@@ -26,3 +26,6 @@ name = "OceanSim.more_python"
 
 [[python.module]]
 name = "OceanSim.DVL_python"
+
+[[python.module]]
+name = "OceanSim.UIlibrary_python"

@@ -17,7 +17,7 @@ from omni.isaac.core.utils.prims import is_prim_path_valid
 from omni.isaac.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
 from omni.isaac.core.world import World
 from omni.isaac.nucleus import get_assets_root_path
-from omni.isaac.ui.element_wrappers import CollapsableFrame, StateButton, XYPlot
+from omni.isaac.ui.element_wrappers import CollapsableFrame, Frame, StateButton, XYPlot
 from omni.isaac.ui.element_wrappers.core_connectors import LoadButton, ResetButton
 from omni.isaac.ui.ui_utils import get_style
 from omni.usd import StageEventType
@@ -139,33 +139,9 @@ class UIBuilder:
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
 
-        outputs_frame = CollapsableFrame("Outputs", collapsed=False)
+        self._outputs_frame = CollapsableFrame("Outputs", collapsed=False)
 
-        with outputs_frame:
-            with ui.VStack(style=get_style(), spacing=5, height=0):
 
-                x = np.arange(-1, 6.01, 0.01)
-                y = np.sin((x - 0.5) * np.pi)
-                plot = XYPlot(
-                    "XY Plot",
-                    tooltip="Press mouse over the plot for data label",
-                    x_data=[x[:300], x[100:400], x[200:]],
-                    y_data=[y[:300], y[100:400], y[200:]],
-                    x_min=None,  # Use default behavior to fit plotted data to entire frame
-                    x_max=None,
-                    y_min=-1.5,
-                    y_max=1.5,
-                    x_label="X [rad]",
-                    y_label="Y",
-                    plot_height=10,
-                    legends=["Line 1", "Line 2", "Line 3"],
-                    show_legend=True,
-                    plot_colors=[
-                        [255, 0, 0],
-                        [0, 255, 0],
-                        [0, 100, 200],
-                    ],  # List of [r,g,b] values; not necessary to specify
-                )
 
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
@@ -185,12 +161,15 @@ class UIBuilder:
         self._DVL_min_range = 0.5  # m
         self._DVL_max_range = 10.0 # m
         self._DVL_location = np.array([0.0,0.0,-0.6])
+        self._DVL_vel_cov = np.array([1,2,3])
+        self._DVL_uncertainty = True
 
+        
+        
         self._init_rob_pos = np.array([2, 2, 5])
         self._box_size = 1 #temporary (using a box for the rob)
 
-        self._physics_context = None
-        
+
 
         self._scenario = DVLScenario()
 
@@ -227,7 +206,7 @@ class UIBuilder:
                 orientation=Gf.Quatd(*self.orients_quat[i]),
                 forward_axis=Gf.Vec3d(0, 0, -1),
                 num_rays=1,
-                )   
+                )  
         
 
 
@@ -398,6 +377,7 @@ class UIBuilder:
             step (float): The dt of the current physics step
         """
         self._scenario.update_scenario(step)
+        self._scenario.update_ui(self._outputs_frame)
 
     def _on_run_scenario_a_text(self):
         """
