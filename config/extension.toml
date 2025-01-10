@@ -22,7 +22,7 @@ icon = "data/icon.png"
 "omni.isaac.core" = {}
 
 [[python.module]]
-name = "more_python"
+name = "OceanSim.more_python"
 
 [[python.module]]
-name = "DVL_python"
+name = "OceanSim.DVL_python"
