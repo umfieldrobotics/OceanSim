@@ -34,6 +34,7 @@ import omni.graph.core as og
 import omni.isaac.core.utils.prims as prims_utils
 from omni.isaac.core.physics_context import PhysicsContext
 from pxr import Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
+from .DVLsensor import DVLsensor
 
 
 
@@ -154,14 +155,15 @@ class UIBuilder:
 
 
         self._DVL = None
-        self._DVL_interface = None
 
-        self._DVL_elevation = 45.0 # deg
-        self._DVL_min_range = 0.5  # m
+        self._DVL_elevation = 30.0 # deg
+        self._DVL_min_range = 0.01  # m
         self._DVL_max_range = 10.0 # m
         self._DVL_location = np.array([0.0,0.0,-0.6])
-        self._DVL_vel_cov = np.array([1,2,3])
-        self._DVL_uncertainty = True
+        self._DVL_vel_cov = np.array([1,1,1,1])
+        self._DVL_vel_cov = 0
+
+        self._DVL_depth_cov = 0
 
         
         
@@ -180,34 +182,7 @@ class UIBuilder:
         sphereLight.CreateRadiusAttr(2)
         sphereLight.CreateIntensityAttr(100000)
         XFormPrim(str(sphereLight.GetPath())).set_world_pose([6.5, 0, 12])
-
-    def _add_DVL_sensor(self, rob_prim_path: str, local_translation: np.ndarray):
-
-        sensor_prim_path = rob_prim_path + "/DVL"
-        self._DVL = BaseSensor(prim_path=sensor_prim_path,translation=local_translation)
-        
-        elevation = np.deg2rad(self._DVL_elevation)
-        orients_euler = np.array([[elevation, 0.0, 0.0], [0.0, elevation, 0.0], [-elevation, 0.0, 0.0], [0.0, -elevation, 0.0]])
-
-        self.beam_paths = []
-        self.orients_quat = []
-        for i in range(orients_euler.shape[0]):
-            self.orients_quat.append(rotations_utils.euler_angles_to_quat(orients_euler[i,:]))
-            self.beam_paths.append(sensor_prim_path + "/beam" + str(i))
-
-            result, sensor = omni.kit.commands.execute(
-                "IsaacSensorCreateLightBeamSensor",
-                path=self.beam_paths[i],
-                parent=None,
-                min_range=self._DVL_min_range,
-                max_range=self._DVL_max_range,
-                translation=Gf.Vec3d(0, 0, 0),
-                orientation=Gf.Quatd(*self.orients_quat[i]),
-                forward_axis=Gf.Vec3d(0, 0, -1),
-                num_rays=1,
-                )  
-        
-
+       
 
     def _setup_scene(self):
         """
@@ -225,11 +200,6 @@ class UIBuilder:
         # Add light 
         create_new_stage()
         self._add_light_to_stage()
-
-
-        # Define the xform containing rob and sensor
-        # rob_xform_path = "/rob_xform"
-        # self._rob_xform = XFormPrim(prim_path=rob_xform_path, position=self._init_rob_xform_pos)
 
         # Load the robot
         robot_prim_path = "/rob"
@@ -267,69 +237,20 @@ class UIBuilder:
         self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
         
         # Define the DVL at the bottom side of the rob
-        self._add_DVL_sensor(rob_prim_path=robot_prim_path, local_translation=self._DVL_location)
-        self._DVL_interface = _sensor.acquire_lightbeam_sensor_interface()
-
-
+        self._DVL = DVLsensor(elevation=self._DVL_elevation, 
+                              min_range=self._DVL_min_range,
+                              max_range=self._DVL_max_range,
+                              vel_cov=self._DVL_vel_cov,
+                              depth_cov=self._DVL_depth_cov)
+        self._DVL.attachDVL(rigid_body_path=robot_prim_path, location=self._DVL_location)
+        self._DVL.add_debug_lines()
+        
+        # Why the template provides these lines? 
+        # (since prim is automatically added to stage with the call of creating prim)
         # Add user-loaded objects to the World
         # world = World.instance()
         # world.scene.add(self._sea_floor)
         # world.scene.add(self._rob)
-
-
-
-
-        # Use debugDrawRayCastNode to draw beam lines
-        (action_graph, new_nodes, _, _) = og.Controller.edit(
-            {"graph_path": "/debugLines", "evaluator_name": "execution"},
-            {
-                og.Controller.Keys.CREATE_NODES: [
-                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                    ("IsaacReadLightBeam0", "omni.isaac.sensor.IsaacReadLightBeam"),
-                    ("IsaacReadLightBeam1", "omni.isaac.sensor.IsaacReadLightBeam"),
-                    ("IsaacReadLightBeam2", "omni.isaac.sensor.IsaacReadLightBeam"),
-                    ("IsaacReadLightBeam3", "omni.isaac.sensor.IsaacReadLightBeam"),
-                    ("DebugDrawRayCast0", "omni.isaac.debug_draw.DebugDrawRayCast"),
-                    ("DebugDrawRayCast1", "omni.isaac.debug_draw.DebugDrawRayCast"),
-                    ("DebugDrawRayCast2", "omni.isaac.debug_draw.DebugDrawRayCast"),
-                    ("DebugDrawRayCast3", "omni.isaac.debug_draw.DebugDrawRayCast"),
-                ],
-                og.Controller.Keys.SET_VALUES: [
-                    ("IsaacReadLightBeam0.inputs:lightbeamPrim", self.beam_paths[0]),
-                    ("IsaacReadLightBeam1.inputs:lightbeamPrim", self.beam_paths[1]),
-                    ("IsaacReadLightBeam2.inputs:lightbeamPrim", self.beam_paths[2]),
-                    ("IsaacReadLightBeam3.inputs:lightbeamPrim", self.beam_paths[3]),
-
-                ],
-                og.Controller.Keys.CONNECT: [
-                    ("OnPlaybackTick.outputs:tick", "IsaacReadLightBeam0.inputs:execIn"),
-                    ("IsaacReadLightBeam0.outputs:execOut", "DebugDrawRayCast0.inputs:exec"),
-                    ("IsaacReadLightBeam0.outputs:beamOrigins", "DebugDrawRayCast0.inputs:beamOrigins"),
-                    ("IsaacReadLightBeam0.outputs:beamEndPoints", "DebugDrawRayCast0.inputs:beamEndPoints"),
-                    ("IsaacReadLightBeam0.outputs:numRays", "DebugDrawRayCast0.inputs:numRays"),
-
-                    ("OnPlaybackTick.outputs:tick", "IsaacReadLightBeam1.inputs:execIn"),
-                    ("IsaacReadLightBeam1.outputs:execOut", "DebugDrawRayCast1.inputs:exec"),
-                    ("IsaacReadLightBeam1.outputs:beamOrigins", "DebugDrawRayCast1.inputs:beamOrigins"),
-                    ("IsaacReadLightBeam1.outputs:beamEndPoints", "DebugDrawRayCast1.inputs:beamEndPoints"),
-                    ("IsaacReadLightBeam1.outputs:numRays", "DebugDrawRayCast1.inputs:numRays"),
-
-                    ("OnPlaybackTick.outputs:tick", "IsaacReadLightBeam2.inputs:execIn"),
-                    ("IsaacReadLightBeam2.outputs:execOut", "DebugDrawRayCast2.inputs:exec"),
-                    ("IsaacReadLightBeam2.outputs:beamOrigins", "DebugDrawRayCast2.inputs:beamOrigins"),
-                    ("IsaacReadLightBeam2.outputs:beamEndPoints", "DebugDrawRayCast2.inputs:beamEndPoints"),
-                    ("IsaacReadLightBeam2.outputs:numRays", "DebugDrawRayCast2.inputs:numRays"),
-
-                    ("OnPlaybackTick.outputs:tick", "IsaacReadLightBeam3.inputs:execIn"),
-                    ("IsaacReadLightBeam3.outputs:execOut", "DebugDrawRayCast3.inputs:exec"),
-                    ("IsaacReadLightBeam3.outputs:beamOrigins", "DebugDrawRayCast3.inputs:beamOrigins"),
-                    ("IsaacReadLightBeam3.outputs:beamEndPoints", "DebugDrawRayCast3.inputs:beamEndPoints"),
-                    ("IsaacReadLightBeam3.outputs:numRays", "DebugDrawRayCast3.inputs:numRays"),
-                ],
-            },
-        )
-
-
 
 
     def _setup_scenario(self):
@@ -350,7 +271,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._DVL_interface, self.beam_paths, self._articulation)
+        self._scenario.setup_scenario(self._rob, self._DVL, self._articulation)
 
     def _on_post_reset_btn(self):
         """

@@ -6,13 +6,14 @@ from omni.isaac.sensor import _sensor
 import omni.kit.commands
 from omni.isaac.dynamic_control import _dynamic_control
 from ..utils.MultivariateNormal import MultivariateNormal
+import omni.graph.core as og
 import carb
 class DVLsensor:
     def __init__(self,
                  elevation:float = 22.5, # deg
-                 vel_cov = np.array([1,1,1,1]),
-                 depth_cov = np.array([1,1,1,1]),
-                 min_range: float = 0,
+                 vel_cov = 0,
+                 depth_cov = 0,
+                 min_range: float = 0.1,
                  max_range: float = 10,
                  ):
         self._elevation = elevation
@@ -47,11 +48,11 @@ class DVLsensor:
         orients_quat = []
         for i in range(orients_euler.shape[0]):
             orients_quat.append(rotations_utils.euler_angles_to_quat(orients_euler[i,:]))
-            self.beam_paths.append(sensor_prim_path + "/beam" + str(i))
+            self._beam_paths.append(sensor_prim_path + "/beam" + str(i))
 
             result, sensor = omni.kit.commands.execute(
                 "IsaacSensorCreateLightBeamSensor",
-                path=self.beam_paths[i],
+                path=self._beam_paths[i],
                 parent=None,
                 min_range=self._min_range,
                 max_range=self._max_range,
@@ -87,11 +88,6 @@ class DVLsensor:
         
         return depth
     
-    def get_hit_pos(self):
-        hit_pos = []
-        for beam_path in self._beam_paths:
-            hit_pos.append(self._DVL_interface.get_hit_pos_data(beam_path).squeeze())
-        return hit_pos
     
     def get_beam_hit(self):
         beam_hit = []
@@ -109,3 +105,56 @@ class DVLsensor:
             for i in range(4):
                 for j in range(3):
                     vel[j] += self._transform[j][i] * sample[i] 
+        
+        return vel
+
+    def add_debug_lines(self):
+
+        (action_graph, new_nodes, _, _) = og.Controller.edit(
+            {"graph_path": "/debugLines", "evaluator_name": "execution"},
+            {
+                og.Controller.Keys.CREATE_NODES: [
+                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+                    ("IsaacReadLightBeam0", "omni.isaac.sensor.IsaacReadLightBeam"),
+                    ("IsaacReadLightBeam1", "omni.isaac.sensor.IsaacReadLightBeam"),
+                    ("IsaacReadLightBeam2", "omni.isaac.sensor.IsaacReadLightBeam"),
+                    ("IsaacReadLightBeam3", "omni.isaac.sensor.IsaacReadLightBeam"),
+                    ("DebugDrawRayCast0", "omni.isaac.debug_draw.DebugDrawRayCast"),
+                    ("DebugDrawRayCast1", "omni.isaac.debug_draw.DebugDrawRayCast"),
+                    ("DebugDrawRayCast2", "omni.isaac.debug_draw.DebugDrawRayCast"),
+                    ("DebugDrawRayCast3", "omni.isaac.debug_draw.DebugDrawRayCast"),
+                ],
+                og.Controller.Keys.SET_VALUES: [
+                    ("IsaacReadLightBeam0.inputs:lightbeamPrim", self._beam_paths[0]),
+                    ("IsaacReadLightBeam1.inputs:lightbeamPrim", self._beam_paths[1]),
+                    ("IsaacReadLightBeam2.inputs:lightbeamPrim", self._beam_paths[2]),
+                    ("IsaacReadLightBeam3.inputs:lightbeamPrim", self._beam_paths[3]),
+
+                ],
+                og.Controller.Keys.CONNECT: [
+                    ("OnPlaybackTick.outputs:tick", "IsaacReadLightBeam0.inputs:execIn"),
+                    ("IsaacReadLightBeam0.outputs:execOut", "DebugDrawRayCast0.inputs:exec"),
+                    ("IsaacReadLightBeam0.outputs:beamOrigins", "DebugDrawRayCast0.inputs:beamOrigins"),
+                    ("IsaacReadLightBeam0.outputs:beamEndPoints", "DebugDrawRayCast0.inputs:beamEndPoints"),
+                    ("IsaacReadLightBeam0.outputs:numRays", "DebugDrawRayCast0.inputs:numRays"),
+
+                    ("OnPlaybackTick.outputs:tick", "IsaacReadLightBeam1.inputs:execIn"),
+                    ("IsaacReadLightBeam1.outputs:execOut", "DebugDrawRayCast1.inputs:exec"),
+                    ("IsaacReadLightBeam1.outputs:beamOrigins", "DebugDrawRayCast1.inputs:beamOrigins"),
+                    ("IsaacReadLightBeam1.outputs:beamEndPoints", "DebugDrawRayCast1.inputs:beamEndPoints"),
+                    ("IsaacReadLightBeam1.outputs:numRays", "DebugDrawRayCast1.inputs:numRays"),
+
+                    ("OnPlaybackTick.outputs:tick", "IsaacReadLightBeam2.inputs:execIn"),
+                    ("IsaacReadLightBeam2.outputs:execOut", "DebugDrawRayCast2.inputs:exec"),
+                    ("IsaacReadLightBeam2.outputs:beamOrigins", "DebugDrawRayCast2.inputs:beamOrigins"),
+                    ("IsaacReadLightBeam2.outputs:beamEndPoints", "DebugDrawRayCast2.inputs:beamEndPoints"),
+                    ("IsaacReadLightBeam2.outputs:numRays", "DebugDrawRayCast2.inputs:numRays"),
+
+                    ("OnPlaybackTick.outputs:tick", "IsaacReadLightBeam3.inputs:execIn"),
+                    ("IsaacReadLightBeam3.outputs:execOut", "DebugDrawRayCast3.inputs:exec"),
+                    ("IsaacReadLightBeam3.outputs:beamOrigins", "DebugDrawRayCast3.inputs:beamOrigins"),
+                    ("IsaacReadLightBeam3.outputs:beamEndPoints", "DebugDrawRayCast3.inputs:beamEndPoints"),
+                    ("IsaacReadLightBeam3.outputs:numRays", "DebugDrawRayCast3.inputs:numRays"),
+                ],
+            },
+        )
