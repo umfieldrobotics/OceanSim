@@ -148,7 +148,6 @@ class UIBuilder:
     ######################################################################################
 
     def _on_init(self):
-        self._rob_xform = None
         self._rob = None
         self._sea_floor = None
         self._articulation= None
