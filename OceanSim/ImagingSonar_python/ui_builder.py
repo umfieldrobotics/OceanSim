@@ -214,19 +214,33 @@ class UIBuilder:
         cube_rigidBody_API.GetAngularDampingAttr().Set(0.0)
 
 
-        # Add a dynamic cylinder as an obstacle
-        obstacle_path = "/obstacle"
+        # Add dynamic cylinders as obstacles
+        obstacle_path = ["/obstacle_0", "/obstacle_1"]
         self._obstacle = DynamicCylinder(
-            prim_path=obstacle_path,
+            prim_path=obstacle_path[0],
             translation=np.array([5,0,5]),
             radius=0.5,
             height=10,
         )
-        obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path)
+        obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[0])
         obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
         obstacle_rigidBody_API.CreateDisableGravityAttr(True)
         obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-        obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)  
+        obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+
+        self._obstacle = DynamicCuboid(
+            prim_path=obstacle_path[1],
+            translation=np.array([5,2,4.5]),
+            size=1
+        )
+        obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[1])
+        obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
+        obstacle_rigidBody_API.CreateDisableGravityAttr(True)
+        obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
+        obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+
+
+
 
         #For now use the flat ground plane as the seafloor
         sea_floor_prim_path = "/GroundPlane"
@@ -238,7 +252,7 @@ class UIBuilder:
         result, emitter_prim = omni.kit.commands.execute(
             "RangeSensorCreateUltrasonicEmitter",
             path=robot_prim_path + "/UltrasonicEmitter",
-            per_ray_intensity=0.4,
+            per_ray_intensity=0.5,
             yaw_offset = 0.0,
             adjacency_list = adjacency
         )
@@ -271,11 +285,14 @@ class UIBuilder:
             # 0, 15, 30, and 45 degrees.
             horizontal_fov=90.0,  # set wedge vertical extent in degrees
             vertical_fov=15.0,  # set wedge horizontal extent in degrees
-            horizontal_resolution=0.3,
-            vertical_resolution=0.5,
-            num_bins=224,
+            horizontal_resolution=18,
+            vertical_resolution=3,
+            num_bins=224, # number of bins that the emiiters output (numBins divides minRange to maxRange distance.)
+            use_brdf = True,
+            use_uss_materials = False,
             emitter_prims=[emitter_path],
             firing_group_prims=[group.GetPath()],
+            
         ) 
 
 
