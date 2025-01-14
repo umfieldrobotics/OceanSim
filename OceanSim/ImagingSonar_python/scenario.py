@@ -39,7 +39,6 @@ class ImagingSonarScenario(ScenarioTemplate):
         self._ul = _range_sensor.acquire_ultrasonic_sensor_interface()
         self._running_scenario = False
         self._time = 0.0
-        
 
 
 
@@ -89,7 +88,6 @@ class ImagingSonarScenario(ScenarioTemplate):
                               pcl_cart[i,0]/max_range * map_height,
                               intensity[i]]
             
-        print(intensity)
 
         # envelope_arr = self._ul.get_envelope_array(self._sonar_path)
         # print(envelope_arr[0,:])

@@ -32,3 +32,6 @@ name = "OceanSim.UIlibrary_python"
 
 [[python.module]]
 name = "OceanSim.ImagingSonar_python"
+
+[[python.module]]
+name = "OceanSim.fossen_python"
