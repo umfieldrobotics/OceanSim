@@ -11,8 +11,8 @@ Author:     Thor I. Fossen
 """
 
 import numpy as np
-from dynamics_controls.guidance import refModel3
-from dynamics_controls.gnc import ssa, Rzyx
+from .guidance import refModel3
+from .gnc import ssa, Rzyx
 
 # SISO PID pole placement
 def PIDpolePlacement(

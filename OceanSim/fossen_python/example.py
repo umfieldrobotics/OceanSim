@@ -6,13 +6,6 @@ import numpy as np
 from vehicle_dynamics import *
 from dynamics import *
 
-from omni.isaac.kit import SimulationApp
-config = {
-     width: "1280",
-     height: "720",
-     headless: False,
-}
-simulation_app = SimulationApp(config)
 
 """
 Example of how Thor Fossen models can be used in the HoloOcean simulator to model 
@@ -28,7 +21,7 @@ account witht the Fossen Models.
 
 ticks_per_sec = 50
 # print("Change Additional Launch Parameters to match ticks_per_sec if running live")
-numSteps = 600
+# numSteps = 600
 # print("Total Simulation Time:", (numSteps/ticks_per_sec))
 
 initial_location = [0,0,-10] #Translation in NWU coordinate system
@@ -134,7 +127,7 @@ vehicle.set_control_mode('manualControl')
 
 
 
-for i in range(numSteps):
+for i in range(600):
     state = env.step(accel)
     torpedo_dynamics.set_u_control_rad(u_control) #If desired you can change control command here
     accel = torpedo_dynamics.update(state) #Calculate accelerations to be applied to HoloOcean agent

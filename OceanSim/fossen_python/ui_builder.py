@@ -10,13 +10,9 @@
 import numpy as np
 import omni.timeline
 import omni.ui as ui
-from omni.isaac.core.articulations import Articulation
-from omni.isaac.core.objects.cuboid import FixedCuboid
 from omni.isaac.core.prims import XFormPrim
 from omni.isaac.core.utils.prims import is_prim_path_valid
 from omni.isaac.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
-from omni.isaac.core.world import World
-from omni.isaac.nucleus import get_assets_root_path
 from omni.isaac.ui.element_wrappers import CollapsableFrame, StateButton
 from omni.isaac.ui.element_wrappers.core_connectors import LoadButton, ResetButton
 from omni.isaac.ui.ui_utils import get_style
@@ -28,13 +24,10 @@ from omni.isaac.core.objects import DynamicCuboid
 from .scenario import FossenScenario
 from omni.isaac.core.objects import GroundPlane
 from omni.isaac.core.objects import DynamicCuboid
-from omni.isaac.core.prims import BaseSensor
-import omni.isaac.core.utils.rotations as rotations_utils
-from omni.isaac.sensor import _sensor
-import omni.graph.core as og
 import omni.isaac.core.utils.prims as prims_utils
-from omni.isaac.core.physics_context import PhysicsContext
 from pxr import Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
+
+
 
 class UIBuilder:
     def __init__(self):
@@ -48,6 +41,7 @@ class UIBuilder:
 
         # Run initialization for the provided example
         self._on_init()
+
 
     ###################################################################################
     #           The Functions Below Are Called Automatically By extension.py
@@ -172,39 +166,27 @@ class UIBuilder:
         self._add_light_to_stage()
 
         # Load the robot
-        robot_prim_path = "/rob"
-
-        # path_to_robot_usd = get_assets_root_path() + "/Isaac/Robots/Franka/franka_alt_fingers.usd"
-
-        # Do not reload assets when hot reloading.  This should only be done while extension is under development.
-        # if not is_prim_path_valid(robot_prim_path):
-        #     create_new_stage()
-        #     add_reference_to_stage(path_to_robot_usd, robot_prim_path)
-        # else:
-        #     print("Robot already on Stage")
-
-        # add_reference_to_stage(path_to_robot_usd, robot_prim_path)
-
-
-        # For now use a dynamic cube as the robot
-        self._rob = DynamicCuboid(
-            prim_path=robot_prim_path, 
-            translation=np.array([0,0,5]), 
-            size=2, 
-            color=np.array([255, 0, 0]),            
-        )
-
-        cube_prim = prims_utils.get_prim_at_path(prim_path=robot_prim_path)
+        self._robot_prim_path = "/rob"
+        robot_asset_path = '/home/haoyu-ma/.local/share/ov/pkg/isaac-sim-4.2.0/extsUser/OceanSim/demo_usd/rob_assets/torpedo_UUV.usd'
+        if not is_prim_path_valid(self._robot_prim_path):
+            add_reference_to_stage(robot_asset_path, self._robot_prim_path)
+            XFormPrim(self._robot_prim_path).set_local_scale([0.01, 0.01, 0.01])
+            rob_prim = prims_utils.get_prim_at_path(self._robot_prim_path)
+        else:
+            print("Robot already on Stage")
         
-        # Toggle rigid body and apply zero gravity
-        cube_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(cube_prim)
-        cube_rigidBody_API.CreateDisableGravityAttr(True)
-        cube_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-        cube_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+        # # Toggle rigid body and apply zero gravity
+        UsdPhysics.RigidBodyAPI.Apply(rob_prim)
+        rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(rob_prim)
+        rob_rigidBody_API.CreateDisableGravityAttr(True)
+        rob_rigidBody_API.GetLinearDampingAttr().Set(0.0)
+        rob_rigidBody_API.GetAngularDampingAttr().Set(0.0)
 
         #For now use the flat ground plane as the seafloor
         sea_floor_prim_path = "/GroundPlane"
         self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
+
+
 
     def _setup_scenario(self):
         """
@@ -224,7 +206,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._articulation, self._rob)
+        self._scenario.setup_scenario(self._articulation, self._robot_prim_path)
 
     def _on_post_reset_btn(self):
         """

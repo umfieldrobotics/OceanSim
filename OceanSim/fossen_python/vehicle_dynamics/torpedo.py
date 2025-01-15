@@ -1,6 +1,6 @@
 import numpy as np
-from dynamics_controls.control import integralSMC
-from dynamics_controls.gnc import crossFlowDrag, forceLiftDrag, Hmtrx, m2c, gvect, ssa
+from ..dynamics_controls.control import integralSMC
+from ..dynamics_controls.gnc import crossFlowDrag, forceLiftDrag, Hmtrx, m2c, gvect, ssa
 
 """
 torpedo.py:  
