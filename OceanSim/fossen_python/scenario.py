@@ -265,7 +265,7 @@ class FossenScenario(ScenarioTemplate):
 
         # Plot x and y positions
         plt.figure()
-        plt.plot( east_positions,x_positions, marker='o')
+        plt.plot( east_positions,x_positions, marker='o', linestyle='None')
         plt.title('X and Y Positions')
         plt.xlabel('East (meters)')
         plt.ylabel('North (meters)')
@@ -275,7 +275,7 @@ class FossenScenario(ScenarioTemplate):
 
         # Plot z positions over time
         plt.figure()
-        plt.plot(self.time_buffer, z_positions, marker='o')
+        plt.plot(self.time_buffer, z_positions, marker='o', linestyle='None')
         plt.title('Z Position over Time')
         plt.xlabel('Time Step')
         plt.ylabel('Z Position')
@@ -285,9 +285,9 @@ class FossenScenario(ScenarioTemplate):
 
 
         plt.figure()
-        plt.plot( self.time_buffer,linear_accel_array[:,0], marker='o', label='x_acc')
-        plt.plot( self.time_buffer,linear_accel_array[:,1], marker='x', label='y_acc')
-        plt.plot( self.time_buffer,linear_accel_array[:,2], marker='*', label='z_acc')
+        plt.plot( self.time_buffer,linear_accel_array[:,0], marker='o', label='x_acc', linestyle='None')
+        plt.plot( self.time_buffer,linear_accel_array[:,1], marker='x', label='y_acc', linestyle='None')
+        plt.plot( self.time_buffer,linear_accel_array[:,2], marker='*', label='z_acc', linestyle='None')
         plt.legend()
         plt.title('Accel')
         plt.xlabel('Accel')
@@ -298,9 +298,9 @@ class FossenScenario(ScenarioTemplate):
 
 
         plt.figure()
-        plt.plot( self.time_buffer,angular_accel_array[:,0], marker='o', label='ang_x_acc')
-        plt.plot( self.time_buffer,angular_accel_array[:,1], marker='x', label='ang_y_acc')
-        plt.plot( self.time_buffer,angular_accel_array[:,2], marker='*', label='ang_z_acc')
+        plt.plot( self.time_buffer,angular_accel_array[:,0], marker='o', label='ang_x_acc', linestyle='None')
+        plt.plot( self.time_buffer,angular_accel_array[:,1], marker='x', label='ang_y_acc', linestyle='None')
+        plt.plot( self.time_buffer,angular_accel_array[:,2], marker='*', label='ang_z_acc', linestyle='None')
         plt.legend()
         plt.title('ang_Accel')
         plt.xlabel('ang_Accel')
