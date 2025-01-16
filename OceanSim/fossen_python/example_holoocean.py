@@ -1,6 +1,8 @@
-"""This file contains multiple examples of how you might use HoloOcean."""
+"""
+This file is not being used. 
+It is an example from Holoocean that shows how to do fossen implementation.
+"""
 import numpy as np
-
 # import holoocean
 # from holoocean.environments import *
 from vehicle_dynamics import *
@@ -128,15 +130,15 @@ vehicle.set_control_mode('manualControl')
 
 
 for i in range(600):
-    state = env.step(accel)
+    # state = env.step(accel)
     torpedo_dynamics.set_u_control_rad(u_control) #If desired you can change control command here
     # The below line return the acceleration in the world frame
     # accel = torpedo_dynamics.update(state) #Calculate accelerations to be applied to HoloOcean agent
 
     #For Plotting
-    pos = state['DynamicsSensor'][6:9]  # [x, y, z]
-    pos_list.append(pos)
-    time_list.append(state['t'])
+    # pos = state['DynamicsSensor'][6:9]  # [x, y, z]
+    # pos_list.append(pos)
+    # time_list.append(state['t'])
 
 
     ############ Depth Heading Control Example:  ############ 
