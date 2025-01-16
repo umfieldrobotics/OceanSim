@@ -130,7 +130,8 @@ vehicle.set_control_mode('manualControl')
 for i in range(600):
     state = env.step(accel)
     torpedo_dynamics.set_u_control_rad(u_control) #If desired you can change control command here
-    accel = torpedo_dynamics.update(state) #Calculate accelerations to be applied to HoloOcean agent
+    # The below line return the acceleration in the world frame
+    # accel = torpedo_dynamics.update(state) #Calculate accelerations to be applied to HoloOcean agent
 
     #For Plotting
     pos = state['DynamicsSensor'][6:9]  # [x, y, z]

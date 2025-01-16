@@ -27,6 +27,10 @@ from omni.isaac.core.utils.types import ArticulationAction
 from omni.isaac.dynamic_control import _dynamic_control
 from .vehicle_dynamics import *
 from .dynamics import *
+from omni.isaac.sensor import _sensor
+import carb
+import omni.isaac.core.utils.rotations as rotations_utils
+
 """
 This scenario takes in a robot Articulation and makes it move through its joint DOFs.
 Additionally, it adds a cuboid prim to the stage that moves in a circle around the robot.
@@ -44,12 +48,28 @@ class FossenScenario(ScenarioTemplate):
         self._articulation = None
 
         self._dc = _dynamic_control.acquire_dynamic_control_interface()
-
+        self._IMU = _sensor.acquire_imu_sensor_interface()
         self._running_scenario = False
         self._time = 0.0
+
+        self.pos_buffer = [[0,0,-10]]
+        self.time_buffer = [0]
+        self.linear_accel_buffer = [np.array(np.zeros(3), float)]
+        self.angular_accel_buffer = [np.array(np.zeros(3), float)]
+
+
         
-        # Fossen scenario config
-        self._ticks_per_sec = 20
+        
+
+    def setup_scenario(self, articulation, rob_prim_path):
+        self._articulation = articulation
+        self._rob_prim_path = rob_prim_path
+                
+        self._rob_body = self._dc.get_rigid_body(self._rob_prim_path) 
+
+        # Fossen scenario setup
+        self._ticks_per_sec = 50
+
         initial_location = [0,0,-10] #Translation in NWU coordinate system
         initial_rotation = [0,0,0] #Roll, pitch, Yaw in Euler angle order ZYX and in degrees NWU coordinate system
 
@@ -128,17 +148,24 @@ class FossenScenario(ScenarioTemplate):
             ]
         }
         
-
-    def setup_scenario(self, articulation, rob_prim_path):
-        self._articulation = articulation
-        self._rob_prim_path = rob_prim_path
         vehicle = fourFinDep(scenario=self._scenario_config,
                              vehicle_name='auv0',
                              controlSystem='manualControl')
-        ticks_per_second = 25 
-        period = 1.0/ticks_per_second
+        period = 1.0/self._ticks_per_sec
         self._torpedo_dynamics = FossenDynamics(vehicle=vehicle, 
                                           sample_period=period)
+
+        
+        
+        ############## MANUAL CONTROL EXAMPLE: ###########
+        #Set control surfaces command
+        fins_degrees = np.array([5 , 5]) #Rudder and Stern Fin Deflection (degrees)
+        fin_radians = np.radians(fins_degrees)
+        thruster_rpm = 800
+        self.u_control = np.append(fin_radians,thruster_rpm)  #[RudderAngle, SternAngle,Thruster]
+        self.accel = np.array(np.zeros(6),float)
+
+
         self._running_scenario = True
 
 
@@ -151,8 +178,136 @@ class FossenScenario(ScenarioTemplate):
             return
 
         self._time += step
-        # Use the top fin rigid body as measurement of dynamical properties
-        rob_body = self._dc.get_rigid_body(self._rob_prim_path + "/Object_27/mesh_0/Geometry") 
-        # pose = rob_body.Transform.pose
-        # print(pose)
+
+
+        self.action(self.accel)
+        self._torpedo_dynamics.set_u_control_rad(self.u_control)
+        state = self.read_dynamics_info()
+        self.accel = self._torpedo_dynamics.update(state)
+
+        x = state["DynamicsSensor"]
+
+        self.pos_buffer.append(x[6:9])
+        self.time_buffer.append(self._time)
+        self.linear_accel_buffer.append(self.accel[:3])
+        self.angular_accel_buffer.append(self.accel[3:])
+
+    
+    
+    
+    
+    
+    
+    def read_dynamics_info(self):
+        # Use the COM of the entire rob for reading and manipulating dynamics
+
+        # Use dynamics control plugin for reading position, orientation, linear\angular vel
+        # Needs to convert them from carb array to numpy
+        
+        rob_body_transform = self._dc.get_rigid_body_pose(self._rob_body)
+        position = np.array([*(rob_body_transform.p)])
+        orient_quad = np.array([*(rob_body_transform.r)])
+        orient_rpy = rotations_utils.quat_to_euler_angles(orient_quad)
+        angular_vel = self._dc.get_rigid_body_angular_velocity(self._rob_body)
+        angular_vel = np.array([*angular_vel])
+        linear_vel = self._dc.get_rigid_body_linear_velocity(self._rob_body)
+        linear_vel = np.array([*linear_vel])
+        
+        # Get acceleration and orientation reading from IMU sensor
+        IMU_reading = self._IMU.get_sensor_reading(self._rob_prim_path + "/IMU")
+        linear_acc = np.array([float(IMU_reading.lin_acc_x), 
+                               float(IMU_reading.lin_acc_y), 
+                               float(IMU_reading.lin_acc_z)])
+        # This is a naming error in their IMU sensor "ang_vel" actually means "ang_acc"
+        # In Isaac Lab, they use velocity numerical differentiation to compute acceleration.
+        angular_acc = np.array([float(IMU_reading.ang_vel_x), 
+                                float(IMU_reading.ang_vel_y), 
+                                float(IMU_reading.ang_vel_z)])
+        return {
+            'DynamicsSensor' : np.concatenate([
+                linear_acc,
+                linear_vel,
+                position,
+                angular_acc,
+                angular_vel,
+                orient_quad,
+            ]),
+            't' : self._time
+
+        }
+
+         
+
+    def action(self, accel):
+        # dynamic control API uses cm/s as unit
+        accel = 0.01 * accel
+        state = self.read_dynamics_info()
+        new_linear_vel = state["DynamicsSensor"][3:6] + accel[:3]
+        new_angular_vel = state["DynamicsSensor"][12:15] + accel[3:]
+        self._dc.set_rigid_body_linear_velocity(self._rob_body,
+                                                carb.Float3(*new_linear_vel))
+        self._dc.set_rigid_body_angular_velocity(self._rob_body,
+                                                 carb.Float3(*new_angular_vel))
+
+    def plot(self):
+        import matplotlib.pyplot as plt
+
+        saved_path = '/home/haoyu-ma/Desktop'
+        # Convert position list to a numpy array for easier slicing
+        pos_array = np.array(self.pos_buffer)
+        linear_accel_array = np.array(self.linear_accel_buffer)
+        angular_accel_array = np.array(self.angular_accel_buffer)
+        # Extract x, y, and z positions
+        x_positions = pos_array[:, 0] #North Position
+        y_positions = pos_array[:, 1]  #West Position
+        east_positions = [-y for y in y_positions] #Convert from west to east
+        z_positions = pos_array[:, 2]   #Depth
+
+        # Plot x and y positions
+        plt.figure()
+        plt.plot( east_positions,x_positions, marker='o')
+        plt.title('X and Y Positions')
+        plt.xlabel('East (meters)')
+        plt.ylabel('North (meters)')
+        plt.grid(True)
+
+        plt.savefig(saved_path + '/XY.png')
+
+        # Plot z positions over time
+        plt.figure()
+        plt.plot(self.time_buffer, z_positions, marker='o')
+        plt.title('Z Position over Time')
+        plt.xlabel('Time Step')
+        plt.ylabel('Z Position')
+        plt.grid(True)
+        
+        plt.savefig(saved_path + '/Z.png')
+
+
+        plt.figure()
+        plt.plot( self.time_buffer,linear_accel_array[:,0], marker='o', label='x_acc')
+        plt.plot( self.time_buffer,linear_accel_array[:,1], marker='x', label='y_acc')
+        plt.plot( self.time_buffer,linear_accel_array[:,2], marker='*', label='z_acc')
+        plt.legend()
+        plt.title('Accel')
+        plt.xlabel('Accel')
+        plt.ylabel('t')
+        plt.grid(True)
+
+        plt.savefig(saved_path + '/acc.png')
+
+
+        plt.figure()
+        plt.plot( self.time_buffer,angular_accel_array[:,0], marker='o', label='ang_x_acc')
+        plt.plot( self.time_buffer,angular_accel_array[:,1], marker='x', label='ang_y_acc')
+        plt.plot( self.time_buffer,angular_accel_array[:,2], marker='*', label='ang_z_acc')
+        plt.legend()
+        plt.title('ang_Accel')
+        plt.xlabel('ang_Accel')
+        plt.ylabel('t')
+        plt.grid(True)
+
+        plt.savefig(saved_path + '/ang_acc.png')
+
+        print(f"Plot save to {saved_path}")
 

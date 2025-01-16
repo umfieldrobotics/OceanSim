@@ -26,6 +26,7 @@ from omni.isaac.core.objects import GroundPlane
 from omni.isaac.core.objects import DynamicCuboid
 import omni.isaac.core.utils.prims as prims_utils
 from pxr import Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
+from omni.physx.scripts import utils
 
 
 
@@ -167,24 +168,49 @@ class UIBuilder:
 
         # Load the robot
         self._robot_prim_path = "/rob"
+
+        # !!Notice this USD file has an internal translation and rotation!!, 
+        # if you look at the viewport, 
+        # it is added at the origin but are above the ground plane and not aligned with x axis, 
         robot_asset_path = '/home/haoyu-ma/.local/share/ov/pkg/isaac-sim-4.2.0/extsUser/OceanSim/demo_usd/rob_assets/torpedo_UUV.usd'
         if not is_prim_path_valid(self._robot_prim_path):
             add_reference_to_stage(robot_asset_path, self._robot_prim_path)
-            XFormPrim(self._robot_prim_path).set_local_scale([0.01, 0.01, 0.01])
+            XFormPrim(self._robot_prim_path).set_local_scale(scale=[0.01, 0.01, 0.01])  #Set scale to fit the scene
+            XFormPrim(self._robot_prim_path).set_world_pose(position=[0.0,0.0,-10.0])
             rob_prim = prims_utils.get_prim_at_path(self._robot_prim_path)
         else:
             print("Robot already on Stage")
         
-        # # Toggle rigid body and apply zero gravity
+        # Toggle collider for all mesh prims in rob xform for automatically mass computation
+        # Notice MeshCollisionAPI is also enabled to change "triangle mesh" approximation to "convexHull"
+        # Otherwise when toggle rigid body later, a warning for using convexHull approximation will show 
+        for prim in Usd.PrimRange(rob_prim):
+            if prim.IsA(UsdGeom.Mesh):
+                mesh_collision_API = UsdPhysics.MeshCollisionAPI.Apply(prim)
+                mesh_collision_API.CreateApproximationAttr("convexHull")
+                UsdPhysics.CollisionAPI.Apply(prim)
+
+        #Togle rigid body API for the entire rob xform
         UsdPhysics.RigidBodyAPI.Apply(rob_prim)
         rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(rob_prim)
         rob_rigidBody_API.CreateDisableGravityAttr(True)
         rob_rigidBody_API.GetLinearDampingAttr().Set(0.0)
         rob_rigidBody_API.GetAngularDampingAttr().Set(0.0)
 
+
         #For now use the flat ground plane as the seafloor
-        sea_floor_prim_path = "/GroundPlane"
-        self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
+        # sea_floor_prim_path = "/GroundPlane"
+        # self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
+
+        # Lastly, include an IMU sensor to read linear\angular acceleration
+        result, IMU_sensor = omni.kit.commands.execute(
+            "IsaacSensorCreateImuSensor",
+            path=self._robot_prim_path + "/IMU",
+            # parent=self._robot_prim_path,
+            sensor_period=-1.0,
+            translation=Gf.Vec3d(0, 0, 0),
+            orientation=Gf.Quatd(1, 0, 0, 0),
+        )
 
 
 
@@ -259,6 +285,8 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
+        self._scenario.plot() # Added an plot function after clicking the pause
+
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().
@@ -271,3 +299,6 @@ class UIBuilder:
         self._scenario_state_btn.reset()
         self._scenario_state_btn.enabled = False
         self._reset_btn.enabled = False
+
+
+    

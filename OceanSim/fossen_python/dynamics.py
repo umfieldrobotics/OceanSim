@@ -69,11 +69,12 @@ class FossenDynamics:
         
         self.u_control=u_control
 
-    #This Matrix transforms coordinate frames between NED and NWU
+    # This Matrix transforms coordinate frames between NED and NWU
     T_coord_sys = np.array([
         [ 1,  0,  0 ],
         [ 0,  -1,  0],
-        [ 0,  0,     -1] ])
+        [ 0,  0,  -1] ])
+
 
     def R2euler(self, R):
         """
