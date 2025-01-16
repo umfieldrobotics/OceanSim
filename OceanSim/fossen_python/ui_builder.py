@@ -172,7 +172,7 @@ class UIBuilder:
         # !!Notice this USD file has an internal translation and rotation!!, 
         # if you look at the viewport, 
         # it is added at the origin but are above the ground plane and not aligned with x axis, 
-        robot_asset_path = '/home/haoyu-ma/.local/share/ov/pkg/isaac-sim-4.2.0/extsUser/OceanSim/demo_usd/rob_assets/torpedo_UUV.usd'
+        robot_asset_path = '/home/haoyu-ma/.local/share/ov/pkg/isaac-sim-4.2.0/extsUser/OceanSim/demo/rob_assets/torpedo_UUV.usd'
         if not is_prim_path_valid(self._robot_prim_path):
             add_reference_to_stage(robot_asset_path, self._robot_prim_path)
             XFormPrim(self._robot_prim_path).set_local_scale(scale=[0.01, 0.01, 0.01])  #Set scale to fit the scene
