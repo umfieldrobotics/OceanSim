@@ -68,29 +68,30 @@ class ImagingSonarScenario(ScenarioTemplate):
         azimuth = self._ul.get_azimuth_data(self._sonar_path)
         zenith = self._ul.get_zenith_data(self._sonar_path)
         num_points = azimuth.shape[0] * zenith.shape[0]
-        phi, psi = np.meshgrid(azimuth, zenith, indexing="ij")
-        pcl_spher = np.column_stack((depth.ravel(), phi.ravel(), psi.ravel()))
-        pcl_cart = np.zeros([num_points, 3])
+        theta, phi = np.meshgrid(azimuth, zenith, indexing="ij")
+        self.pcl_spher = np.column_stack((depth.ravel(), theta.ravel(), phi.ravel()))
+        self.pcl_cart = np.zeros([num_points, 3])
 
         intensity = self._ul.get_intensity_data(self._sonar_path, 0)
-        intensity = intensity.ravel()
-        sonar_map = np.zeros([num_points, 3])
+        self._intensity = intensity.ravel()
+        self.sonar_map = np.zeros([num_points, 3])
         map_width = 1
         map_height = 2
         hori_fov = np.abs(azimuth[-1] - azimuth[0])
         max_range = 4.5
         
         for i in range(num_points):
-            pcl_cart[i,:] = [pcl_spher[i,0] * np.cos(pcl_spher[i,1]) * np.cos(pcl_spher[i,2]),
-                             pcl_spher[i,0] * np.cos(pcl_spher[i,1]) * np.sin(pcl_spher[i,2]),
-                             pcl_spher[i,0] * np.sin(pcl_spher[i,1])]
-            sonar_map[i,:] = [map_width/2 - pcl_cart[i,1]/(np.sin(hori_fov) * max_range) * np.sin(hori_fov/2) * map_height,
-                              pcl_cart[i,0]/max_range * map_height,
-                              intensity[i]]
+            self.pcl_cart[i,:] = [self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
+                             self.pcl_spher[i,0] * np.sin(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
+                             self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2])]
+            self.sonar_map[i,:] = [map_width/2 - (self.pcl_cart[i,0]/(np.sin(hori_fov) * max_range)) * np.sin(hori_fov/2) * map_height,
+                              (self.pcl_cart[i,1]/max_range) * map_height,
+                              self._intensity[i]]
             
 
-        # envelope_arr = self._ul.get_envelope_array(self._sonar_path)
-        # print(envelope_arr[0,:])
+
+        # envelope = self._ul.get_envelope(self._sonar_path, 0)
+        # print(f"envelope:{envelope}")
 
         # if you want to move the rob in x-direction
         # rob_body = self._dc.get_rigid_body("/rob")
@@ -98,17 +99,45 @@ class ImagingSonarScenario(ScenarioTemplate):
         #     self._dc.apply_body_force(rob_body, carb.Float3(0.1,0,0), carb.Float3(0,0,0), 0)
 
         
+    def plot(self):
+        import matplotlib.pyplot as plt
+
+        saved_path = '/home/haoyu-ma/Desktop'
+
+        plt.figure()
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        ax.scatter(self.sonar_map[:,0], self.sonar_map[:,1], self.sonar_map[:,2])
+        ax.set_xlabel('X Label')
+        ax.set_ylabel('Y Label')
+        ax.set_zlabel('Z Label')
+        ax.set_xlim([0,5])
+        fig.set_figwidth(10)
+        fig.set_figheight(10)
+        plt.grid(True)
+        plt.savefig(saved_path + '/sonar.png')
 
 
+        plt.figure()
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+            # Normalize the array to the range [0, 1]
+        norm_array = (self._intensity) / 255
 
-
-    def sonar_plot(self):
-        pass
-
-    def update_ui(self,ui_frame):
-
-        pass
+        # Use a colormap to map the normalized values to colors
+        colors = plt.cm.viridis(norm_array.flatten())
+        ax.scatter(self.pcl_spher[:,0], self.pcl_spher[:,1], self.pcl_spher[:,2], c=colors)
+        ax.set_xlabel('X Label')
+        ax.set_ylabel('Y Label')
+        ax.set_zlabel('Z Label')
+        fig.set_figwidth(10)
+        fig.set_figheight(10)
+        plt.grid(True)
+        plt.savefig(saved_path + '/pcl_colored.png')
+        
+        print(f"Plot has been save to {saved_path}")
+        
+        plt.close()
 
     
 
-
+    def update_ui(outputs_frame):
+        pass

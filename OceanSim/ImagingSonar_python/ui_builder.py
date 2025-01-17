@@ -285,15 +285,16 @@ class UIBuilder:
             # 0, 15, 30, and 45 degrees.
             horizontal_fov=90.0,  # set wedge vertical extent in degrees
             vertical_fov=15.0,  # set wedge horizontal extent in degrees
-            horizontal_resolution=18,
-            vertical_resolution=3,
-            num_bins=224, # number of bins that the emiiters output (numBins divides minRange to maxRange distance.)
+            horizontal_resolution=0.9,
+            vertical_resolution=0.25,
+            num_bins=30, # number of bins that the emiiters output (numBins divides minRange to maxRange distance.)
             use_brdf = True,
             use_uss_materials = False,
             emitter_prims=[emitter_path],
             firing_group_prims=[group.GetPath()],
             
         ) 
+        self.ultrasonic.CreateUseDistAttenuationAttr(True)
 
 
     def _setup_scenario(self):
@@ -314,7 +315,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._articulation,self._ultrasonic_path)
+        self._scenario.setup_scenario(self._rob, self._articulation, self._ultrasonic_path)
 
     def _on_post_reset_btn(self):
         """
@@ -340,7 +341,7 @@ class UIBuilder:
             step (float): The dt of the current physics step
         """
         self._scenario.update_scenario(step)
-        self._scenario.update_ui(self._outputs_frame)
+        # self._scenario.update_ui(self._outputs_frame)
 
     def _on_run_scenario_a_text(self):
         """
@@ -368,6 +369,7 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
+        self._scenario.plot() # Added an plot function after clicking the pause
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().
