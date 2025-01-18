@@ -148,10 +148,10 @@ class UIBuilder:
         self._rob = None
         self._sea_floor = None
         self._articulation= None
-        self._sensor_location = Gf.Vec3d(0.0, 0.0, -0.6)
+        self._sensor_location = Gf.Vec3d(0.05, 0.0, 0)
 
-        self._init_rob_pos = np.array([2, 2, 5])
-        self._box_size = 1 #temporary (using a box for the rob)
+        self._init_rob_pos = np.array([2, 2, 1.5])
+        self._box_size = 0.05 #temporary (using a box for the rob)
 
         self._scenario = ImagingSonarScenario()
 
@@ -230,7 +230,7 @@ class UIBuilder:
 
         self._obstacle = DynamicCuboid(
             prim_path=obstacle_path[1],
-            translation=np.array([5,2,4.5]),
+            translation=np.array([5,2,2]),
             size=1
         )
         obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[1])
@@ -252,7 +252,7 @@ class UIBuilder:
         result, emitter_prim = omni.kit.commands.execute(
             "RangeSensorCreateUltrasonicEmitter",
             path=robot_prim_path + "/UltrasonicEmitter",
-            per_ray_intensity=0.5,
+            per_ray_intensity=1.0,
             yaw_offset = 0.0,
             adjacency_list = adjacency
         )
@@ -273,7 +273,7 @@ class UIBuilder:
             "RangeSensorCreateUltrasonicArray",
             path=self._ultrasonic_path,
             # Min and max range for the ULTRASONIC.  This defines the starting and stopping locations for the linetrace
-            min_range=0.4,
+            min_range=0,
             max_range=4.5,
             # These attributes affect drawing the ultrasonic in the viewport.  High Level Of Detail (HighLod) = True will draw
             # all rays.  If false it will only draw horizontal rays.  Draw Ultrasonic Points = True will draw the actual
@@ -284,9 +284,9 @@ class UIBuilder:
             # resolution.  If your FOV is 45 degrees and your resolution is 15 degrees, you will get rays at
             # 0, 15, 30, and 45 degrees.
             horizontal_fov=90.0,  # set wedge vertical extent in degrees
-            vertical_fov=15.0,  # set wedge horizontal extent in degrees
+            vertical_fov=90,  # set wedge horizontal extent in degrees
             horizontal_resolution=0.9,
-            vertical_resolution=0.25,
+            vertical_resolution=0.9,
             num_bins=30, # number of bins that the emiiters output (numBins divides minRange to maxRange distance.)
             use_brdf = True,
             use_uss_materials = False,

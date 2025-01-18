@@ -76,17 +76,20 @@ class ImagingSonarScenario(ScenarioTemplate):
         self._intensity = intensity.ravel()
         self.sonar_map = np.zeros([num_points, 3])
         map_width = 1
-        map_height = 2
+        map_height = 1
         hori_fov = np.abs(azimuth[-1] - azimuth[0])
         max_range = 4.5
         
         for i in range(num_points):
-            self.pcl_cart[i,:] = [self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
-                             self.pcl_spher[i,0] * np.sin(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
-                             self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2])]
-            self.sonar_map[i,:] = [map_width/2 - (self.pcl_cart[i,0]/(np.sin(hori_fov) * max_range)) * np.sin(hori_fov/2) * map_height,
-                              (self.pcl_cart[i,1]/max_range) * map_height,
-                              self._intensity[i]]
+            # self.pcl_cart[i,:] = [self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
+            #                  self.pcl_spher[i,0] * np.sin(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
+            #                  self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2])]
+            self.pcl_cart[i,:] = [self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2]) * np.cos(self.pcl_spher[i,1]),
+                             self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2]) * np.sin(self.pcl_spher[i,1]),
+                             self.pcl_spher[i,0] * np.sin(self.pcl_spher[i,2])]
+            self.sonar_map[i,:] = [map_width/2 - (self.pcl_cart[i,1]/(np.sin(hori_fov) * max_range)) * np.sin(hori_fov/2) * map_height,
+                              (self.pcl_cart[i,0]/max_range) * map_height,
+                              self._intensity[i]/255]
             
 
 
@@ -100,13 +103,16 @@ class ImagingSonarScenario(ScenarioTemplate):
 
         
     def plot(self):
-        import matplotlib.pyplot as plt
-
         saved_path = '/home/haoyu-ma/Desktop'
+
+        np.save(saved_path+'/cart_coord.npy', self.pcl_cart)
+        np.save(saved_path+'/sonar_map.npy', self.sonar_map)
+        import matplotlib.pyplot as plt 
 
         plt.figure()
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-        ax.scatter(self.sonar_map[:,0], self.sonar_map[:,1], self.sonar_map[:,2])
+        colors = plt.cm.viridis(self.sonar_map[:,2].flatten())
+        ax.scatter(self.pcl_cart[:,0], self.pcl_cart[:,1], self.pcl_cart[:,2], c=colors)
         ax.set_xlabel('X Label')
         ax.set_ylabel('Y Label')
         ax.set_zlabel('Z Label')
@@ -114,26 +120,23 @@ class ImagingSonarScenario(ScenarioTemplate):
         fig.set_figwidth(10)
         fig.set_figheight(10)
         plt.grid(True)
-        plt.savefig(saved_path + '/sonar.png')
-
-
+        plt.savefig(saved_path + '/pcl_colored.png')
+ 
+        
+        
         plt.figure()
-        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-            # Normalize the array to the range [0, 1]
-        norm_array = (self._intensity) / 255
-
-        # Use a colormap to map the normalized values to colors
-        colors = plt.cm.viridis(norm_array.flatten())
-        ax.scatter(self.pcl_spher[:,0], self.pcl_spher[:,1], self.pcl_spher[:,2], c=colors)
+        fig, ax = plt.subplots()
+        filterd_sonar_map = self.sonar_map[self.sonar_map[:,2]!=0]
+        ax.scatter(filterd_sonar_map[:,0], filterd_sonar_map[:,1])
         ax.set_xlabel('X Label')
         ax.set_ylabel('Y Label')
-        ax.set_zlabel('Z Label')
         fig.set_figwidth(10)
         fig.set_figheight(10)
         plt.grid(True)
-        plt.savefig(saved_path + '/pcl_colored.png')
-        
-        print(f"Plot has been save to {saved_path}")
+        plt.savefig(saved_path + '/sonar.png')
+
+
+        print(f"Plot and data has been save to {saved_path}")
         
         plt.close()
 
