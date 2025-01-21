@@ -7,6 +7,6 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
-EXTENSION_TITLE = "UIlibrary"
+EXTENSION_TITLE = "PhysXraycast"
 
-EXTENSION_DESCRIPTION = "UIlibrary"
+EXTENSION_DESCRIPTION = "PhysXraycast"
