@@ -62,50 +62,17 @@ class ImagingSonarScenario(ScenarioTemplate):
             return
 
         self._time += step
-        self.sonar_map = self._sonar.ray_cast(sonar_map_data=True
-                                             )
-        # self._sonar.draw_debug_lines()
+        self._sonar.ray_cast()
+        self._sonar.draw_debug_lines()
 
 
 
 
 
     def plot(self):
-        saved_path = '/home/haoyu-ma/Desktop'
-
-        # np.save(saved_path+'/cart_coord.npy', self.pcl_cart)
-        # np.save(saved_path+'/sonar_map.npy', self.sonar_map)
-
-        # plt.figure()
-        # fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-        # colors = plt.cm.viridis(self.sonar_map[:,2].flatten())
-        # ax.scatter(self.pcl_cart[:,0], self.pcl_cart[:,1], self.pcl_cart[:,2], c=colors)
-        # ax.set_xlabel('X Label')
-        # ax.set_ylabel('Y Label')
-        # ax.set_zlabel('Z Label')
-        # ax.set_xlim([0,5])
-        # fig.set_figwidth(10)
-        # fig.set_figheight(10)
-        # plt.grid(True)
-        # plt.savefig(saved_path + '/pcl_colored.png')
- 
+        pass
         
-        map = np.array(self.sonar_map)
-        plt.figure()
-        fig, ax = plt.subplots()
-        ax.scatter(map[:,0], map[:,1],c=map[:,2]/255,cmap='jet', s=25, edgecolors=None)
-        ax.set_ylim(bottom=0)
-        fig.set_figwidth(10)
-        fig.set_figheight(10)
         
-        plt.grid(True)
-        plt.savefig(saved_path + '/sonar.png')
-
-
-        print(f"Plot and data has been save to {saved_path}")
-        
-        plt.close()
-
     
 
     def update_ui(outputs_frame):

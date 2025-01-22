@@ -1,7 +1,6 @@
 import numpy as np
 import random
-# import omni.kit.raycast.query
-from omni.physx import get_physx_scene_query_interface
+import omni.kit.raycast.query
 from pxr import Gf
 from omni.isaac.core.prims import BaseSensor
 from omni.isaac.dynamic_control import _dynamic_control
@@ -28,8 +27,7 @@ class SonarSensor():
         self.map_height = 1
         
         self.draw = _debug_draw.acquire_debug_draw_interface()
-        # self.raycast = omni.kit.raycast.query.acquire_raycast_query_interface()
-        self.raycast = get_physx_scene_query_interface()
+        self.raycast = omni.kit.raycast.query.acquire_raycast_query_interface()
         self._rigid_body_path = None
         self._dc = _dynamic_control.acquire_dynamic_control_interface()
     
@@ -45,7 +43,7 @@ class SonarSensor():
                                                np.sin(self.zen[j])*np.sin(self.azi[i]),
                                                np.cos(self.zen[j])])
 
-        self.origins_local = (self.origins_local + self.unit_vec_local * self.min_range).reshape(-1,3)
+        self.origins_local = self.origins_local.reshape(-1,3)
         self.unit_vec_local = self.unit_vec_local.reshape(-1,3)
 
 
@@ -56,42 +54,26 @@ class SonarSensor():
         self._sonar = BaseSensor(prim_path=sensor_prim_path,translation=location)
         
 
-    def ray_cast(self, sonar_map_data: bool=True):
+    def ray_cast(self):
         world_pose, world_orien_quat = self._sonar.get_world_pose()
         self.local2world_tran = world_pose
         self.local2world_rot = rotations_utils.quat_to_rot_matrix(world_orien_quat)
         self.origins_world = self.origins_local @ self.local2world_rot.T + self.local2world_tran
         self.unit_vec_world = self.unit_vec_local @ self.local2world_rot.T
-        self.intensity = []
-        self.hit_pos = []
-        sonar_map = []
+
+        hit_position = []
+        def query_callback(ray, result):
+            print(result.hit_position)
+            hit_position.append(result.hit_position)
+
         for i in range(self.numRays):
-            origin = carb.Float3(*self.origins_world[i,:])
-            direction = carb.Float3(*self.unit_vec_world[i,:])
-            hit_info = self.raycast.raycast_closest(origin, direction, (self.max_range-self.min_range))
-            
-            reflectivity = 1
-
-            if hit_info['hit']:
-                theta = np.arccos(np.dot(self.unit_vec_world[i,:], hit_info['normal']))
-                inten = self.base_intensity * reflectivity * np.cos(theta) * (1/self.max_range)**2 * np.exp(-self.attenuation * 2 * hit_info['distance'])
-                
-
-                if sonar_map_data:
-                    sonar_map.append(np.array([self.map_width/2 - (hit_info['position'][1]/(np.sin(self.hori_fov) * self.max_range)) * np.sin(self.hori_fov/2) * self.map_height,
-                              (hit_info['position'][0]/self.max_range) * self.map_height,
-                              inten]))
-                else:
-                    self.intensity.append(inten)
-                    self.hit_pos.append(hit_info['position'])
-
+            ray = omni.kit.raycast.query.Ray(origin=self.origins_world,
+                                       direction=self.unit_vec_world,
+                                       min_t=self.min_range,
+                                       max_t=self.max_range)
+            self.raycast.submit_raycast_query(ray,query_callback)
 
            
-        if sonar_map_data:
-            return sonar_map
-        else:
-            return self.hit_pos, self.intensity
-
         
 
     def get_azi(self):
@@ -103,8 +85,8 @@ class SonarSensor():
     def draw_debug_lines(self):
         colors = [(random.uniform(0, 1), random.uniform(0, 1), random.uniform(0, 1), 1) for _ in range(self.numRays)]
         sizes = [1.5 for _ in range(self.numRays)]
-        self.draw.draw_lines(self.origins_world, 
-                             self.origins_world + self.unit_vec_world * (self.max_range - self.min_range), 
+        self.draw.draw_lines(self.origins_world + self.min_range * self.unit_vec_world, 
+                             self.origins_world + self.unit_vec_world * self.max_range, 
                              colors, 
                              sizes)
 

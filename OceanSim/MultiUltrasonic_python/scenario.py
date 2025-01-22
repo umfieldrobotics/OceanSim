@@ -42,9 +42,9 @@ class ImagingSonarScenario(ScenarioTemplate):
 
 
 
-    def setup_scenario(self, rob, articulation, sonar_path):
+    def setup_scenario(self, rob, rotations, sonar_path):
         self._rob = rob
-        self._articulation = articulation
+        self._rotations = rotations
         self._sonar_path = sonar_path
         self._running_scenario = True
 
@@ -64,41 +64,44 @@ class ImagingSonarScenario(ScenarioTemplate):
             return
 
         self._time += step
-        depth = self._ul.get_linear_depth_data(self._sonar_path, 0)
-        azimuth = self._ul.get_azimuth_data(self._sonar_path)
-        zenith = self._ul.get_zenith_data(self._sonar_path)
-        num_points = azimuth.shape[0] * zenith.shape[0]
-        theta, phi = np.meshgrid(azimuth, zenith, indexing="ij")
-        self.pcl_spher = np.column_stack((depth.ravel(), theta.ravel(), phi.ravel()))
-        self.pcl_cart = np.zeros([num_points, 3])
-
-        intensity = self._ul.get_intensity_data(self._sonar_path, 0)
-        self._intensity = intensity.ravel()
-        self.sonar_map = np.zeros([num_points, 3])
-        map_width = 1
-        map_height = 1
-        hori_fov = np.abs(azimuth[-1] - azimuth[0])
-        max_range = 4.5
         self.envelope_array = self._ul.get_envelope_array(self._sonar_path)
+        self.bin_stamp = np.linspace(0, 224, 224)
+
+        # depth = self._ul.get_linear_depth_data(self._sonar_path, 0)
+        # azimuth = self._ul.get_azimuth_data(self._sonar_path)
+        # zenith = self._ul.get_zenith_data(self._sonar_path)
+        # num_points = azimuth.shape[0] * zenith.shape[0]
+        # theta, phi = np.meshgrid(azimuth, zenith, indexing="ij")
+        # self.pcl_spher = np.column_stack((depth.ravel(), theta.ravel(), phi.ravel()))
+        # self.pcl_cart = np.zeros([num_points, 3])
+
+        # intensity = self._ul.get_intensity_data(self._sonar_path, 0)
+        # self._intensity = intensity.ravel()
+        # self.sonar_map = np.zeros([num_points, 3])
+        # map_width = 1
+        # map_height = 1
+        # hori_fov = np.abs(azimuth[-1] - azimuth[0])
+        # max_range = 4.5
+        # self.envelope_array = self._ul.get_envelope_array(self._sonar_path)
         
-        for i in range(num_points):
-            # self.pcl_cart[i,:] = [self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
-            #                  self.pcl_spher[i,0] * np.sin(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
-            #                  self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2])]
-            self.pcl_cart[i,:] = [self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2]) * np.cos(self.pcl_spher[i,1]),
-                             self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2]) * np.sin(self.pcl_spher[i,1]),
-                             self.pcl_spher[i,0] * np.sin(self.pcl_spher[i,2])]
-            self.sonar_map[i,:] = [map_width/2 - (self.pcl_cart[i,1]/(np.sin(hori_fov) * max_range)) * np.sin(hori_fov/2) * map_height,
-                              (self.pcl_cart[i,0]/max_range) * map_height,
-                              self._intensity[i]/255]
+        # for i in range(num_points):
+        #     # self.pcl_cart[i,:] = [self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
+        #     #                  self.pcl_spher[i,0] * np.sin(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
+        #     #                  self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2])]
+        #     self.pcl_cart[i,:] = [self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2]) * np.cos(self.pcl_spher[i,1]),
+        #                      self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2]) * np.sin(self.pcl_spher[i,1]),
+        #                      self.pcl_spher[i,0] * np.sin(self.pcl_spher[i,2])]
+        #     self.sonar_map[i,:] = [map_width/2 - (self.pcl_cart[i,1]/(np.sin(hori_fov) * max_range)) * np.sin(hori_fov/2) * map_height,
+        #                       (self.pcl_cart[i,0]/max_range) * map_height,
+        #                       self._intensity[i]/255]
             
 
 
     def save(self):
         saved_path = '/home/haoyu-ma/Desktop'
 
-        np.save(saved_path+'/cart_coord.npy', self.pcl_cart)
-        np.save(saved_path+'/sonar_map.npy', self.sonar_map)
+        np.save(saved_path+'/rotations.npy', self._rotations)
+        np.save(saved_path+'/bin_stamp.npy', self.bin_stamp)
         np.save(saved_path+'/envelope.npy', self.envelope_array)
 
         print(f"Data has been save to {saved_path}")

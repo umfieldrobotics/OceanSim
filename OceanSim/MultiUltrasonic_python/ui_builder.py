@@ -212,26 +212,47 @@ class UIBuilder:
         sea_floor_prim_path = "/GroundPlane"
         self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
         
+        num_emitter = 120
+        min_hor_fov = -60
+        max_hor_fov = 60
+        self.rotations = np.linspace(min_hor_fov, max_hor_fov, num_emitter)
+        emitter_prim_paths = []
+        emitter_modes = []
+        receiver_modes = []
+
+        for i in range(num_emitter):
+            emitter_rot = (0,0,self.rotations[i])
+            emitter_tran = self._sensor_location
+            if i==0:
+                adjacency = [i, i+1]
+            elif i==num_emitter-1:
+                adjacency = [i-1, i]
+            else:
+                adjacency = [i-1, i, i+1]
+            
+            result, emitter_prim = omni.kit.commands.execute(
+                "RangeSensorCreateUltrasonicEmitter",
+                path=robot_prim_path + "/UltrasonicEmitter",
+                per_ray_intensity=1,
+                yaw_offset = 0.0,
+                adjacency_list = adjacency
+            )
+
+            emitter_prim.GetPrim().GetAttribute("xformOp:translate").Set(emitter_tran)
+            emitter_prim.GetPrim().GetAttribute("xformOp:rotateXYZ").Set(emitter_rot)
+            emitter_path = emitter_prim.GetPath()
+            emitter_prim_paths.append(emitter_path)
+
+            emitter_modes.append((i,0))
+
+            receiver_modes.append((i,0))
+
         
-        emitter_pose = ((180, 0, 0), self._sensor_location)
-        adjacency = [0]
-        result, emitter_prim = omni.kit.commands.execute(
-            "RangeSensorCreateUltrasonicEmitter",
-            path=robot_prim_path + "/UltrasonicEmitter",
-            per_ray_intensity=1.0,
-            yaw_offset = 0.0,
-            adjacency_list = adjacency
-        )
-
-        emitter_prim.GetPrim().GetAttribute("xformOp:translate").Set(emitter_pose[1])
-        emitter_prim.GetPrim().GetAttribute("xformOp:rotateXYZ").Set(emitter_pose[0])
-        emitter_path = emitter_prim.GetPath()
-
         result, group = omni.kit.commands.execute(
             "RangeSensorCreateUltrasonicFiringGroup",
             path="/World/UltrasonicFiringGroup",
-            emitter_modes=[(0,1)],
-            receiver_modes=[(0,1)],
+            emitter_modes=emitter_modes, 
+            receiver_modes=receiver_modes,
         )
 
         self._ultrasonic_path = "/World/UltrasonicArray"
@@ -244,23 +265,28 @@ class UIBuilder:
             # These attributes affect drawing the ultrasonic in the viewport.  High Level Of Detail (HighLod) = True will draw
             # all rays.  If false it will only draw horizontal rays.  Draw Ultrasonic Points = True will draw the actual
             # ULTRASONIC rays in the viewport.
-            draw_points=True,
+            draw_points=False,
             draw_lines=True,
             # Horizontal and vertical resolution in degrees.  Rays will be fired on the bin boundries defined by the
             # resolution.  If your FOV is 45 degrees and your resolution is 15 degrees, you will get rays at
             # 0, 15, 30, and 45 degrees.
-            horizontal_fov=120,  # set wedge vertical extent in degrees
-            vertical_fov=10,  # set wedge horizontal extent in degrees
-            horizontal_resolution=0.2,
-            vertical_resolution=1,
-            num_bins=1024, # number of bins that the emiiters output (numBins divides minRange to maxRange distance.)
+            horizontal_fov=90,  # set wedge vertical extent in degrees
+            vertical_fov=15,  # set wedge horizontal extent in degrees
+            horizontal_resolution=0.3,
+            vertical_resolution=0.5,
+            num_bins=224, # number of bins that the emiiters output (numBins divides minRange to maxRange distance.)
             use_brdf = True,
             use_uss_materials = False,
-            emitter_prims=[emitter_path],
+            emitter_prims=emitter_prim_paths,
             firing_group_prims=[group.GetPath()],
             
         ) 
-        self.ultrasonic.CreateUseDistAttenuationAttr(True)
+        # self.ultrasonic.CreateUseDistAttenuationAttr(True)
+        
+        
+        
+
+
 
 
     def _setup_scenario(self):
@@ -281,7 +307,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._articulation, self._ultrasonic_path)
+        self._scenario.setup_scenario(self._rob, self.rotations, self._ultrasonic_path)
 
     def _on_post_reset_btn(self):
         """

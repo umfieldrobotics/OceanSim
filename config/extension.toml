@@ -35,3 +35,9 @@ name = "OceanSim.ImagingSonar_python"
 
 [[python.module]]
 name = "OceanSim.fossen_python"
+
+[[python.module]]
+name = "OceanSim.MultiUltrasonic_python"
+
+[[python.module]]
+name = "OceanSim.RTXraycast_python"
