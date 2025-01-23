@@ -22,7 +22,7 @@ from omni.isaac.ui.ui_utils import get_style
 from omni.usd import StageEventType
 from pxr import Sdf, UsdLux
 
-
+import random
 from .scenario import ImagingSonarScenario
 from omni.isaac.core.objects import GroundPlane
 from omni.isaac.core.objects import DynamicCuboid, DynamicCylinder
@@ -151,7 +151,7 @@ class UIBuilder:
         self._articulation= None
         self._sensor_location = Gf.Vec3d(0.05, 0.0, 0)
 
-        self._init_rob_pos = np.array([2, 2, 0.5])
+        self._init_rob_pos = np.array([2, 2, 0.1])
         self._box_size = 0.05 #temporary (using a box for the rob)
 
         self._scenario = ImagingSonarScenario()
@@ -212,9 +212,9 @@ class UIBuilder:
         sea_floor_prim_path = "/GroundPlane"
         self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
         
-        num_emitter = 120
-        min_hor_fov = -60
-        max_hor_fov = 60
+        num_emitter = 200
+        min_hor_fov = -10
+        max_hor_fov = 10
         self.rotations = np.linspace(min_hor_fov, max_hor_fov, num_emitter)
         emitter_prim_paths = []
         emitter_modes = []
@@ -223,19 +223,14 @@ class UIBuilder:
         for i in range(num_emitter):
             emitter_rot = (0,0,self.rotations[i])
             emitter_tran = self._sensor_location
-            if i==0:
-                adjacency = [i, i+1]
-            elif i==num_emitter-1:
-                adjacency = [i-1, i]
-            else:
-                adjacency = [i-1, i, i+1]
+
             
             result, emitter_prim = omni.kit.commands.execute(
                 "RangeSensorCreateUltrasonicEmitter",
                 path=robot_prim_path + "/UltrasonicEmitter",
                 per_ray_intensity=1,
                 yaw_offset = 0.0,
-                adjacency_list = adjacency
+                adjacency_list = np.arange(0,num_emitter,1)
             )
 
             emitter_prim.GetPrim().GetAttribute("xformOp:translate").Set(emitter_tran)
@@ -251,7 +246,7 @@ class UIBuilder:
         result, group = omni.kit.commands.execute(
             "RangeSensorCreateUltrasonicFiringGroup",
             path="/World/UltrasonicFiringGroup",
-            emitter_modes=emitter_modes, 
+            emitter_modes=[(100,0)], # !!!!!!!
             receiver_modes=receiver_modes,
         )
 
@@ -265,25 +260,49 @@ class UIBuilder:
             # These attributes affect drawing the ultrasonic in the viewport.  High Level Of Detail (HighLod) = True will draw
             # all rays.  If false it will only draw horizontal rays.  Draw Ultrasonic Points = True will draw the actual
             # ULTRASONIC rays in the viewport.
-            draw_points=False,
-            draw_lines=True,
+            draw_points=True,
+            draw_lines=False,
             # Horizontal and vertical resolution in degrees.  Rays will be fired on the bin boundries defined by the
             # resolution.  If your FOV is 45 degrees and your resolution is 15 degrees, you will get rays at
             # 0, 15, 30, and 45 degrees.
             horizontal_fov=90,  # set wedge vertical extent in degrees
-            vertical_fov=15,  # set wedge horizontal extent in degrees
+            vertical_fov=45,  # set wedge horizontal extent in degrees
             horizontal_resolution=0.3,
-            vertical_resolution=0.5,
-            num_bins=224, # number of bins that the emiiters output (numBins divides minRange to maxRange distance.)
-            use_brdf = True,
+            vertical_resolution=0.15,
+            num_bins=1000, # number of bins that the emiiters output (numBins divides minRange to maxRange distance.)
+            use_brdf = False,
             use_uss_materials = False,
             emitter_prims=emitter_prim_paths,
             firing_group_prims=[group.GetPath()],
             
         ) 
-        # self.ultrasonic.CreateUseDistAttenuationAttr(True)
+        self.ultrasonic.CreateUseDistAttenuationAttr(False)
         
-        
+        def random_quaternion():
+
+            x = random.uniform(-1, 1)
+
+            y = random.uniform(-1, 1)
+
+            z = random.uniform(-1, 1)
+
+            w = random.uniform(-1, 1)
+
+            magnitude = (x**2 + y**2 + z**2 + w**2)**0.5
+
+            return np.array([x / magnitude, y / magnitude, z / magnitude, w / magnitude])
+
+        self._obstacle = DynamicCuboid(
+            prim_path="/obstacle_0",
+            translation=np.array([4,2.5,1]),
+            orientation=random_quaternion(),
+            size=1,
+        )
+        obstacle_prim = prims_utils.get_prim_at_path(prim_path="/obstacle_0")
+        obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
+        obstacle_rigidBody_API.CreateDisableGravityAttr(True)
+        obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
+        obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
         
 
 

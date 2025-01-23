@@ -65,7 +65,6 @@ class ImagingSonarScenario(ScenarioTemplate):
 
         self._time += step
         self.envelope_array = self._ul.get_envelope_array(self._sonar_path)
-        self.bin_stamp = np.linspace(0, 224, 224)
 
         # depth = self._ul.get_linear_depth_data(self._sonar_path, 0)
         # azimuth = self._ul.get_azimuth_data(self._sonar_path)
@@ -98,11 +97,10 @@ class ImagingSonarScenario(ScenarioTemplate):
 
 
     def save(self):
-        saved_path = '/home/haoyu-ma/Desktop'
+        saved_path = '/home/haoyu-ma/Desktop/viz_test'
 
         np.save(saved_path+'/rotations.npy', self._rotations)
-        np.save(saved_path+'/bin_stamp.npy', self.bin_stamp)
-        np.save(saved_path+'/envelope.npy', self.envelope_array)
+        np.save(saved_path+'/envelope_array.npy', self.envelope_array)
 
         print(f"Data has been save to {saved_path}")
         

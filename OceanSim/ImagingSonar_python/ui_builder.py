@@ -22,7 +22,7 @@ from omni.isaac.ui.ui_utils import get_style
 from omni.usd import StageEventType
 from pxr import Sdf, UsdLux
 
-
+import random
 from .scenario import ImagingSonarScenario
 from omni.isaac.core.objects import GroundPlane
 from omni.isaac.core.objects import DynamicCuboid, DynamicCylinder
@@ -151,7 +151,7 @@ class UIBuilder:
         self._articulation= None
         self._sensor_location = Gf.Vec3d(0.05, 0.0, 0)
 
-        self._init_rob_pos = np.array([2, 2, 0.5])
+        self._init_rob_pos = np.array([2, 2, 2])
         self._box_size = 0.05 #temporary (using a box for the rob)
 
         self._scenario = ImagingSonarScenario()
@@ -203,8 +203,6 @@ class UIBuilder:
         cube_rigidBody_API.GetLinearDampingAttr().Set(0.0)
         cube_rigidBody_API.GetAngularDampingAttr().Set(0.0)
 
-
-
         set_camera_view(eye=[-5.0, 5.0, 5.0], target=[2.00, 2.00, 2.0], camera_prim_path="/OmniverseKit_Persp")
 
 
@@ -212,26 +210,37 @@ class UIBuilder:
         sea_floor_prim_path = "/GroundPlane"
         self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
         
-        
-        emitter_pose = ((180, 0, 0), self._sensor_location)
-        adjacency = [0]
-        result, emitter_prim = omni.kit.commands.execute(
+        emitter_path = []
+        result, emitter_prim1 = omni.kit.commands.execute(
             "RangeSensorCreateUltrasonicEmitter",
-            path=robot_prim_path + "/UltrasonicEmitter",
+            path=robot_prim_path + "/UltrasonicEmitter_0",
             per_ray_intensity=1.0,
             yaw_offset = 0.0,
-            adjacency_list = adjacency
+            adjacency_list = [0,1]
         )
 
-        emitter_prim.GetPrim().GetAttribute("xformOp:translate").Set(emitter_pose[1])
-        emitter_prim.GetPrim().GetAttribute("xformOp:rotateXYZ").Set(emitter_pose[0])
-        emitter_path = emitter_prim.GetPath()
+        emitter_prim1.GetPrim().GetAttribute("xformOp:translate").Set(self._sensor_location)
+        emitter_prim1.GetPrim().GetAttribute("xformOp:rotateXYZ").Set((180, 0, 0))
+        emitter_path.append(emitter_prim1.GetPath())
+        
+        
+        result, emitter_prim2 = omni.kit.commands.execute(
+            "RangeSensorCreateUltrasonicEmitter",
+            path=robot_prim_path + "/UltrasonicEmitter_1",
+            per_ray_intensity=1.0,
+            yaw_offset = 0.0,
+            adjacency_list = [0,1]
+        )
+
+        emitter_prim2.GetPrim().GetAttribute("xformOp:translate").Set(self._sensor_location + Gf.Vec3d(0.0, 0.25, 0.0))
+        emitter_prim2.GetPrim().GetAttribute("xformOp:rotateXYZ").Set((180, 0, 0))
+        emitter_path.append(emitter_prim2.GetPath())
 
         result, group = omni.kit.commands.execute(
             "RangeSensorCreateUltrasonicFiringGroup",
             path="/World/UltrasonicFiringGroup",
-            emitter_modes=[(0,1)],
-            receiver_modes=[(0,1)],
+            emitter_modes=[(0,0)],
+            receiver_modes=[(1,0)],
         )
 
         self._ultrasonic_path = "/World/UltrasonicArray"
@@ -240,27 +249,67 @@ class UIBuilder:
             path=self._ultrasonic_path,
             # Min and max range for the ULTRASONIC.  This defines the starting and stopping locations for the linetrace
             min_range=0,
-            max_range=4.5,
+            max_range=10,
             # These attributes affect drawing the ultrasonic in the viewport.  High Level Of Detail (HighLod) = True will draw
             # all rays.  If false it will only draw horizontal rays.  Draw Ultrasonic Points = True will draw the actual
             # ULTRASONIC rays in the viewport.
-            draw_points=True,
+            draw_points=False,
             draw_lines=True,
             # Horizontal and vertical resolution in degrees.  Rays will be fired on the bin boundries defined by the
             # resolution.  If your FOV is 45 degrees and your resolution is 15 degrees, you will get rays at
             # 0, 15, 30, and 45 degrees.
-            horizontal_fov=120,  # set wedge vertical extent in degrees
-            vertical_fov=10,  # set wedge horizontal extent in degrees
-            horizontal_resolution=0.2,
-            vertical_resolution=1,
-            num_bins=1024, # number of bins that the emiiters output (numBins divides minRange to maxRange distance.)
-            use_brdf = True,
+            horizontal_fov=20,  # set wedge vertical extent in degrees
+            vertical_fov=20,  # set wedge horizontal extent in degrees
+            horizontal_resolution=0.1,
+            vertical_resolution=0.1,
+            num_bins=100, # number of bins that the emiiters output (numBins divides minRange to maxRange distance.)
+            use_brdf = False,
             use_uss_materials = False,
-            emitter_prims=[emitter_path],
-            firing_group_prims=[group.GetPath()],
-            
+            emitter_prims=emitter_path,
+            firing_group_prims=[group.GetPath()],    
         ) 
-        self.ultrasonic.CreateUseDistAttenuationAttr(True)
+        self.ultrasonic.CreateUseDistAttenuationAttr(False)
+
+
+        def random_quaternion():
+
+            x = random.uniform(-1, 1)
+
+            y = random.uniform(-1, 1)
+
+            z = random.uniform(-1, 1)
+
+            w = random.uniform(-1, 1)
+
+            magnitude = (x**2 + y**2 + z**2 + w**2)**0.5
+
+            return np.array([x / magnitude, y / magnitude, z / magnitude, w / magnitude])
+
+        obstacle_path = ["/obstacle_0", "/obstacle_1"]
+        self._obstacle = DynamicCylinder(
+            prim_path=obstacle_path[0],
+            translation=np.array([5,0,5]),
+            radius=0.5,
+            height=10,
+        )
+        obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[0])
+        obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
+        obstacle_rigidBody_API.CreateDisableGravityAttr(True)
+        obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
+        obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+
+        self._obstacle = DynamicCuboid(
+            prim_path=obstacle_path[1],
+            translation=np.array([5,2,2]),
+            orientation=random_quaternion(),
+            size=1
+        )
+        obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[1])
+        obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
+        obstacle_rigidBody_API.CreateDisableGravityAttr(True)
+        obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
+        obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+
 
 
     def _setup_scenario(self):
