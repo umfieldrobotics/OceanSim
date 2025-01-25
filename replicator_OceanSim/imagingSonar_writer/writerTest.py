@@ -1,7 +1,7 @@
 import numpy as np
 from omni.replicator.core import AnnotatorRegistry, BackendDispatch, Writer, WriterRegistry
 
-class ImagingSonarWriter_Pt(Writer):
+class writerTest(Writer):
     def __init__(
         self,
         output_dir,
@@ -55,12 +55,14 @@ class ImagingSonarWriter_Pt(Writer):
                 if multi_render_prod:
                     render_product_path += "cameraViewTransform/"
                 filename_viewTransform = f"{render_product_path}viewTransform_{self._frame_id}.npy"
+                filename_cameraParam = f"{render_product_path}cameraParam_{self._frame_id}.npy"
+
                 print(f"[{self._frame_id}] Writing {self.backend.output_dir}/{filename_viewTransform} ..")
                 self.backend.write_array(filename_viewTransform, data[annotator]['cameraViewTransform'])
-
+                self.backend.write_array(filename_cameraParam, data[annotator])
         self._frame_id += 1
 
     def on_final_frame(self):
         self._frame_id = 0
 
-WriterRegistry.register(ImagingSonarWriter_Pt)
+WriterRegistry.register(writerTest)
