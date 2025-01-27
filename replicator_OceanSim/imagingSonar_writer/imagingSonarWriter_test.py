@@ -1,11 +1,22 @@
-import numpy as np
-from omni.replicator.core import AnnotatorRegistry, BackendDispatch, Writer, WriterRegistry
-from omni.replicator.core.scripts.functional import write_image, write_json
+import asyncio
+import os
 import time
+
+from omni.replicator.core import AnnotatorRegistry, BackendDispatch, Writer, WriterRegistry
+import omni.replicator.core as rep
+from omni.replicator.core.scripts.functional import write_image, write_json
+
+import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import binned_statistic_2d
 
-class imagingSonarWriter(Writer):
+
+
+##########################
+## Imaging sonar writer ##
+##########################
+
+class imagingSonarWriter_test(Writer):
     """Imaging Sonar Writer
     Args:
         output_dir:
@@ -29,7 +40,7 @@ class imagingSonarWriter(Writer):
 
 
 
-        self.max_range = 4
+        self.max_range = 6
         self.base_intensity = 255
         self.reflectivity = 1
         self.attenuation = 0.01
@@ -109,9 +120,11 @@ class imagingSonarWriter(Writer):
         self._multiple_render_products = False
         self._start_time = time.time()
 
+    def _get_current_frame(self):
+        return self._frame_id
+    
     def _get_time_past(self):
         return format(time.time() - self._start_time, ".2f")
-
 
     def _process_frame_data(self, data: dict, render_product_name: str):
         # Store the frame data for writing to disk
@@ -232,12 +245,11 @@ class imagingSonarWriter(Writer):
             
             return np.stack((r, azi, intensity_binned), axis=-1).reshape(-1,3)
 
-        
 
         normals = np.delete(arr=normals, obj=3, axis=1)
         viewTransform = viewTransform.reshape(4,4).T
         render_trans = -(np.transpose(viewTransform)[:3,3])
-        render_rot = np.transpose(viewTransform)[:3,:3]
+        # render_rot = np.transpose(viewTransform)[:3,:3]
         dist = np.linalg.norm(pcl-render_trans, axis=1)
         directs = pcl - render_trans
         unit_directs = directs/np.linalg.norm(directs)
@@ -260,5 +272,51 @@ class imagingSonarWriter(Writer):
         return sonar_map
     
 
+# Register this writer to the writer registry
+WriterRegistry.register(imagingSonarWriter_test)
 
-WriterRegistry.register(imagingSonarWriter)
+######################
+## Set up the scene ##
+######################
+    
+r0 = 3
+elevation = [20, 50, 80] # deg
+num_azi = 10
+sub_frames = 4
+
+cam = rep.create.camera(clipping_range=[0.01, 6])
+rp = rep.create.render_product(cam, (2048, 2048))
+writer = rep.WriterRegistry.get("imagingSonarWriter_test")
+
+# rep.create.light(light_type="dome")
+
+out_dir = os.getcwd() + "/_imagingSonarTest"
+print(f"Writing data to {out_dir}")
+writer.initialize(output_dir=out_dir)
+writer.attach(rp)
+
+
+
+async def run_scan_async(cam, r0, num_azi, elevation):
+    azi = np.linspace(-180, 180, num_azi).tolist()
+
+    for i in range(len(elevation)):
+        for j in range(len(azi)):
+            with cam:
+                rep.modify.pose_orbit(
+                    barycentre=(0,0,0),
+                    distance=r0,
+                    azimuth=azi[j],
+                    elevation=elevation[i],
+                    look_at_barycentre=True,
+                    )
+                
+            # step the simulation to write one frame of data
+            await rep.orchestrator.step_async(rt_subframes=sub_frames)
+
+
+    # Wait until all the data is saved to disk
+    await rep.orchestrator.wait_until_complete_async()
+
+
+asyncio.ensure_future(run_scan_async(cam, r0, num_azi, elevation))
