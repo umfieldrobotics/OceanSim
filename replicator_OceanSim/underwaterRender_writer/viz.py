@@ -6,13 +6,13 @@ from scipy.stats import binned_statistic_2d
 import json
 
 
-with open('cameraParams/cameraParams_1.json', 'r') as file:
+with open('cameraParams_1.json', 'r') as file:
     data = json.load(file)
 
 
 
-pcl = np.load('pcl/pcl_1.npy')
-depth = np.load('depth/depth_1.npy')
+pcl = np.load('pcl_1.npy')
+depth = np.load('depth_1.npy')
 viewTransform = np.array(data['camera_view_matrix']).T
 print(pcl.shape)
 print(depth.shape)
