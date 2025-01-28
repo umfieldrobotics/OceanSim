@@ -102,12 +102,12 @@ rep.WriterRegistry.register(ScanWriter)
 ## Scene ##
 
     
-r0 = 2
+r0 = 1
 elevation = [45, -45] # deg
-num_azi = 3
+num_azi = 10
 
-cam = rep.create.camera()
-rp = rep.create.render_product(cam, (512, 512))
+cam = rep.create.camera(clipping_range=[0.01, 8])
+rp = rep.create.render_product(cam, (1024, 1024))
 writer = rep.WriterRegistry.get("ScanWriter")
 
 rep.create.light(light_type="dome")

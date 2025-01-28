@@ -1,14 +1,16 @@
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 class Underwater_render():
     def __init__(self):
         # TODO 
         # Now we have the wideband_veiling_light, assume three attenuation coefficients for RGB channel and perform color correction
-#
-# 
-#
-        self._depth = 0.01         # Current altitude depth measurement
+
+        self._backscatter_atte = np.array([0.1, 0.1, 0.1])
+        self._direct_atte = np.array([0.1, 0.1, 0.1])
+
+
+        self._depth = 0.01        # Current altitude depth measurement
         self._irradiance_0 = 1.0   # Irradiance (E) at the surface
         self._K = 0.1   #  Camera image exposure and camera pixel geometry
         # Sony_IMX117_Camera_Response       
@@ -24,7 +26,7 @@ class Underwater_render():
             ]) 
         self._wavelenths = self._camera_response[:,0]
         self._wavelengths_sub = (self._wavelenths[-1] - self._wavelenths[0]) / (self._wavelenths.shape[0] - 1) / 2
-        self._camera_info = np.column_stack((self._camera_response[:,3], self._camera_response[:,2], self._camera_response[:,1], np.zeros((self._wavelenths.shape[0],1))))
+        self._camera_info = np.column_stack((self._camera_response[:,3], self._camera_response[:,2], self._camera_response[:,1]))
         # Jerlov I      
         # [wavelength   K_d	  b_abs	   b_sca]
         self._Jerlov_water_types = np.array([
@@ -62,16 +64,42 @@ class Underwater_render():
 
         
     def calc_wideband_veiling_light(self) -> np.ndarray: 
-        wideband_veiling_light = np.zeros(4)
+        self.wideband_veiling_light = np.zeros(3)
         for i in range(self._wavelenths.shape[0]):
             temp_cur = self._b_sca[i] * self._irradiance[i] / self._b_att[i]
-            wideband_veiling_light += 2.0 * self._camera_info[i,:] * temp_cur
-        wideband_veiling_light *= 1/self._K * self._wavelengths_sub
+            self.wideband_veiling_light += 2.0 * self._camera_info[i,:] * temp_cur
+        self.wideband_veiling_light *= 1/self._K * self._wavelengths_sub
 
-        return wideband_veiling_light
+        return self.wideband_veiling_light
+    
+
+    def render(self, raw_image):
+        rendered_image = raw_image.copy()
+        for i in range(raw_image.shape[0]):
+            for j in range(raw_image.shape[1]):
+                rendered_image[i,j,:3] = raw_image[i,j,:3] * np.exp(-self._direct_atte * self._depth) + self.wideband_veiling_light * (1 - np.exp(self._backscatter_atte * self._depth))
+                rendered_image[i,j,3] = raw_image[i,j,3]
+        return rendered_image
+    
+    def cal_backscatter(self):
+        pass
+        # self.backscatter = self.wideband_veiling_light * (1 - np.exp())
+
         
 
 
 if __name__ =="__main__":
+
+
     render = Underwater_render()
-    print(render.calc_wideband_veiling_light())
+    raw_image = plt.imread('rgb_1.png')
+    print(f'Wideband_veiling_light:{render.calc_wideband_veiling_light()}')
+    rendered_image = render.render(raw_image)
+    fig = plt.figure()
+    ax1 = fig.add_subplot(1,2,1)
+    ax1.imshow(raw_image)
+    ax1.set_title('raw image')
+    ax2 = fig.add_subplot(1,2,2)
+    ax2.imshow(rendered_image)
+    ax2.set_title('rendered image')
+    plt.show()
