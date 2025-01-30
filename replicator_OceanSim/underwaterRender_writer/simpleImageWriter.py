@@ -41,8 +41,10 @@ class ScanWriter(Writer):
 
         # Store the camera information in the
         self._frame_data["camera_data"] = self._process_camera_parameters(data["camera_params"])
-
-        self._frame_data["depth_data"] = data["distance_to_camera"]
+        
+        depth = data['distance_to_camera']
+        depth_map = (depth - np.min(depth)) / (np.max(depth) - np.min(depth))
+        self._frame_data["depth_data"] = (255 * depth_map).astype(np.uint8)
 
         self._frame_data['pcl_data'] = data["pointcloud"]["data"]
 
@@ -98,48 +100,3 @@ class ScanWriter(Writer):
 # Register this writer
 rep.WriterRegistry.register(ScanWriter)
 
-
-## Scene ##
-
-    
-r0 = 1
-elevation = [45] # deg
-num_azi = 1
-
-cam = rep.create.camera(clipping_range=[0.01, 8])
-rp = rep.create.render_product(cam, (1024, 1024))
-writer = rep.WriterRegistry.get("ScanWriter")
-
-rep.create.light(light_type="dome")
-
-out_dir = os.getcwd() + "/_out_custom_event"
-print(f"Writing data to {out_dir}")
-writer.initialize(output_dir=out_dir)
-writer.attach(rp)
-
-
-
-async def run_scan_async(cam, r0, num_azi, elevation):
-    azi = np.linspace(-180, 180, num_azi).tolist()
-
-    for i in range(len(elevation)):
-        for j in range(len(azi)):
-            with cam:
-                rep.modify.pose_orbit(
-                    barycentre=(0,0,0),
-                    distance=r0,
-                    azimuth=azi[j],
-                    elevation=elevation[i],
-                    look_at_barycentre=True,
-                    )
-                
-            # step the simulation to write one frame of data
-            await rep.orchestrator.step_async(rt_subframes=8)
-
-
-    # Wait until all the data is saved to disk
-    await rep.orchestrator.wait_until_complete_async()
-
-
-
-asyncio.ensure_future(run_scan_async(cam, r0, num_azi, elevation))
