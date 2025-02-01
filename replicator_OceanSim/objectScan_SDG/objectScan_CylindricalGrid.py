@@ -112,12 +112,10 @@ RT_SUBFRAMES = 2
 r0 = 4.5
 
 z_range = [0, 20] 
-num_z = 5
+num_z = 50
 z_list = np.linspace(z_range[0], z_range[1], num_z)
-num_azi = 5
+num_azi = 20
 azi_list = np.linspace(0, 2*np.pi, num_azi)
-
-num_data = len(z_list) * len(azi_list)
 
 
 cam = rep.create.camera(clipping_range=[0.01, 16])
@@ -131,9 +129,8 @@ print(f"Writing data to {out_dir}")
 writer.initialize(output_dir=out_dir)
 writer.attach(rp)
 
-def move_cam(r0, azi, z):
+def move_cam(cam_xform_prim, r0, azi, z):
 
-    cam_xform_prim = rep.get.xform(path_pattern="Camera_Xform").get_output_prims()['prims'][0]
     cam_xform_prim.GetAttribute('xformOp:translate').Set((r0 * np.cos(azi), r0* np.sin(azi), z))
     cam_xform_prim.GetAttribute('xformOp:rotateXYZ').Set((0.0 + random.uniform(-10.0, 10.0),
                                                           0.0 + random.uniform(-45.0, 45.0), 
@@ -144,11 +141,12 @@ rep.trigger.register(move_cam)
 
 
 async def run_scan_async(r0, z_list, azi_list):
+    cam_xform_prim = rep.get.xform(path_pattern="Camera_Xform").get_output_prims()['prims'][0]
 
     for i in range(len(z_list)):
         for j in range(len(azi_list)):
             
-            rep.trigger.move_cam(r0, azi_list[j], z_list[i])
+            rep.trigger.move_cam(cam_xform_prim, r0, azi_list[j], z_list[i])
 
             # step the simulation to write one frame of data
             await rep.orchestrator.step_async(rt_subframes=RT_SUBFRAMES)
