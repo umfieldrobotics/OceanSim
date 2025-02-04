@@ -10,9 +10,7 @@
 import numpy as np
 import omni.timeline
 import omni.ui as ui
-from omni.isaac.core.articulations import Articulation, ArticulationView
 from omni.isaac.core.prims import XFormPrim
-from omni.isaac.core.utils.prims import is_prim_path_valid
 from omni.isaac.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
 from omni.isaac.core.world import World
 from omni.isaac.nucleus import get_assets_root_path
@@ -30,9 +28,9 @@ import omni.isaac.core.utils.rotations as rotations_utils
 import omni.isaac.core.utils.prims as prims_utils
 from omni.isaac.core.physics_context import PhysicsContext
 from pxr import Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
-
+from omni.isaac.sensor import Camera
 from omni.isaac.core.utils.viewports import set_camera_view
-
+import omni.replicator.core as rep
 
 
 
@@ -148,8 +146,8 @@ class UIBuilder:
     def _on_init(self):
         self._rob = None
         self._sea_floor = None
-        self._articulation= None
-        self._sensor_location = Gf.Vec3d(0.05, 0.0, 0)
+        self._camera = None
+        self._sensor_location = Gf.Vec3d(0.05, 0.0, 0.0)
 
         self._init_rob_pos = np.array([2, 2, 2])
         self._box_size = 0.05 #temporary (using a box for the rob)
@@ -203,114 +201,57 @@ class UIBuilder:
         cube_rigidBody_API.GetLinearDampingAttr().Set(0.0)
         cube_rigidBody_API.GetAngularDampingAttr().Set(0.0)
 
+        # Set the default viewport view angle
         set_camera_view(eye=[-5.0, 5.0, 5.0], target=[2.00, 2.00, 2.0], camera_prim_path="/OmniverseKit_Persp")
 
+
+        # Add the camera sensor to mimic an imaging sonar
+        camera = Camera(
+            prim_path=robot_prim_path + '/camera',
+            translation=self._sensor_location,
+        )
+        camera.set_clipping_range(near_distance=0.01, far_distance=100)
+
+        rp = rep.create.render_product(camera=robot_prim_path+'/camera', resolution=(1024, 1024))
+        self.pointcloud_annot = rep.AnnotatorRegistry.get_annotator("pointcloud", init_params={"includeUnlabelled": True})
+        self.cameraParams_annot = rep.AnnotatorRegistry.get_annotator("CameraParams")
+
+        self.pointcloud_annot.attach(rp)
+        self.cameraParams_annot.attach(rp)
+        # # Initialize the camera and attach point cloud annotator to this render product
+        # self._camera.initialize()
+        # self._camera.add_distance_to_image_plane_to_frame()
+        # self._camera.add_pointcloud_to_frame()
+
+        # obstacle_path = ["/obstacle_0", "/obstacle_1"]
+        # self._obstacle = DynamicCylinder(
+        #     prim_path=obstacle_path[0],
+        #     translation=np.array([5,0,5]),
+        #     radius=0.5,
+        #     height=10,
+            
+        # )
+        # obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[0])
+        # obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
+        # obstacle_rigidBody_API.CreateDisableGravityAttr(True)
+        # obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
+        # obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+
+        # self._obstacle = DynamicCuboid(
+        #     prim_path=obstacle_path[1],
+        #     translation=np.array([5,2,2]),
+        #     size=1,
+        # )
+        # obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[1])
+        # obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
+        # obstacle_rigidBody_API.CreateDisableGravityAttr(True)
+        # obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
+        # obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
 
         #For now use the flat ground plane as the seafloor
         sea_floor_prim_path = "/GroundPlane"
         self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
         
-        emitter_path = []
-        result, emitter_prim1 = omni.kit.commands.execute(
-            "RangeSensorCreateUltrasonicEmitter",
-            path=robot_prim_path + "/UltrasonicEmitter_0",
-            per_ray_intensity=1.0,
-            yaw_offset = 0.0,
-            adjacency_list = [0,1]
-        )
-
-        emitter_prim1.GetPrim().GetAttribute("xformOp:translate").Set(self._sensor_location)
-        emitter_prim1.GetPrim().GetAttribute("xformOp:rotateXYZ").Set((180, 0, 0))
-        emitter_path.append(emitter_prim1.GetPath())
-        
-        
-        result, emitter_prim2 = omni.kit.commands.execute(
-            "RangeSensorCreateUltrasonicEmitter",
-            path=robot_prim_path + "/UltrasonicEmitter_1",
-            per_ray_intensity=1.0,
-            yaw_offset = 0.0,
-            adjacency_list = [0,1]
-        )
-
-        emitter_prim2.GetPrim().GetAttribute("xformOp:translate").Set(self._sensor_location + Gf.Vec3d(0.0, 0.25, 0.0))
-        emitter_prim2.GetPrim().GetAttribute("xformOp:rotateXYZ").Set((180, 0, 0))
-        emitter_path.append(emitter_prim2.GetPath())
-
-        result, group = omni.kit.commands.execute(
-            "RangeSensorCreateUltrasonicFiringGroup",
-            path="/World/UltrasonicFiringGroup",
-            emitter_modes=[(0,0)],
-            receiver_modes=[(1,0)],
-        )
-
-        self._ultrasonic_path = "/World/UltrasonicArray"
-        result, self.ultrasonic = omni.kit.commands.execute(
-            "RangeSensorCreateUltrasonicArray",
-            path=self._ultrasonic_path,
-            # Min and max range for the ULTRASONIC.  This defines the starting and stopping locations for the linetrace
-            min_range=0,
-            max_range=10,
-            # These attributes affect drawing the ultrasonic in the viewport.  High Level Of Detail (HighLod) = True will draw
-            # all rays.  If false it will only draw horizontal rays.  Draw Ultrasonic Points = True will draw the actual
-            # ULTRASONIC rays in the viewport.
-            draw_points=False,
-            draw_lines=True,
-            # Horizontal and vertical resolution in degrees.  Rays will be fired on the bin boundries defined by the
-            # resolution.  If your FOV is 45 degrees and your resolution is 15 degrees, you will get rays at
-            # 0, 15, 30, and 45 degrees.
-            horizontal_fov=20,  # set wedge vertical extent in degrees
-            vertical_fov=20,  # set wedge horizontal extent in degrees
-            horizontal_resolution=0.1,
-            vertical_resolution=0.1,
-            num_bins=100, # number of bins that the emiiters output (numBins divides minRange to maxRange distance.)
-            use_brdf = False,
-            use_uss_materials = False,
-            emitter_prims=emitter_path,
-            firing_group_prims=[group.GetPath()],    
-        ) 
-        self.ultrasonic.CreateUseDistAttenuationAttr(False)
-
-
-        def random_quaternion():
-
-            x = random.uniform(-1, 1)
-
-            y = random.uniform(-1, 1)
-
-            z = random.uniform(-1, 1)
-
-            w = random.uniform(-1, 1)
-
-            magnitude = (x**2 + y**2 + z**2 + w**2)**0.5
-
-            return np.array([x / magnitude, y / magnitude, z / magnitude, w / magnitude])
-
-        obstacle_path = ["/obstacle_0", "/obstacle_1"]
-        self._obstacle = DynamicCylinder(
-            prim_path=obstacle_path[0],
-            translation=np.array([5,0,5]),
-            radius=0.5,
-            height=10,
-        )
-        obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[0])
-        obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
-        obstacle_rigidBody_API.CreateDisableGravityAttr(True)
-        obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-        obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
-
-        self._obstacle = DynamicCuboid(
-            prim_path=obstacle_path[1],
-            translation=np.array([5,2,2]),
-            orientation=random_quaternion(),
-            size=1
-        )
-        obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[1])
-        obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
-        obstacle_rigidBody_API.CreateDisableGravityAttr(True)
-        obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-        obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
-
-
 
     def _setup_scenario(self):
         """
@@ -330,7 +271,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._articulation, self._ultrasonic_path)
+        self._scenario.setup_scenario(self._rob, self.pointcloud_annot, self.cameraParams_annot)
 
     def _on_post_reset_btn(self):
         """
@@ -384,7 +325,7 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
-        self._scenario.save() # Added an plot function after clicking the pause
+        self._scenario.save()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().

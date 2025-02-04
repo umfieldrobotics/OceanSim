@@ -109,9 +109,9 @@ rep.WriterRegistry.register(ScanWriter)
 ## Scene ##
 
 RT_SUBFRAMES = 2
-r0 = 4.5
+r0 = 0.75
 
-z_range = [0, 20] 
+z_range = [0, 1.5] 
 num_z = 50
 z_list = np.linspace(z_range[0], z_range[1], num_z)
 num_azi = 20

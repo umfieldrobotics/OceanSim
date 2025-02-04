@@ -28,24 +28,24 @@ import omni.ui as ui
 from omni.isaac.ui.element_wrappers import XYPlot
 from omni.isaac.range_sensor import _range_sensor
 import matplotlib.pyplot as plt
+from scipy.stats import binned_statistic_2d
 
 
 class ImagingSonarScenario(ScenarioTemplate):
     def __init__(self):
         self._rob = None
-        self._articulation = None
+        self._camera = None
 
         self._dc = _dynamic_control.acquire_dynamic_control_interface()
-        self._ul = _range_sensor.acquire_ultrasonic_sensor_interface()
         self._running_scenario = False
         self._time = 0.0
 
 
 
-    def setup_scenario(self, rob, articulation, sonar_path):
+    def setup_scenario(self, rob, pointcloud_anno, cameraParams_anno):
         self._rob = rob
-        self._articulation = articulation
-        self._sonar_path = sonar_path
+        self._pointcloud_anno = pointcloud_anno
+        self._cameraParams_anno = cameraParams_anno
         self._running_scenario = True
 
 
@@ -53,7 +53,7 @@ class ImagingSonarScenario(ScenarioTemplate):
 
     def teardown_scenario(self):
         self._rob = None
-        self._articulation = None
+        self._camera = None
 
         self._running_scenario = False
         self._time = 0.0
@@ -64,85 +64,108 @@ class ImagingSonarScenario(ScenarioTemplate):
             return
 
         self._time += step
-        self.depth = self._ul.get_linear_depth_data(self._sonar_path, 0)
-        self.azimuth = self._ul.get_azimuth_data(self._sonar_path)
-        self.zenith = self._ul.get_zenith_data(self._sonar_path)
-        # num_points = azimuth.shape[0] * zenith.shape[0]
-        # theta, phi = np.meshgrid(azimuth, zenith, indexing="ij")
-        # self.pcl_spher = np.column_stack((depth.ravel(), theta.ravel(), phi.ravel()))
-        # self.pcl_cart = np.zeros([num_points, 3])
-
-        self.intensity = self._ul.get_intensity_data(self._sonar_path, 0)
-        self.num_rows = self._ul.get_num_rows(self._sonar_path)
-        self.num_cols = self._ul.get_num_cols(self._sonar_path)
-        self.envelope_array = self._ul.get_envelope_array(self._sonar_path)
-        self.envelope = self._ul.get_envelope(self._sonar_path,0)
-
-
-        # self.sonar_map = np.zeros([num_points, 3])
-        # map_width = 1
-        # map_height = 1
-        # hori_fov = np.abs(azimuth[-1] - azimuth[0])
-        # max_range = 4.5
-        # self.envelope_array = self._ul.get_envelope_array(self._sonar_path)
+        self.sonar_data = self.make_sonar_data(pcl=self._pointcloud_anno.get_data()['data'],
+                             normals=self._pointcloud_anno.get_data()['info']['pointNormals'],
+                             viewTransform=self._cameraParams_anno.get_data()['cameraViewTransform'])
         
-        # for i in range(num_points):
-        #     # self.pcl_cart[i,:] = [self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
-        #     #                       self.pcl_spher[i,0] * np.sin(self.pcl_spher[i,1]) * np.sin(self.pcl_spher[i,2]),
-        #     #                       self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2])]
-        #     self.pcl_cart[i,:] = [self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2]) * np.cos(self.pcl_spher[i,1]),
-        #                      self.pcl_spher[i,0] * np.cos(self.pcl_spher[i,2]) * np.sin(self.pcl_spher[i,1]),
-        #                      self.pcl_spher[i,0] * np.sin(self.pcl_spher[i,2])]
-        #     self.sonar_map[i,:] = [map_width/2 - (self.pcl_cart[i,1]/(np.sin(hori_fov) * max_range)) * np.sin(hori_fov/2) * map_height,
-        #                       (self.pcl_cart[i,0]/max_range) * map_height,
-        #                       self._intensity[i]/255]
-            
-
-
-    def save(self):
-        saved_path = '/home/haoyu-ma/Desktop/viz_test'
-
-        np.save(saved_path+'/azi.npy', self.azimuth)
-        np.save(saved_path+'/zen.npy', self.zenith)
-        np.save(saved_path+'/envelope_array.npy', self.envelope_array)
-        np.save(saved_path+'/envelope.npy', self.envelope)
-        np.save(saved_path+'/depth.npy', self.depth)
-        np.save(saved_path+'/intensity.npy', self.intensity)
-        np.save(saved_path+'/num_rows.npy', self.num_rows)
-        np.save(saved_path+'/num_cols.npy', self.num_cols)
-
-        print(f"Data has been save to {saved_path}")
-        
-        plt.close()
 
     
+    def save(self):
+        save_path = '/home/haoyu-ma/Desktop/'
+        fig = plt.figure(dpi=600)
+        ax1 = fig.add_subplot(1,1,1)
+        sonar_plot = ax1.scatter(self.sonar_data[:,0], self.sonar_data[:,1], c=self.sonar_data[:,2], cmap='jet', s=0.5, marker='.')
+        fig.colorbar(mappable=sonar_plot, ax=ax1)
+        plt.savefig(save_path+'sonar.png')
+        fig.clear() 
 
-    def update_ui(outputs_frame):
-        pass
+        # np.save(self._pointcloud_anno.get_data()['data'], save_path+'pcl.npy')
+        # np.save(self._pointcloud_anno.get_data()['info']['pointNormals'], save_path+'normals.npy')
+        # np.save(self._cameraParams_anno.get_data()['cameraViewTransform'], save_path+'viewTransform.npy')
+
+        print(f'plot saved as {save_path}')
 
 
 
-# # Add dynamic cylinders as obstacles
-#         obstacle_path = ["/obstacle_0", "/obstacle_1"]
-#         self._obstacle = DynamicCylinder(
-#             prim_path=obstacle_path[0],
-#             translation=np.array([5,0,5]),
-#             radius=0.5,
-#             height=10,
-#         )
-#         obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[0])
-#         obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
-#         obstacle_rigidBody_API.CreateDisableGravityAttr(True)
-#         obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-#         obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
 
-#         self._obstacle = DynamicCuboid(
-#             prim_path=obstacle_path[1],
-#             translation=np.array([5,2,2]),
-#             size=1
-#         )
-#         obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[1])
-#         obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
-#         obstacle_rigidBody_API.CreateDisableGravityAttr(True)
-#         obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-#         obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+    def make_sonar_map(self, sonar_data:np.ndarray) -> np.ndarray:
+        
+        fig = plt.figure(dpi=600)
+        ax1 = fig.add_subplot(1,1,1)
+        sonar_plot = ax1.scatter(sonar_data[:,0], sonar_data[:,1], c=sonar_data[:,2], cmap='jet', s=0.5, marker='.')
+        fig.colorbar(mappable=sonar_plot, ax=ax1)
+        fig.canvas.draw()
+        image_array = np.array(fig.canvas.renderer.buffer_rgba())
+        fig.clear() 
+
+        return image_array
+
+    def make_sonar_data(self, pcl:np.ndarray, normals:np.ndarray, viewTransform:np.ndarray) -> np.ndarray:
+        
+        
+        def arctan_with_quadrants(y, x):
+            # Compute arctan for the ratio y/x
+            angle = np.arctan(np.divide(y, x, where=x != 0))  # Avoid division by zero with `where`
+            
+            # Adjust angles based on the quadrant
+            angle = np.where((x > 0), angle, angle + np.pi)  # Quadrants II and III
+            angle = np.where((x < 0) & (y < 0), angle - 2 * np.pi, angle)  # Quadrant III correction
+            angle = np.where((x == 0) & (y > 0), np.pi / 2, angle)  # Positive y-axis
+            angle = np.where((x == 0) & (y < 0), -np.pi / 2, angle)  # Negative y-axis
+
+            return angle
+        
+
+        def cartesian_to_spherical(cart_coords):
+            x, y, z = cart_coords[:, 0], cart_coords[:, 1], cart_coords[:, 2]
+            r = np.sqrt(x**2 + y**2 + z**2)
+            theta = arctan_with_quadrants(y, x)
+            phi = np.arccos(z / r)
+            return np.vstack((r, theta, phi)).T
+
+
+        def bin_intensity(num_r_bins, num_azi_bins, pcl, intensity):
+            min_r = pcl[:,0].min()
+            max_r = pcl[:,0].max()
+            min_azi = pcl[:,1].min()
+            max_azi = pcl[:,1].max()
+            r_bins = np.linspace(min_r, max_r, num_r_bins, endpoint=True)
+            azi_bins = np.linspace(min_azi, max_azi, num_azi_bins, endpoint=True)
+
+            intensity_binned, r_edges, azi_edges, _ = binned_statistic_2d(pcl[:,0], pcl[:,1], intensity, statistic='mean', bins=[r_bins, azi_bins])
+            r_mid = (r_edges[:-1] + r_edges[1:]) / 2  
+            azi_mid = (azi_edges[:-1] + azi_edges[1:]) / 2
+            r, azi = np.meshgrid(r_mid, azi_mid, indexing='ij')
+            
+            return np.stack((r, azi, intensity_binned), axis=-1).reshape(-1,3)
+
+        
+        self.max_range = 4
+        self.base_intensity = 255
+        self.reflectivity = 1
+        self.attenuation = 0.01
+
+        normals = np.delete(arr=normals, obj=3, axis=1)
+        viewTransform = viewTransform.reshape(4,4).T
+        render_trans = -(np.transpose(viewTransform)[:3,3])
+        render_rot = np.transpose(viewTransform)[:3,:3]
+        dist = np.linalg.norm(pcl-render_trans, axis=1)
+        directs = pcl - render_trans
+        unit_directs = directs/np.linalg.norm(directs)
+
+        theta = np.arccos(np.sum(unit_directs * normals, axis=1))
+        intensity = self.base_intensity * self.reflectivity * np.abs(np.cos(theta)) * (1/self.max_range)**2 * np.exp(-self.attenuation * 2 * dist)
+
+        # Pre-multiplication to produce transform with respect to world frame
+        pcl_local = (viewTransform @ np.hstack((pcl, np.ones([pcl.shape[0], 1]))).T).T 
+        # Change the axis location to make z pointing upwards  and x pointing forwards for spherical coordinate transformation
+        pcl_local = np.delete(pcl_local, obj=3, axis=1) @ np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
+
+
+        pcl_spher_local = cartesian_to_spherical(pcl_local)
+        sonar_data = bin_intensity(1024, 1024, pcl_spher_local, intensity)
+        sonar_data = np.array([sonar_data[:,0] * np.cos(sonar_data[:,1]), 
+                            sonar_data[:,0] * np.sin(sonar_data[:,1]),
+                            sonar_data[:,2]]).T
+        
+        return sonar_data
