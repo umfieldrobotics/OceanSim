@@ -151,8 +151,8 @@ class UIBuilder:
         self._sensor_location = Gf.Vec3d(0.05, 0.0, 0.0)
         self._focal_length = 3.0
         self._clipping_dist = [0.01, 10]
-        self._init_rob_pos = np.array([-5, -0.5, 6])
-        self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0, np.deg2rad(30), 0]))
+        self._init_rob_pos = np.array([-1.5, -0.5, 6])
+        self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0, np.deg2rad(60), 0]))
         self._box_size = 0.05 #temporary (using a box for the rob)
 
         self._scenario = ImagingSonarScenario()
@@ -221,7 +221,7 @@ class UIBuilder:
         camera.set_focal_length(value=self._focal_length)
         camera.initialize()
 
-        rp = rep.create.render_product(camera=camera_prim_path, resolution=(1920, 1080))
+        rp = rep.create.render_product(camera=camera_prim_path, resolution=(2560,2560))
         self.pointcloud_annot = rep.AnnotatorRegistry.get_annotator("pointcloud", init_params={"includeUnlabelled": True})
         self.cameraParams_annot = rep.AnnotatorRegistry.get_annotator("CameraParams")
 
@@ -234,8 +234,8 @@ class UIBuilder:
         self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
         
         #Reference the obstacle on stage
-        obstacle_asset_path = ['/home/haoyu-ma/projects/Underwater_Simulator/blender/toy_biplane_idle.usdz',
-                               '/home/haoyu-ma/projects/Underwater_Simulator/blender/toy_car.usdz']
+        obstacle_asset_path = ['/home/haoyu-ma/projects/OceanSim_utils/assets/usd/imagingSonar_usd/toy_biplane_idle.usdz',
+                               '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/imagingSonar_usd/toy_car.usdz']
         obstacle_prim_path = ['/World/Obstacle/obstacle_0', '/World/Obstalce/obstacle_1']
 
         add_reference_to_stage(obstacle_asset_path[0], obstacle_prim_path[0])

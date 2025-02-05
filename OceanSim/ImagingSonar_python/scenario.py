@@ -68,7 +68,7 @@ class ImagingSonarScenario(ScenarioTemplate):
         self._frame += 1
 
         if (self._frame < 50):
-            XFormPrim('/rob').set_world_pose(position=[-5.0 + 0.2 * self._frame, -0.5, 6])
+            XFormPrim('/rob').set_world_pose(position=[-1.5 + 0.2 * self._frame, -0.5, 6])
         sonar_data = self.make_sonar_data(pcl=self._pointcloud_anno.get_data()['data'],
                             normals=self._pointcloud_anno.get_data()['info']['pointNormals'],
                             viewTransform=self._cameraParams_anno.get_data()['cameraViewTransform'])
@@ -77,19 +77,6 @@ class ImagingSonarScenario(ScenarioTemplate):
         print(f'Writing frame[{self._frame}] data to {self.output_dir}')
 
 
-
-
-    def make_sonar_map(self, sonar_data:np.ndarray) -> np.ndarray:
-        
-        fig = plt.figure(dpi=600)
-        ax1 = fig.add_subplot(1,1,1)
-        sonar_plot = ax1.scatter(sonar_data[:,0], sonar_data[:,1], c=sonar_data[:,2], cmap='jet', s=0.5, marker='.')
-        fig.colorbar(mappable=sonar_plot, ax=ax1)
-        fig.canvas.draw()
-        image_array = np.array(fig.canvas.renderer.buffer_rgba())
-        fig.clear() 
-
-        return image_array
 
     def make_sonar_data(self, pcl:np.ndarray, normals:np.ndarray, viewTransform:np.ndarray, ) -> np.ndarray:
         
@@ -120,7 +107,7 @@ class ImagingSonarScenario(ScenarioTemplate):
         max_range = 1
         base_intensity = 255
         reflectivity = 1
-        attenuation = 0.01
+        attenuation = 0.1
 
         normals = np.delete(arr=normals, obj=3, axis=1)
         viewTransform = viewTransform.reshape(4,4).T
@@ -130,18 +117,23 @@ class ImagingSonarScenario(ScenarioTemplate):
         unit_directs = directs/np.linalg.norm(directs)
 
         theta = np.arccos(np.sum(unit_directs * normals, axis=1))
+        # Formula to calculate the intensity 
         intensity = base_intensity * reflectivity * np.abs(np.cos(theta)) * (1/max_range)**2 * np.exp(-attenuation * 2 * dist)
-
         # Pre-multiplication to produce transform with respect to world frame
         pcl_local = (viewTransform @ np.hstack((pcl, np.ones([pcl.shape[0], 1]))).T).T 
         # Change the axis location to make z pointing upwards  and x pointing forwards for spherical coordinate transformation
         pcl_local = np.delete(pcl_local, obj=3, axis=1) @ np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
 
-
         pcl_spher_local = cartesian_to_spherical(pcl_local)
         sonar_data = bin_intensity(1024, 1024, pcl_spher_local, intensity)
+        # Remove all the nan intensity entries
+        sonar_data = sonar_data[~np.isnan(sonar_data[:,2])]
+        # Normalized the intensity
+        normalized_intensity = (sonar_data[:,2] - sonar_data[:,2].min()) / (sonar_data[:,2].max() - sonar_data[:,2].min())
+        # Convert back to cartesian corrdiantes and map normalized intensity to 0-255 uint8
         sonar_data = np.array([sonar_data[:,0] * np.cos(sonar_data[:,1]), 
                             sonar_data[:,0] * np.sin(sonar_data[:,1]),
-                            sonar_data[:,2]]).T
-        
+                            np.round(normalized_intensity * 255)
+                            ]).T
+        print(f'{sonar_data.shape[0]} sonar points generated')
         return sonar_data
