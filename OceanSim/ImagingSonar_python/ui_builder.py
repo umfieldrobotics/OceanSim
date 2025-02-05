@@ -149,9 +149,10 @@ class UIBuilder:
         self._sea_floor = None
         self._camera = None
         self._sensor_location = Gf.Vec3d(0.05, 0.0, 0.0)
-
-        self._init_rob_pos = np.array([-6, -0.6, 3])
-        self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0, np.deg2rad(20), 0]))
+        self._focal_length = 3.0
+        self._clipping_dist = [0.01, 10]
+        self._init_rob_pos = np.array([-5, -0.5, 6])
+        self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0, np.deg2rad(30), 0]))
         self._box_size = 0.05 #temporary (using a box for the rob)
 
         self._scenario = ImagingSonarScenario()
@@ -216,8 +217,9 @@ class UIBuilder:
             translation=self._sensor_location,
 
         )
-        camera.set_clipping_range(near_distance=0.01, far_distance=10)
-        camera.set_focal_length(value=2.2)
+        camera.set_clipping_range(near_distance=self._clipping_dist[0], far_distance=self._clipping_dist[1])
+        camera.set_focal_length(value=self._focal_length)
+        camera.initialize()
 
         rp = rep.create.render_product(camera=camera_prim_path, resolution=(1920, 1080))
         self.pointcloud_annot = rep.AnnotatorRegistry.get_annotator("pointcloud", init_params={"includeUnlabelled": True})
@@ -315,7 +317,6 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
-        self._scenario.save()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().

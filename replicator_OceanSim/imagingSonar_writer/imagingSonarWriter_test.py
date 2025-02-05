@@ -248,7 +248,7 @@ class imagingSonarWriter_test(Writer):
 
         normals = np.delete(arr=normals, obj=3, axis=1)
         viewTransform = viewTransform.reshape(4,4).T
-        render_trans = -(np.transpose(viewTransform)[:3,3])
+        render_trans = -(viewTransform[:3,:3].T @ viewTransform[:3,3])
         # render_rot = np.transpose(viewTransform)[:3,:3]
         dist = np.linalg.norm(pcl-render_trans, axis=1)
         directs = pcl - render_trans

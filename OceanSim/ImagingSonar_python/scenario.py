@@ -67,28 +67,14 @@ class ImagingSonarScenario(ScenarioTemplate):
         self._time += step
         self._frame += 1
 
-        rob_body = self._dc.get_rigid_body("/rob")
         if (self._frame < 50):
-            XFormPrim('/rob').set_world_pose(position=[-6 + 0.2 * self._frame, -0.6, 3])
-
-        self.sonar_data = self.make_sonar_data(pcl=self._pointcloud_anno.get_data()['data'],
+            XFormPrim('/rob').set_world_pose(position=[-5.0 + 0.2 * self._frame, -0.5, 6])
+        sonar_data = self.make_sonar_data(pcl=self._pointcloud_anno.get_data()['data'],
                             normals=self._pointcloud_anno.get_data()['info']['pointNormals'],
                             viewTransform=self._cameraParams_anno.get_data()['cameraViewTransform'])
         file_path_depth = f"sonar_data_{self._frame}.npy"
-        self.backend.schedule(write_np, path=file_path_depth, data=self.sonar_data)
+        self.backend.schedule(write_np, path=file_path_depth, data=sonar_data)
         print(f'Writing frame[{self._frame}] data to {self.output_dir}')
-
-
-
-    def save(self):
-        # save_path = '/home/haoyu-ma/Desktop/'
-        # fig = plt.figure(dpi=600)
-        # ax1 = fig.add_subplot(1,1,1)
-        # sonar_plot = ax1.scatter(self.sonar_data[:,0], self.sonar_data[:,1], c=self.sonar_data[:,2], cmap='jet', s=0.01)
-        # fig.colorbar(mappable=sonar_plot, ax=ax1)
-        # plt.savefig(save_path+'sonar.png')
-        # fig.clear() 
-        pass
 
 
 
@@ -105,26 +91,13 @@ class ImagingSonarScenario(ScenarioTemplate):
 
         return image_array
 
-    def make_sonar_data(self, pcl:np.ndarray, normals:np.ndarray, viewTransform:np.ndarray) -> np.ndarray:
-        
-        
-        def arctan_with_quadrants(y, x):
-            # Compute arctan for the ratio y/x
-            angle = np.arctan(np.divide(y, x, where=x != 0))  # Avoid division by zero with `where`
-            
-            # Adjust angles based on the quadrant
-            angle = np.where((x > 0), angle, angle + np.pi)  # Quadrants II and III
-            angle = np.where((x < 0) & (y < 0), angle - 2 * np.pi, angle)  # Quadrant III correction
-            angle = np.where((x == 0) & (y > 0), np.pi / 2, angle)  # Positive y-axis
-            angle = np.where((x == 0) & (y < 0), -np.pi / 2, angle)  # Negative y-axis
-
-            return angle
+    def make_sonar_data(self, pcl:np.ndarray, normals:np.ndarray, viewTransform:np.ndarray, ) -> np.ndarray:
         
 
         def cartesian_to_spherical(cart_coords):
             x, y, z = cart_coords[:, 0], cart_coords[:, 1], cart_coords[:, 2]
             r = np.sqrt(x**2 + y**2 + z**2)
-            theta = arctan_with_quadrants(y, x)
+            theta = np.arctan2(y, x)
             phi = np.arccos(z / r)
             return np.vstack((r, theta, phi)).T
 
@@ -151,8 +124,7 @@ class ImagingSonarScenario(ScenarioTemplate):
 
         normals = np.delete(arr=normals, obj=3, axis=1)
         viewTransform = viewTransform.reshape(4,4).T
-        render_trans = -(np.transpose(viewTransform)[:3,3])
-        render_rot = np.transpose(viewTransform)[:3,:3]
+        render_trans = -(viewTransform[:3,:3].T @ viewTransform[:3,3])
         dist = np.linalg.norm(pcl-render_trans, axis=1)
         directs = pcl - render_trans
         unit_directs = directs/np.linalg.norm(directs)
