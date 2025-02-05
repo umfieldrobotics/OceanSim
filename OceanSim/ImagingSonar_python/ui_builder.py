@@ -11,6 +11,7 @@ import numpy as np
 import omni.timeline
 import omni.ui as ui
 from omni.isaac.core.prims import XFormPrim
+from omni.isaac.core.utils.prims import is_prim_path_valid
 from omni.isaac.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
 from omni.isaac.core.world import World
 from omni.isaac.nucleus import get_assets_root_path
@@ -149,7 +150,8 @@ class UIBuilder:
         self._camera = None
         self._sensor_location = Gf.Vec3d(0.05, 0.0, 0.0)
 
-        self._init_rob_pos = np.array([2, 2, 2])
+        self._init_rob_pos = np.array([-6, -0.6, 3])
+        self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0, np.deg2rad(20), 0]))
         self._box_size = 0.05 #temporary (using a box for the rob)
 
         self._scenario = ImagingSonarScenario()
@@ -176,9 +178,10 @@ class UIBuilder:
         and avoid loading anything if they are.  In this case, the user would still need to add
         their assets to the World (which has low overhead).  See commented code section in this function.
         """
-
-        # Add light 
+        # you can create a new stage. Or comment out this line to load on current stage
         create_new_stage()
+        
+        # Add light 
         self._add_light_to_stage()
 
         # Load the robot
@@ -188,7 +191,8 @@ class UIBuilder:
         # For now use a dynamic cube as the robot
         self._rob = DynamicCuboid(
             prim_path=robot_prim_path, 
-            translation=self._init_rob_pos, 
+            translation=self._init_rob_pos,
+            orientation=self._init_rob_orien,
             size=self._box_size, 
             color=np.array([255, 0, 0]),            
         )
@@ -206,52 +210,39 @@ class UIBuilder:
 
 
         # Add the camera sensor to mimic an imaging sonar
+        camera_prim_path = robot_prim_path + '/Camera'
         camera = Camera(
-            prim_path=robot_prim_path + '/camera',
+            prim_path=camera_prim_path,
             translation=self._sensor_location,
-        )
-        camera.set_clipping_range(near_distance=0.01, far_distance=100)
 
-        rp = rep.create.render_product(camera=robot_prim_path+'/camera', resolution=(1024, 1024))
+        )
+        camera.set_clipping_range(near_distance=0.01, far_distance=10)
+        camera.set_focal_length(value=2.2)
+
+        rp = rep.create.render_product(camera=camera_prim_path, resolution=(1920, 1080))
         self.pointcloud_annot = rep.AnnotatorRegistry.get_annotator("pointcloud", init_params={"includeUnlabelled": True})
         self.cameraParams_annot = rep.AnnotatorRegistry.get_annotator("CameraParams")
 
         self.pointcloud_annot.attach(rp)
         self.cameraParams_annot.attach(rp)
-        # # Initialize the camera and attach point cloud annotator to this render product
-        # self._camera.initialize()
-        # self._camera.add_distance_to_image_plane_to_frame()
-        # self._camera.add_pointcloud_to_frame()
-
-        # obstacle_path = ["/obstacle_0", "/obstacle_1"]
-        # self._obstacle = DynamicCylinder(
-        #     prim_path=obstacle_path[0],
-        #     translation=np.array([5,0,5]),
-        #     radius=0.5,
-        #     height=10,
-            
-        # )
-        # obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[0])
-        # obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
-        # obstacle_rigidBody_API.CreateDisableGravityAttr(True)
-        # obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-        # obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
-
-        # self._obstacle = DynamicCuboid(
-        #     prim_path=obstacle_path[1],
-        #     translation=np.array([5,2,2]),
-        #     size=1,
-        # )
-        # obstacle_prim = prims_utils.get_prim_at_path(prim_path=obstacle_path[1])
-        # obstacle_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(obstacle_prim)
-        # obstacle_rigidBody_API.CreateDisableGravityAttr(True)
-        # obstacle_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-        # obstacle_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+        
 
         #For now use the flat ground plane as the seafloor
         sea_floor_prim_path = "/GroundPlane"
         self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
         
+        #Reference the obstacle on stage
+        obstacle_asset_path = ['/home/haoyu-ma/projects/Underwater_Simulator/blender/toy_biplane_idle.usdz',
+                               '/home/haoyu-ma/projects/Underwater_Simulator/blender/toy_car.usdz']
+        obstacle_prim_path = ['/World/Obstacle/obstacle_0', '/World/Obstalce/obstacle_1']
+
+        add_reference_to_stage(obstacle_asset_path[0], obstacle_prim_path[0])
+        XFormPrim(obstacle_prim_path[0]).set_local_scale(scale=[0.1, 0.1, 0.1])  
+        XFormPrim(obstacle_prim_path[0]).set_world_pose(position=[5.0,-2.5,0.0],orientation=rotations_utils.euler_angles_to_quat([np.pi/2,0,0]))
+
+        add_reference_to_stage(obstacle_asset_path[1], obstacle_prim_path[1])
+        XFormPrim(obstacle_prim_path[1]).set_local_scale(scale=[0.1, 0.1, 0.1])  
+        XFormPrim(obstacle_prim_path[1]).set_world_pose(position=[5.0,1.0,0.0],orientation=rotations_utils.euler_angles_to_quat([np.pi/2,0,0]))
 
     def _setup_scenario(self):
         """
@@ -297,7 +288,6 @@ class UIBuilder:
             step (float): The dt of the current physics step
         """
         self._scenario.update_scenario(step)
-        # self._scenario.update_ui(self._outputs_frame)
 
     def _on_run_scenario_a_text(self):
         """

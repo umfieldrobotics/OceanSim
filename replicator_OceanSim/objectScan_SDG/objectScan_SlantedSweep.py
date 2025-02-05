@@ -109,14 +109,15 @@ rep.WriterRegistry.register(ScanWriter)
 ## Scene ##
 
 RT_SUBFRAMES = 2
-r0 = 7
+z0 = 1.3
 
-z_range = [0, 5] 
-num_z = 50
-z_list = np.linspace(z_range[0], z_range[1], num_z)
-num_azi = 20
-azi_list = np.linspace(0, 2*np.pi, num_azi)
+x_span = [-0.55, 0.55]
+y_span = [-0.42, 0.42]
 
+scale_factor = 1.5
+x = np.arange(scale_factor * x_span[0], scale_factor * x_span[1], 0.1)
+y = np.arange(scale_factor * y_span[0], scale_factor * y_span[1], 0.1)
+xs, ys = np.meshgrid(x, y, indexing='ij')
 
 cam = rep.create.camera(clipping_range=[0.01, 24])
 rp = rep.create.render_product(cam, (1024, 1024))
@@ -129,31 +130,28 @@ print(f"Writing data to {out_dir}")
 writer.initialize(output_dir=out_dir)
 writer.attach(rp)
 
-def move_cam(cam_xform_prim, r0, azi, z):
+def move_cam(cam_xform_prim, translate, orientation):
 
-    cam_xform_prim.GetAttribute('xformOp:translate').Set((r0 * np.cos(azi), r0* np.sin(azi), z))
-    # Random row pitch yaw
-    # cam_xform_prim.GetAttribute('xformOp:rotateXYZ').Set((0.0 + random.uniform(-10.0, 10.0),
-    #                                                       0.0 + random.uniform(-45.0, 45.0), 
-    #                                                       np.rad2deg(azi) + random.uniform(-15.0, 15.0)))
-    # Fixed row pitch yaw
-    cam_xform_prim.GetAttribute('xformOp:rotateXYZ').Set((0.0 ,
-                                                        0.0 - 30.0, 
-                                                        np.rad2deg(azi) ))
+    cam_xform_prim.GetAttribute('xformOp:translate').Set((translate[0], translate[1], translate[2]))
+
+    cam_xform_prim.GetAttribute('xformOp:rotateXYZ').Set((orientation[0], orientation[1], orientation[2]))
+
 rep.trigger.register(move_cam)
 
 
 
-async def run_scan_async(r0, z_list, azi_list):
+async def run_scan_async(xs, ys, z):
     cam_xform_prim = rep.get.xform(path_pattern="Camera_Xform").get_output_prims()['prims'][0]
 
-    for i in range(len(z_list)):
-        for j in range(len(azi_list)):
-            
-            rep.trigger.move_cam(cam_xform_prim, r0, azi_list[j], z_list[i])
+    for i in range(xs.shape[0]):
+        for j in range(xs.shape[1]):
+            for k in range(4):
+                translation = [xs[i,j], ys[i,j], z]
+                orientation = [0, -45, 90*k]
+                rep.trigger.move_cam(cam_xform_prim, translation, orientation)
 
-            # step the simulation to write one frame of data
-            await rep.orchestrator.step_async(rt_subframes=RT_SUBFRAMES)
+                # step the simulation to write one frame of data
+                await rep.orchestrator.step_async(rt_subframes=RT_SUBFRAMES)
 
 
     # Wait until all the data is saved to disk
@@ -161,4 +159,4 @@ async def run_scan_async(r0, z_list, azi_list):
 
 
 
-asyncio.ensure_future(run_scan_async(r0, z_list, azi_list))
+asyncio.ensure_future(run_scan_async(xs, ys, z0))

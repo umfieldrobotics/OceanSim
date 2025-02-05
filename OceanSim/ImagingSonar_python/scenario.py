@@ -24,12 +24,11 @@ class ScenarioTemplate:
 import numpy as np
 from omni.isaac.dynamic_control import _dynamic_control
 import carb
-import omni.ui as ui
-from omni.isaac.ui.element_wrappers import XYPlot
-from omni.isaac.range_sensor import _range_sensor
 import matplotlib.pyplot as plt
 from scipy.stats import binned_statistic_2d
-
+from omni.replicator.core import BackendDispatch
+from omni.replicator.core.scripts.functional import write_np
+from omni.isaac.core.prims import XFormPrim
 
 class ImagingSonarScenario(ScenarioTemplate):
     def __init__(self):
@@ -39,7 +38,9 @@ class ImagingSonarScenario(ScenarioTemplate):
         self._dc = _dynamic_control.acquire_dynamic_control_interface()
         self._running_scenario = False
         self._time = 0.0
-
+        self._frame = 0
+        self.output_dir = '/home/haoyu-ma/Downloads' + "/_out_custom_event"
+        self.backend = BackendDispatch({"paths": {"out_dir": self.output_dir}})
 
 
     def setup_scenario(self, rob, pointcloud_anno, cameraParams_anno):
@@ -59,31 +60,35 @@ class ImagingSonarScenario(ScenarioTemplate):
         self._time = 0.0
 
 
+
     def update_scenario(self, step: float):
         if not self._running_scenario:
             return
-
         self._time += step
+        self._frame += 1
+
+        rob_body = self._dc.get_rigid_body("/rob")
+        if (self._frame < 50):
+            XFormPrim('/rob').set_world_pose(position=[-6 + 0.2 * self._frame, -0.6, 3])
+
         self.sonar_data = self.make_sonar_data(pcl=self._pointcloud_anno.get_data()['data'],
-                             normals=self._pointcloud_anno.get_data()['info']['pointNormals'],
-                             viewTransform=self._cameraParams_anno.get_data()['cameraViewTransform'])
-        
+                            normals=self._pointcloud_anno.get_data()['info']['pointNormals'],
+                            viewTransform=self._cameraParams_anno.get_data()['cameraViewTransform'])
+        file_path_depth = f"sonar_data_{self._frame}.npy"
+        self.backend.schedule(write_np, path=file_path_depth, data=self.sonar_data)
+        print(f'Writing frame[{self._frame}] data to {self.output_dir}')
 
-    
+
+
     def save(self):
-        save_path = '/home/haoyu-ma/Desktop/'
-        fig = plt.figure(dpi=600)
-        ax1 = fig.add_subplot(1,1,1)
-        sonar_plot = ax1.scatter(self.sonar_data[:,0], self.sonar_data[:,1], c=self.sonar_data[:,2], cmap='jet', s=0.5, marker='.')
-        fig.colorbar(mappable=sonar_plot, ax=ax1)
-        plt.savefig(save_path+'sonar.png')
-        fig.clear() 
-
-        # np.save(self._pointcloud_anno.get_data()['data'], save_path+'pcl.npy')
-        # np.save(self._pointcloud_anno.get_data()['info']['pointNormals'], save_path+'normals.npy')
-        # np.save(self._cameraParams_anno.get_data()['cameraViewTransform'], save_path+'viewTransform.npy')
-
-        print(f'plot saved as {save_path}')
+        # save_path = '/home/haoyu-ma/Desktop/'
+        # fig = plt.figure(dpi=600)
+        # ax1 = fig.add_subplot(1,1,1)
+        # sonar_plot = ax1.scatter(self.sonar_data[:,0], self.sonar_data[:,1], c=self.sonar_data[:,2], cmap='jet', s=0.01)
+        # fig.colorbar(mappable=sonar_plot, ax=ax1)
+        # plt.savefig(save_path+'sonar.png')
+        # fig.clear() 
+        pass
 
 
 
@@ -136,14 +141,13 @@ class ImagingSonarScenario(ScenarioTemplate):
             r_mid = (r_edges[:-1] + r_edges[1:]) / 2  
             azi_mid = (azi_edges[:-1] + azi_edges[1:]) / 2
             r, azi = np.meshgrid(r_mid, azi_mid, indexing='ij')
-            
             return np.stack((r, azi, intensity_binned), axis=-1).reshape(-1,3)
 
         
-        self.max_range = 4
-        self.base_intensity = 255
-        self.reflectivity = 1
-        self.attenuation = 0.01
+        max_range = 1
+        base_intensity = 255
+        reflectivity = 1
+        attenuation = 0.01
 
         normals = np.delete(arr=normals, obj=3, axis=1)
         viewTransform = viewTransform.reshape(4,4).T
@@ -154,7 +158,7 @@ class ImagingSonarScenario(ScenarioTemplate):
         unit_directs = directs/np.linalg.norm(directs)
 
         theta = np.arccos(np.sum(unit_directs * normals, axis=1))
-        intensity = self.base_intensity * self.reflectivity * np.abs(np.cos(theta)) * (1/self.max_range)**2 * np.exp(-self.attenuation * 2 * dist)
+        intensity = base_intensity * reflectivity * np.abs(np.cos(theta)) * (1/max_range)**2 * np.exp(-attenuation * 2 * dist)
 
         # Pre-multiplication to produce transform with respect to world frame
         pcl_local = (viewTransform @ np.hstack((pcl, np.ones([pcl.shape[0], 1]))).T).T 
