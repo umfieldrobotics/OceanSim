@@ -20,20 +20,14 @@ from omni.isaac.ui.element_wrappers.core_connectors import LoadButton, ResetButt
 from omni.isaac.ui.ui_utils import get_style
 from omni.usd import StageEventType
 from pxr import Sdf, UsdLux
-
-import random
 from .scenario import ImagingSonarScenario
 from omni.isaac.core.objects import GroundPlane
 from omni.isaac.core.objects import DynamicCuboid, DynamicCylinder
 import omni.isaac.core.utils.rotations as rotations_utils
 import omni.isaac.core.utils.prims as prims_utils
-from omni.isaac.core.physics_context import PhysicsContext
 from pxr import Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
-from omni.isaac.sensor import Camera
 from omni.isaac.core.utils.viewports import set_camera_view
-import omni.replicator.core as rep
-
-
+from .ImagingSonarSensor import ImagingSonarSensor
 
 class UIBuilder:
     def __init__(self):
@@ -147,13 +141,13 @@ class UIBuilder:
     def _on_init(self):
         self._rob = None
         self._sea_floor = None
-        self._camera = None
-        self._sensor_location = Gf.Vec3d(0.05, 0.0, 0.0)
-        self._focal_length = 3.0
-        self._clipping_dist = [0.01, 10]
-        self._init_rob_pos = np.array([-1.5, -0.5, 6])
-        self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0, np.deg2rad(60), 0]))
-        self._box_size = 0.05 #temporary (using a box for the rob)
+        self.sonar = None
+        self._sensor_location = [0.1, 0.0, 0.0]
+        self._init_rob_pos = np.array([-12, -0.5, 6])
+        self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0, np.deg2rad(20), 0]))
+        self._box_size = 0.01 #temporary (using a box for the rob)
+        self._output_dir = "/home/haoyu-ma/Desktop/_sonar_data"
+
 
         self._scenario = ImagingSonarScenario()
 
@@ -210,24 +204,9 @@ class UIBuilder:
         set_camera_view(eye=[-5.0, 5.0, 5.0], target=[2.00, 2.00, 2.0], camera_prim_path="/OmniverseKit_Persp")
 
 
-        # Add the camera sensor to mimic an imaging sonar
-        camera_prim_path = robot_prim_path + '/Camera'
-        camera = Camera(
-            prim_path=camera_prim_path,
-            translation=self._sensor_location,
-
-        )
-        camera.set_clipping_range(near_distance=self._clipping_dist[0], far_distance=self._clipping_dist[1])
-        camera.set_focal_length(value=self._focal_length)
-        camera.initialize()
-
-        rp = rep.create.render_product(camera=camera_prim_path, resolution=(2560,2560))
-        self.pointcloud_annot = rep.AnnotatorRegistry.get_annotator("pointcloud", init_params={"includeUnlabelled": True})
-        self.cameraParams_annot = rep.AnnotatorRegistry.get_annotator("CameraParams")
-
-        self.pointcloud_annot.attach(rp)
-        self.cameraParams_annot.attach(rp)
-        
+        self.sonar = ImagingSonarSensor(prim_path=robot_prim_path,
+                                        trans=self._sensor_location)        
+        self.sonar.initialize()
 
         #For now use the flat ground plane as the seafloor
         sea_floor_prim_path = "/GroundPlane"
@@ -264,7 +243,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self.pointcloud_annot, self.cameraParams_annot)
+        self._scenario.setup_scenario(self._rob, self.sonar)
 
     def _on_post_reset_btn(self):
         """

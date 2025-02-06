@@ -7,7 +7,7 @@ version = "1.0.0"
 category = "Simulation"
 title = "OceanSim"
 description = "Underwater simulation utilities"
-authors = ["NVIDIA", "FRoG--University of Michigan"]
+authors = ["FRoG--University of Michigan"]
 repository = ""
 keywords = ["Underwater","Sensor","Scene"]
 changelog = "docs/CHANGELOG.md"
@@ -21,23 +21,7 @@ icon = "data/icon.png"
 "omni.isaac.ui" = {}
 "omni.isaac.core" = {}
 
-[[python.module]]
-name = "OceanSim.more_python"
-
-[[python.module]]
-name = "OceanSim.DVL_python"
-
-[[python.module]]
-name = "OceanSim.PhysXraycast_python"
 
 [[python.module]]
 name = "OceanSim.ImagingSonar_python"
 
-[[python.module]]
-name = "OceanSim.fossen_python"
-
-[[python.module]]
-name = "OceanSim.MultiUltrasonic_python"
-
-[[python.module]]
-name = "OceanSim.RTXraycast_python"
