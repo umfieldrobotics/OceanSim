@@ -1,4 +1,4 @@
-from omni.isaac.sensor import Camera
+from isaacsim.sensors.camera import Camera
 from omni.isaac.core.prims import BaseSensor
 import omni.replicator.core as rep
 import isaacsim.core.utils.rotations as rotations_utils
@@ -19,46 +19,54 @@ class ImagingSonarSensor:
         self.max_range = 200 # m
         self.min_range = 0.2 # m
         self.range_res = 0.008 # m
-        self.update_rate = 40 # Hz (max update rate)
+        self.update_rate = 40 # Hz (max update rate) (NOT USED FOR NOW)!!
         self.hori_fov = 130 # degree
         self.vert_fov = 20 # degree
-        self.num_beams = 256 # (max number of beams)
-        self.angular_res = 2 # degree
+        self.num_beams = 256 # (max number of beams) (NOT USED FOR NOW)!!
+        self.angular_res = np.deg2rad(2) # degree
         self.beam_separation = 0.5 # degree
 
-        # TODO!!!!!!!!!!!!!!!!!! Tomorrow
-        # Export the sonar data and test if the HFOV and VFOV are really this degrees
+        # We introduce this factor to adjust raycast density
+        # (Equivalently, adjust the beam_separation) 
+        # Increase this value by 1 will quadraple the total number of raycasts
+        self.ray_factor = 10
+
+        self.AR = self.hori_fov / self.vert_fov
+        self.hori_res = int(self.ray_factor * (self.hori_fov / self.beam_separation))
+        self.vert_res = int(self.hori_res / self.AR)
+        # By doing this, I am assuming the vertical beam separation
+        # is the same as the beam vertical separation. 
+        # This is bacause replicator raytracing is specified as resolutions
+        # while non-squre pixel is not supported in Isaac sim. See details below.
+
+        print(f'resolution: {self.hori_res} x {self.vert_res}')
         
-        
-        # TODO 
-        # Needs to figure out how to get resolution in pixels 
-        # given above angular res, beam separations...
-        self.resolution = (1024, 1024)
-        sensor_xform_prim_path = prim_path + '/sensor_xform'
-        self.sonar = BaseSensor(
-            prim_path=sensor_xform_prim_path,
-            )
-        self.camera_prim_path = sensor_xform_prim_path + '/Camera'
+        self.camera_prim_path = prim_path + '/Camera'
         self.camera = Camera(
             prim_path=self.camera_prim_path,
             translation=trans,
-            orientation=orients
+            orientation=orients,
+            resolution=(self.hori_res, self.vert_res)
             )
-        self.camera.initialize()
-
-        self.focal_length = self.camera.get_focal_length()
-        self.hori_aper = 2 * self.focal_length * np.tan(np.deg2rad(self.hori_fov/2))
-        self.vert_aper = 2 * self.focal_length * np.tan(np.deg2rad(self.vert_fov/2))
-
-
         self.camera.set_clipping_range(
             near_distance=self.min_range,
             far_distance=self.max_range
         )
+        # This is a bug. Needs to call initialize() before changing aperture
+        # https://forums.developer.nvidia.com/t/error-when-setting-a-cameras-vertical-horizontal-aperture/271314
+        self.camera.initialize()
 
-        self.camera.set_horizontal_aperture(float(self.hori_aper))
-        self.camera.set_vertical_aperture(float(self.vert_aper))
-    
+        # Assume the default focal length to compute the desired horizontal aperture
+        # The reason why we are doing this is because Isaac sim will fix vertical aperture
+        # given aspect ratio for mandating square pixles
+        # https://forums.developer.nvidia.com/t/how-to-modify-the-cameras-field-of-view/278427/5
+        focal_length = self.camera.get_focal_length()
+        horizontal_aper = 2 * focal_length * np.tan(np.deg2rad(self.hori_fov) / 2)
+        self.camera.set_horizontal_aperture(horizontal_aper)
+        # Notice if you would like to observe sonar view from linked viewport.
+        # Only horizontal fov is displayed correctly while the vertical fov is
+        # followed by your viewport aspect ratio settings.
+
 
     # Initialize the sensor so that annotator is 
     # loaded on cuda and ready to acquire data
@@ -68,7 +76,7 @@ class ImagingSonarSensor:
         self.id = 0
         self.rp = rep.create.render_product(
             camera=self.camera_prim_path,
-            resolution=self.resolution
+            resolution=(self.hori_res, self.vert_res)
             )
 
         self.pointcloud_annot = rep.AnnotatorRegistry.get_annotator(
@@ -97,16 +105,14 @@ class ImagingSonarSensor:
 
     def make_sonar_data(self):
 
-        max_range = self.max_range
         base_intensity = 255
         reflectivity = 1
-        attenuation = 0.1
+        attenuation = 0.25
 
 
-        pcl=self.pointcloud_annot.get_data()['data'],
-        normals=self.pointcloud_annot.get_data()['info']['pointNormals'],
+        pcl=self.pointcloud_annot.get_data()['data']
+        normals=self.pointcloud_annot.get_data()['info']['pointNormals']
         viewTransform=self.cameraParams_annot.get_data()['cameraViewTransform']
-
         def cartesian_to_spherical(cart_coords):
             x, y, z = cart_coords[:, 0], cart_coords[:, 1], cart_coords[:, 2]
             r = np.sqrt(x**2 + y**2 + z**2)
@@ -115,21 +121,21 @@ class ImagingSonarSensor:
             return np.vstack((r, theta, phi)).T
 
 
-        def bin_intensity(num_r_bins, num_azi_bins, pcl, intensity):
-            min_r = pcl[:,0].min()
-            max_r = pcl[:,0].max()
-            min_azi = pcl[:,1].min()
-            max_azi = pcl[:,1].max()
-            r_bins = np.linspace(min_r, max_r, num_r_bins, endpoint=True)
-            azi_bins = np.linspace(min_azi, max_azi, num_azi_bins, endpoint=True)
-
-            intensity_binned, r_edges, azi_edges, _ = binned_statistic_2d(pcl[:,0], pcl[:,1], intensity, statistic='mean', bins=[r_bins, azi_bins])
+        def bin_intensity(r_res, azi_res, pcl, intensity):
+            r_bins = np.arange(pcl[:,0].min(), pcl[:,0].max(), r_res)
+            azi_bins = np.arange(pcl[:,1].min(), pcl[:,1].max(), azi_res)
+            intensity_binned, r_edges, azi_edges, _ = binned_statistic_2d(
+                x=pcl[:,0], 
+                y=pcl[:,1], 
+                values=intensity, 
+                statistic='mean', 
+                bins=[r_bins, azi_bins]
+                )
             r_mid = (r_edges[:-1] + r_edges[1:]) / 2  
             azi_mid = (azi_edges[:-1] + azi_edges[1:]) / 2
             r, azi = np.meshgrid(r_mid, azi_mid, indexing='ij')
             return np.stack((r, azi, intensity_binned), axis=-1).reshape(-1,3)
 
-        
 
         normals = np.delete(arr=normals, obj=3, axis=1)
         viewTransform = viewTransform.reshape(4,4).T
@@ -140,7 +146,7 @@ class ImagingSonarSensor:
 
         theta = np.arccos(np.sum(unit_directs * normals, axis=1))
         # Formula to calculate the intensity 
-        intensity = base_intensity * reflectivity * np.abs(np.cos(theta)) * (1/max_range)**2 * np.exp(-attenuation * 2 * dist)
+        intensity = base_intensity * reflectivity * np.abs(np.cos(theta)) * np.exp(-attenuation * 2 * dist)
         # Pre-multiplication to produce transform with respect to world frame
         pcl_local = (viewTransform @ np.hstack((pcl, np.ones([pcl.shape[0], 1]))).T).T 
         # Change the axis location to make z pointing upwards  and x pointing forwards for spherical coordinate transformation
@@ -148,8 +154,9 @@ class ImagingSonarSensor:
         # Convert to spherical coordinates for binning in sperhical r and azi
         pcl_spher_local = cartesian_to_spherical(pcl_local)
         # Binning the intensity to collapse into 2D
-        sonar_data = bin_intensity(1024, 1024, pcl_spher_local, intensity)
-        # TODO Look at why there are so many nan values in intensities
+        sonar_data = bin_intensity(self.range_res, self.angular_res, pcl_spher_local, intensity)
+        # remove bins with no data (remove intensity being nan)
+        print(f'{np.isnan(sonar_data[:,2]).sum()} / {sonar_data.shape[0]} nums of NaN bins removed')
         sonar_data = sonar_data[~np.isnan(sonar_data[:,2])]
         # Normalized the intensity
         normalized_intensity = (sonar_data[:,2] - sonar_data[:,2].min()) / (sonar_data[:,2].max() - sonar_data[:,2].min())
@@ -164,6 +171,16 @@ class ImagingSonarSensor:
                 fn=write_np, 
                 path=f"sonar_data_{self.id}.npy", 
                 data=sonar_data)
+            self.backend.schedule(
+                fn=write_np,
+                path=f"pcl_{self.id}.npy",
+                data=pcl_local
+            )
+            self.backend.schedule(
+                fn=write_np,
+                path=f"intensity_{self.id}.npy",
+                data=intensity
+            )
         
         self.id += 1
 
@@ -171,10 +188,8 @@ class ImagingSonarSensor:
 
 
     def close(self):
-        if self.writing:
-            self.backend.wait_until_done()
+        # if self.writing:
+        #     self.backend.wait_until_done()
         
         self.pointcloud_annot.detach(self.rp)
         self.cameraParams_annot.detach(self.rp)
-        self.rp.clear()
-        

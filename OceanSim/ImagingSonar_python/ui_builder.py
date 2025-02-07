@@ -143,8 +143,8 @@ class UIBuilder:
         self._sea_floor = None
         self.sonar = None
         self._sensor_location = [0.1, 0.0, 0.0]
-        self._init_rob_pos = np.array([-12, -0.5, 6])
-        self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0, np.deg2rad(20), 0]))
+        self._init_rob_pos = np.array([3, -1, 2])
+        self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0, np.deg2rad(55), 0]))
         self._box_size = 0.01 #temporary (using a box for the rob)
         self._output_dir = "/home/haoyu-ma/Desktop/_sonar_data"
 
@@ -206,7 +206,7 @@ class UIBuilder:
 
         self.sonar = ImagingSonarSensor(prim_path=robot_prim_path,
                                         trans=self._sensor_location)        
-        self.sonar.initialize()
+        self.sonar.initialize(self._output_dir)
 
         #For now use the flat ground plane as the seafloor
         sea_floor_prim_path = "/GroundPlane"

@@ -29,6 +29,7 @@ class ImagingSonarScenario(ScenarioTemplate):
     def __init__(self):
         self._rob = None
         self._camera = None
+        self._sonar = None
 
         self._dc = _dynamic_control.acquire_dynamic_control_interface()
         self._running_scenario = False
@@ -48,7 +49,9 @@ class ImagingSonarScenario(ScenarioTemplate):
     def teardown_scenario(self):
         self._rob = None
         self._camera = None
-
+        if self._sonar is not None:
+            self._sonar.close()
+        
         self._running_scenario = False
         self._time = 0.0
 
@@ -58,12 +61,8 @@ class ImagingSonarScenario(ScenarioTemplate):
         if not self._running_scenario:
             return
         self._time += step
-        self._frame += 1
 
-        if (self._frame < 50):
-            XFormPrim('/rob').set_world_pose(position=[-1.5 + 0.2 * self._frame, -0.5, 6])
-        sonar_data = self._sonar.make_sonar_data()
-        print(sonar_data)
+        self._sonar.make_sonar_data()
 
 
     # def make_sonar_data(self, pcl:np.ndarray, normals:np.ndarray, viewTransform:np.ndarray, ) -> np.ndarray:
