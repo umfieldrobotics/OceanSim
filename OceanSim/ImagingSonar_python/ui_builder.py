@@ -14,7 +14,6 @@ from omni.isaac.core.prims import XFormPrim
 from omni.isaac.core.utils.prims import is_prim_path_valid
 from omni.isaac.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
 from omni.isaac.core.world import World
-from omni.isaac.nucleus import get_assets_root_path
 from omni.isaac.ui.element_wrappers import CollapsableFrame, Frame, StateButton, XYPlot
 from omni.isaac.ui.element_wrappers.core_connectors import LoadButton, ResetButton
 from omni.isaac.ui.ui_utils import get_style
@@ -22,7 +21,6 @@ from omni.usd import StageEventType
 from pxr import Sdf, UsdLux
 from .scenario import ImagingSonarScenario
 from omni.isaac.core.objects import GroundPlane
-from omni.isaac.core.objects import DynamicCuboid, DynamicCylinder
 import omni.isaac.core.utils.rotations as rotations_utils
 import omni.isaac.core.utils.prims as prims_utils
 from pxr import Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
@@ -141,12 +139,10 @@ class UIBuilder:
     def _on_init(self):
         self._rob = None
         self._sea_floor = None
-        self.sonar = None
-        self._sensor_location = [0.1, 0.0, 0.0]
+        self._sonar = None
+        self._sensor_location = [0.5, 0.0, 0.0]
         self._init_rob_pos = np.array([3, -1, 2])
         self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0, np.deg2rad(55), 0]))
-        self._box_size = 0.01 #temporary (using a box for the rob)
-        self._output_dir = "/home/haoyu-ma/Desktop/_sonar_data"
 
 
         self._scenario = ImagingSonarScenario()
@@ -182,31 +178,22 @@ class UIBuilder:
         # Load the robot
         robot_prim_path = "/rob"
 
-
+        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BlueRov2_heavy.usd'
         # For now use a dynamic cube as the robot
-        self._rob = DynamicCuboid(
-            prim_path=robot_prim_path, 
-            translation=self._init_rob_pos,
-            orientation=self._init_rob_orien,
-            size=self._box_size, 
-            color=np.array([255, 0, 0]),            
-        )
-
-        cube_prim = prims_utils.get_prim_at_path(prim_path=robot_prim_path)
-        
-        # Toggle rigid body and apply zero gravity
-        cube_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(cube_prim)
-        cube_rigidBody_API.CreateDisableGravityAttr(True)
-        cube_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-        cube_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+        self._rob = add_reference_to_stage(usd_path=robot_usd_path,prim_path=robot_prim_path)
+        XFormPrim(robot_prim_path).set_world_pose(position=self._init_rob_pos, orientation=self._init_rob_orien)
+        # Toggle rigid body and apply zero gravity and zero damping
+        rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(self._rob)
+        rob_rigidBody_API.CreateDisableGravityAttr(True)
+        rob_rigidBody_API.GetLinearDampingAttr().Set(0.0)
+        rob_rigidBody_API.GetAngularDampingAttr().Set(0.0)
 
         # Set the default viewport view angle
         set_camera_view(eye=[-5.0, 5.0, 5.0], target=[2.00, 2.00, 2.0], camera_prim_path="/OmniverseKit_Persp")
 
 
-        self.sonar = ImagingSonarSensor(prim_path=robot_prim_path,
+        self._sonar = ImagingSonarSensor(prim_path=robot_prim_path,
                                         trans=self._sensor_location)        
-        self.sonar.initialize(self._output_dir)
 
         #For now use the flat ground plane as the seafloor
         sea_floor_prim_path = "/GroundPlane"
@@ -230,9 +217,6 @@ class UIBuilder:
         This function is attached to the Load Button as the setup_post_load_fn callback.
         The user may assume that their assets have been loaded by their setup_scene_fn callback, that
         their objects are properly initialized, and that the timeline is paused on timestep 0.
-
-        In this example, a scenario is initialized which will move each robot joint one at a time in a loop while moving the
-        provided prim in a circle around the robot.
         """
         self._reset_scenario()
 
@@ -243,7 +227,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self.sonar)
+        self._scenario.setup_scenario(self._rob, self._sonar)
 
     def _on_post_reset_btn(self):
         """
