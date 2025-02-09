@@ -25,7 +25,7 @@ import omni.isaac.core.utils.rotations as rotations_utils
 import omni.isaac.core.utils.prims as prims_utils
 from pxr import Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
 from omni.isaac.core.utils.viewports import set_camera_view
-from .ImagingSonarSensor import ImagingSonarSensor
+from .ImagingSonarSensor_warp import ImagingSonarSensor
 
 class UIBuilder:
     def __init__(self):
