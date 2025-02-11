@@ -155,10 +155,9 @@ class UIBuilder:
 
         # Camera parameters
         self._cam = None
-        self._cam_res = (1024, 1024)
+        self._cam_res = (1920, 1080)
         self._cam_pose = ([0.5,0.0,0.0], [0.5,0.5,-0.5,-0.5])
-        self._cam_focalLength =20
-
+        self._cam_focal = 6
         self._scenario = MHLScenario()
 
     def _add_light_to_stage(self):
@@ -188,7 +187,7 @@ class UIBuilder:
         # set_stage_up_axis(UsdGeom.Tokens.z)
 
         # Add light 
-        self._add_light_to_stage()
+        # self._add_light_to_stage()
 
         # Load the robot
         robot_prim_path = "/root/rob"
@@ -227,10 +226,10 @@ class UIBuilder:
             prim_path=cam_prim_path,
             resolution=self._cam_res,
             )
-        self._cam.set_focal_length = self._cam_focalLength
+        self._cam.set_focal_length(0.1 * self._cam_focal)
         XFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0],orientation=self._cam_pose[1])
 
-        set_camera_view(eye=[-1.0, 2.0, 3.0], target=[0.0, 0.0, 0.0], camera_prim_path="/OmniverseKit_Persp")
+        set_camera_view(eye=[-3.0, 0.0, 8.0], target=self._init_rob_pos, camera_prim_path="/OmniverseKit_Persp")
 
         # self._rob = add_reference_to_stage(usd_path=robot_usd_path,prim_path=robot_prim_path)
         # XFormPrim(robot_prim_path).set_world_pose(position=self._init_rob_pos, orientation=self._init_rob_orien)
@@ -309,6 +308,7 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
+        self._scenario.save()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().
