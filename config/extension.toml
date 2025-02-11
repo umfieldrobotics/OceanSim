@@ -25,3 +25,7 @@ icon = "data/icon.png"
 [[python.module]]
 name = "OceanSim.ImagingSonar_python"
 
+[[python.module]]
+name = "OceanSim.MHLscene_python"
+
+
