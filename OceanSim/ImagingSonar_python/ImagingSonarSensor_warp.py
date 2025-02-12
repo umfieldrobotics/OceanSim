@@ -213,6 +213,12 @@ class ImagingSonarSensor:
             name="CameraParams",
             do_array_copy=True
             )
+        
+        self.semanticSeg_annot = rep.AnnotatorRegistry.get_annotator(
+            name='semantic_segmentation',
+            init_params={"colorize": False},
+            do_array_copy=True
+        )
         # do_array_copy: If True, retrieve a copy of the data array. 
         # This is recommended for workflows using asynchronous
         # backends to manage the data lifetime. 
@@ -221,7 +227,8 @@ class ImagingSonarSensor:
 
         self.pointcloud_annot.attach(self.rp)
         self.cameraParams_annot.attach(self.rp)
-
+        self.semanticSeg_annot.attach(self.rp)
+        
         if output_dir is not None:
             self.writing = True
             self.backend = rep.BackendDispatch({"paths": {"out_dir": output_dir}})
@@ -242,7 +249,9 @@ class ImagingSonarSensor:
     def scan(self):
         self.scan_data['pcl'] = self.pointcloud_annot.get_data()['data']
         self.scan_data['normals'] = self.pointcloud_annot.get_data()['info']['pointNormals']
+        self.scan_data['semantics'] = self.pointcloud_annot.get_data()['info']['pointSemantic']
         self.scan_data['viewTransform'] = self.cameraParams_annot.get_data()['cameraViewTransform'].reshape(4,4).T
+        self.scan_data['idToLabels'] = self.semanticSeg_annot.get_data()['info']['idToLabels']
 
 
 

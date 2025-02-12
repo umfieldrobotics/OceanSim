@@ -7,25 +7,28 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
+# Omniverse import
 import numpy as np
 import omni.timeline
 import omni.ui as ui
-from omni.isaac.core.prims import XFormPrim
-from omni.isaac.core.utils.prims import is_prim_path_valid
-from omni.isaac.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage
-from omni.isaac.core.world import World
-from omni.isaac.ui.element_wrappers import CollapsableFrame, Frame, StateButton, XYPlot
-from omni.isaac.ui.element_wrappers.core_connectors import LoadButton, ResetButton
-from omni.isaac.ui.ui_utils import get_style
 from omni.usd import StageEventType
-from pxr import Sdf, UsdLux
+from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
+from isaacsim.core.api.objects import FixedCuboid, GroundPlane
+from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim
+from isaacsim.core.utils.prims import get_prim_at_path
+from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage
+from isaacsim.core.utils.rotations import euler_angles_to_quat
+from isaacsim.core.utils.semantics import add_update_semantics
+from isaacsim.core.utils.viewports import set_camera_view
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style
+from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
+
+
+# Custom import
 from .scenario import ImagingSonarScenario
-from omni.isaac.core.objects import GroundPlane
-import omni.isaac.core.utils.rotations as rotations_utils
-import omni.isaac.core.utils.prims as prims_utils
-from pxr import Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
-from omni.isaac.core.utils.viewports import set_camera_view
 from .ImagingSonarSensor_warp import ImagingSonarSensor
+
+
 
 class UIBuilder:
     def __init__(self):
@@ -142,8 +145,8 @@ class UIBuilder:
         self._sonar = None
         self._sensor_location = [0.5, 0.0, 0.0]
         self._init_rob_pos = np.array([3, -1, 2])
-        self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0, np.deg2rad(55), 0]))
-
+        self._init_rob_orien = euler_angles_to_quat(np.array([0, 55, 0]), degrees=True)
+        self._rob_mass = 10 #kg Need this value to supress a warning given by automatic mass computation from collider assignment
 
         self._scenario = ImagingSonarScenario()
 
@@ -154,7 +157,7 @@ class UIBuilder:
         sphereLight = UsdLux.SphereLight.Define(get_current_stage(), Sdf.Path("/World/SphereLight"))
         sphereLight.CreateRadiusAttr(2)
         sphereLight.CreateIntensityAttr(100000)
-        XFormPrim(str(sphereLight.GetPath())).set_world_pose([6.5, 0, 12])
+        SingleXFormPrim(str(sphereLight.GetPath())).set_world_pose(position=np.array([6.5, 0, 12]))
        
 
     def _setup_scene(self):
@@ -177,40 +180,33 @@ class UIBuilder:
 
         # Load the robot
         robot_prim_path = "/rob"
-
-        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BlueRov2_heavy.usd'
-        # For now use a dynamic cube as the robot
+        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY.usd'
         self._rob = add_reference_to_stage(usd_path=robot_usd_path,prim_path=robot_prim_path)
-        XFormPrim(robot_prim_path).set_world_pose(position=self._init_rob_pos, orientation=self._init_rob_orien)
+        SingleXFormPrim(robot_prim_path).set_world_pose(position=self._init_rob_pos, orientation=self._init_rob_orien)
+
+        
         # Toggle rigid body and apply zero gravity and zero damping
         rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(self._rob)
         rob_rigidBody_API.CreateDisableGravityAttr(True)
         rob_rigidBody_API.GetLinearDampingAttr().Set(0.0)
         rob_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+        rob_rigid_prim = SingleRigidPrim(robot_prim_path, mass=self._rob_mass)
 
         # Set the default viewport view angle
-        set_camera_view(eye=[-5.0, 5.0, 5.0], target=[2.00, 2.00, 2.0], camera_prim_path="/OmniverseKit_Persp")
+        set_camera_view(eye=[-0.5, 0.5, 5.0], target=self._init_rob_pos, camera_prim_path="/OmniverseKit_Persp")
 
 
         self._sonar = ImagingSonarSensor(prim_path=robot_prim_path,
                                         trans=self._sensor_location)        
 
         #For now use the flat ground plane as the seafloor
-        sea_floor_prim_path = "/GroundPlane"
+        sea_floor_prim_path = "/SeaFloor"
         self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
+        add_update_semantics(prim=get_prim_at_path(sea_floor_prim_path), 
+                             semantic_label='0.1',
+                             type_label='reflectivity')
         
-        #Reference the obstacle on stage
-        obstacle_asset_path = ['/home/haoyu-ma/projects/OceanSim_utils/assets/usd/imagingSonar_usd/toy_biplane_idle.usdz',
-                               '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/imagingSonar_usd/toy_car.usdz']
-        obstacle_prim_path = ['/World/Obstacle/obstacle_0', '/World/Obstalce/obstacle_1']
-
-        add_reference_to_stage(obstacle_asset_path[0], obstacle_prim_path[0])
-        XFormPrim(obstacle_prim_path[0]).set_local_scale(scale=[0.1, 0.1, 0.1])  
-        XFormPrim(obstacle_prim_path[0]).set_world_pose(position=[5.0,-2.5,0.0],orientation=rotations_utils.euler_angles_to_quat([np.pi/2,0,0]))
-
-        add_reference_to_stage(obstacle_asset_path[1], obstacle_prim_path[1])
-        XFormPrim(obstacle_prim_path[1]).set_local_scale(scale=[0.1, 0.1, 0.1])  
-        XFormPrim(obstacle_prim_path[1]).set_world_pose(position=[5.0,1.0,0.0],orientation=rotations_utils.euler_angles_to_quat([np.pi/2,0,0]))
+        
 
     def _setup_scenario(self):
         """

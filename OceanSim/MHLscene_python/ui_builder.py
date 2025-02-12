@@ -139,7 +139,7 @@ class UIBuilder:
         self._rob = None
 
         # Robot parameters
-        self._init_rob_pos = np.array([0.0, 0.0, 6.0])
+        self._init_rob_pos = np.array([0.0, 0.0, 2.5])
         self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0.0, 0.0, 0.0]))
 
         # DVl parameters
@@ -148,7 +148,6 @@ class UIBuilder:
         self._DVL_min_range = 0.01  # m
         self._DVL_max_range = 10.0 # m
         self._DVL_location = np.array([0.0,0.0,-0.2])
-        self._DVL_vel_cov = np.array([1,1,1,1])
         self._DVL_vel_cov = 0
         self._DVL_depth_cov = 0
 
@@ -159,6 +158,10 @@ class UIBuilder:
         self._cam_pose = ([0.5,0.0,0.0], [0.5,0.5,-0.5,-0.5])
         self._cam_focal = 6
         self._scenario = MHLScenario()
+
+        # Simulation parameters
+
+        self._frequency = 30 # HZ
 
     def _add_light_to_stage(self):
         """
@@ -237,7 +240,7 @@ class UIBuilder:
 
         MHLMesh_prim = get_prim_at_path('/root/mhl')
         scene_collider_API = UsdPhysics.CollisionAPI.Apply(MHLMesh_prim)
-        
+
 
 
     def _setup_scenario(self):

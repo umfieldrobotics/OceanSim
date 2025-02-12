@@ -61,7 +61,9 @@ class MHLScenario(ScenarioTemplate):
             )
         
         self._ldr = rep.AnnotatorRegistry.get_annotator("LdrColor")
+        self._depth = rep.AnnotatorRegistry.get_annotator('distance_to_camera')
         self._ldr.attach(rp)
+        self._depth.attach(rp)
 
 
     def teardown_scenario(self):
@@ -69,7 +71,6 @@ class MHLScenario(ScenarioTemplate):
         self._running_scenario = False
         self._time = 0.0
         self._id = 0
-        self._frame = 0
 
 
     def update_scenario(self, step: float):
@@ -78,16 +79,13 @@ class MHLScenario(ScenarioTemplate):
         if not self._running_scenario:
             return
         self._time += step
-        self._frame += 1
         if self._ldr.get_data().size == 0:
             return
         
-        if self._frame % 30 !=0:
-            return
 
         # if (self._time < 1):
         #     self._dc.apply_body_force(self._rob_body, carb.Float3(0.1,0.0,0.0), carb.Float3(0,0,0), 0)
-        self._dc.set_rigid_body_linear_velocity(self._rob_body, carb.Float3(0.5,0.0,0.0))
+        self._dc.set_rigid_body_linear_velocity(self._rob_body, carb.Float3(5,0.0,0.0))
         rob_pos, rob_orient = XFormPrim('/root/rob').get_world_poses()
         XFormPrim('/root/skin').set_world_poses(positions=rob_pos, orientations=rob_orient)
         # print(f'Vel:{self._DVL.get_linear_vel()}')
@@ -101,6 +99,7 @@ class MHLScenario(ScenarioTemplate):
         self._fourBeam_buffer.append(self._DVL.get_depth())
         self._vel_buffer.append(self._DVL.get_linear_vel())
         self._backend.schedule(write_image, path=f'cam/rgb_{self._id}.png', data=self._ldr.get_data())
+        self._backend.schedule(write_np, path=f'depth/depth_{self._id}.npy', data=self._depth.get_data())
         print(f'writing [{self._id}]')
         self._id += 1
 
