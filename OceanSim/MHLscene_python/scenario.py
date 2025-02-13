@@ -65,6 +65,7 @@ class MHLScenario():
         self._singleBeam_buffer.append(self._DVL.get_singleBeam_range())
         self._fourBeam_buffer.append(self._DVL.get_depth())
         self._vel_buffer.append(self._DVL.get_linear_vel())
+        print(self._DVL.get_linear_vel())
         self._backend.schedule(write_image, path=f'cam/rgb_{self._id}.png', data=self._ldr.get_data())
         self._backend.schedule(write_np, path=f'depth/depth_{self._id}.npy', data=self._depth.get_data())
         print(f'writing [{self._id}]')

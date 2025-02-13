@@ -8,7 +8,7 @@ from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
 # Isaac sim import
 from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, SingleGeometryPrim
 from isaacsim.core.utils.prims import get_prim_at_path
-from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage, open_stage
+from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, open_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.semantics import add_update_semantics
 from isaacsim.core.utils.viewports import set_camera_view
@@ -188,7 +188,6 @@ class UIBuilder:
                                          translation=self._init_rob_pos,
                                          orientation=self._init_rob_orien,
                                          mass=self._rob_mass)
-        
         # Initialize the DVL and attach it to the rob already being the rigid body
         self._DVL = DVLsensor(elevation=self._DVL_elevation, 
                               min_range=self._DVL_min_range,

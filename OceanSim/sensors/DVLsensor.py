@@ -1,14 +1,19 @@
+# Omniverse import
 import numpy as np
 from pxr import Gf
-from omni.isaac.core.prims import BaseSensor
-import omni.isaac.core.utils.rotations as rotations_utils
-from omni.isaac.core.prims import XFormPrim
-from isaacsim.sensors.physx import _range_sensor
 import omni.kit.commands
-from omni.isaac.dynamic_control import _dynamic_control
-from ..utils.MultivariateNormal import MultivariateNormal
 import omni.graph.core as og
 import carb
+
+# Isaac sim import
+from isaacsim.core.api.sensors import BaseSensor
+from isaacsim.core.utils.rotations import euler_angles_to_quat
+from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim
+from isaacsim.sensors.physx import _range_sensor
+
+# Custom import
+from ..utils.MultivariateNormal import MultivariateNormal
+
 class DVLsensor:
     def __init__(self,
                  elevation:float = 22.5, # deg
@@ -29,7 +34,6 @@ class DVLsensor:
         self._mvn_dep.init_cov(depth_cov)
         
         self._rigid_body_path = None
-        self._dc = _dynamic_control.acquire_dynamic_control_interface()
         self._beam_paths = []
 
         sinElev = np.sin(np.deg2rad(self._elevation))
@@ -42,15 +46,19 @@ class DVLsensor:
 
     def attachDVL(self, rigid_body_path:str, location:np.ndarray = np.array([0.0, 0.0, 0.0])):
         self._rigid_body_path = rigid_body_path
+        self._rigid_body_prim = SingleRigidPrim(prim_path=self._rigid_body_path)
         sensor_prim_path = rigid_body_path + "/DVL"
         self._DVL = BaseSensor(prim_path=sensor_prim_path,translation=location)
         
         elevation = self._elevation
         rotation = self._rotation
-        orients_euler = np.array([[elevation, 0.0, rotation], [0.0, elevation, rotation], [-elevation, 0.0, rotation], [0.0, -elevation, rotation]])
+        orients_euler = np.array([[elevation, 0.0, rotation], 
+                                  [0.0, elevation, rotation], 
+                                  [-elevation, 0.0, rotation], 
+                                  [0.0, -elevation, rotation]])
         orients_quat = []
         for i in range(orients_euler.shape[0]):
-            orients_quat.append(rotations_utils.euler_angles_to_quat(orients_euler[i,:], True))
+            orients_quat.append(euler_angles_to_quat(orients_euler[i,:], degrees=True))
             self._beam_paths.append(sensor_prim_path + "/beam" + str(i))
 
             result, sensor = omni.kit.commands.execute(
@@ -61,7 +69,7 @@ class DVLsensor:
                 forward_axis=Gf.Vec3d(0, 0, -1),
                 num_rays=1,
                 )
-            XFormPrim(self._beam_paths[i]).set_local_pose(orientation=orients_quat[i])
+            SingleXFormPrim(prim_path=self._beam_paths[i]).set_local_pose(orientation=orients_quat[i])
         if result:
             self._DVL_interface = _range_sensor.acquire_lightbeam_sensor_interface()
         else:
@@ -111,9 +119,7 @@ class DVLsensor:
         return beam_hit
     
     def get_linear_vel(self):
-        rob_body = self._dc.get_rigid_body(self._rigid_body_path)
-        
-        vel = self._dc.get_rigid_body_linear_velocity(rob_body)
+        vel = self._rigid_body_prim.get_linear_velocity()
 
         if (self._mvn_vel.is_uncertain()):
             sample = self._mvn_vel.sample_array()
