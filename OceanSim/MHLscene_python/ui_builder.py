@@ -7,24 +7,29 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
+# Omniverse import
 import numpy as np
 import omni.timeline
 import omni.ui as ui
-from omni.isaac.core.prims import XFormPrim
-from omni.isaac.core.utils.prims import get_prim_at_path
-from omni.isaac.core.utils.stage import add_reference_to_stage, create_new_stage, get_current_stage, set_stage_up_axis, open_stage
-from omni.isaac.core.world import World
-from omni.isaac.ui.element_wrappers import CollapsableFrame, Frame, StateButton
-from omni.isaac.ui.element_wrappers.core_connectors import LoadButton, ResetButton
-from omni.isaac.ui.ui_utils import get_style
 from omni.usd import StageEventType
-from .scenario import MHLScenario
-import isaacsim.core.utils.rotations as rotations_utils
 from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
+
+# Isaac sim import
 from isaacsim.core.api.objects import DynamicCuboid
-from omni.isaac.core.utils.viewports import set_camera_view
-from .DVLsensor import DVLsensor
+from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, SingleGeometryPrim
+from isaacsim.core.utils.prims import get_prim_at_path
+from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage, open_stage
+from isaacsim.core.utils.rotations import euler_angles_to_quat
+from isaacsim.core.utils.semantics import add_update_semantics
+from isaacsim.core.utils.viewports import set_camera_view
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style
+from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.sensors.camera import Camera
+
+
+# Custom import
+from ..sensors.DVLsensor import DVLsensor
+from .scenario import MHLScenario
 
 class UIBuilder:
     def __init__(self):
@@ -140,8 +145,8 @@ class UIBuilder:
 
         # Robot parameters
         self._init_rob_pos = np.array([0.0, 0.0, 2.5])
-        self._init_rob_orien = rotations_utils.euler_angles_to_quat(np.array([0.0, 0.0, 0.0]))
-
+        self._init_rob_orien = euler_angles_to_quat(np.array([0.0, 0.0, 0.0]))
+        self._rob_mass = 10 # kg
         # DVl parameters
         self._DVL = None
         self._DVL_elevation = 30.0 # deg
@@ -163,16 +168,6 @@ class UIBuilder:
 
         self._frequency = 30 # HZ
 
-    def _add_light_to_stage(self):
-        """
-        A new stage does not have a light by default.  This function creates a spherical light
-        """
-        sphereLight = UsdLux.SphereLight.Define(get_current_stage(), Sdf.Path("/root/SphereLight"))
-        sphereLight.CreateRadiusAttr(1)
-        sphereLight.CreateIntensityAttr(10000)
-        XFormPrim(str(sphereLight.GetPath())).set_world_pose([1, 0, 4])
-    
-
     def _setup_scene(self):
         """
         This function is attached to the Load Button as the setup_scene_fn callback.
@@ -185,35 +180,26 @@ class UIBuilder:
         and avoid loading anything if they are.  In this case, the user would still need to add
         their assets to the World (which has low overhead).  See commented code section in this function.
         """
-
+        # Open MHL scene
         open_stage("/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_aligned/mhl.usdc")
-        # set_stage_up_axis(UsdGeom.Tokens.z)
-
-        # Add light 
-        # self._add_light_to_stage()
 
         # Load the robot
         robot_prim_path = "/root/rob"
-        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY.usd'
-        DynamicCuboid(
-            prim_path=robot_prim_path, 
-            translation=self._init_rob_pos,
-            size=0.2, 
-            color=np.array([255, 0, 0]), 
-            visible=False        
-        )
-
-        robskin_prim_path = '/root/skin'
-        add_reference_to_stage(usd_path=robot_usd_path, prim_path=robskin_prim_path)
-        XFormPrim(robskin_prim_path).set_world_pose(position=self._init_rob_pos, orientation=self._init_rob_orien)
-
-        cube_prim = get_prim_at_path(robot_prim_path)
-        # Toggle rigid body and apply zero gravity
-        cube_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(cube_prim)
-        cube_rigidBody_API.CreateDisableGravityAttr(True)
-        cube_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-        cube_rigidBody_API.GetAngularDampingAttr().Set(0.0)
-
+        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
+        add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
+        
+        # Toggle rigid body and collider preset for rob
+        self._rob = get_prim_at_path(robot_prim_path)
+        rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(self._rob)
+        rob_rigidBody_API.CreateDisableGravityAttr(True)
+        rob_rigidBody_API.GetLinearDampingAttr().Set(0.0)
+        rob_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+        rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path, 
+                                         translation=self._init_rob_pos,
+                                         orientation=self._init_rob_orien,
+                                         mass=self._rob_mass)
+        
+        # Initialize the DVL and attach it to the rob already being the rigid body
         self._DVL = DVLsensor(elevation=self._DVL_elevation, 
                               min_range=self._DVL_min_range,
                               max_range=self._DVL_max_range,
@@ -223,24 +209,23 @@ class UIBuilder:
         self._DVL.add_debug_lines()
         self._DVL.attach_singleBeam(rigid_body_path=robot_prim_path, location=self._DVL_location)
         self._DVL.add_singleBeam_debug()
-
+        
+        # Attach the front camera
         cam_prim_path = robot_prim_path + '/Camera'
         self._cam = Camera(
             prim_path=cam_prim_path,
             resolution=self._cam_res,
             )
         self._cam.set_focal_length(0.1 * self._cam_focal)
-        XFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0],orientation=self._cam_pose[1])
+        SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0],orientation=self._cam_pose[1])
 
+
+        # Set initial viewport view (optional)
         set_camera_view(eye=[-3.0, 0.0, 8.0], target=self._init_rob_pos, camera_prim_path="/OmniverseKit_Persp")
 
-        # self._rob = add_reference_to_stage(usd_path=robot_usd_path,prim_path=robot_prim_path)
-        # XFormPrim(robot_prim_path).set_world_pose(position=self._init_rob_pos, orientation=self._init_rob_orien)
 
-
-        MHLMesh_prim = get_prim_at_path('/root/mhl')
-        scene_collider_API = UsdPhysics.CollisionAPI.Apply(MHLMesh_prim)
-
+        MHLMesh_prim_path = '/root/mhl'
+        SingleGeometryPrim(prim_path=MHLMesh_prim_path, collision=True)
 
 
     def _setup_scenario(self):

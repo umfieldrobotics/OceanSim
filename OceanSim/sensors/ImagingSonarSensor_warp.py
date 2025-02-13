@@ -20,7 +20,8 @@ def cartesian_to_spherical(cart: wp.vec3) -> wp.vec3:
 def compute_intensity(pcl: wp.array(dtype=wp.vec3),
                     normals: wp.array(dtype=wp.vec3),
                     viewTransform: wp.mat44,
-                    reflectivity: float,
+                    semantics: wp.array(dtype=wp.int8),
+                    indexToRefl: wp.array(dtype=wp.float32),
                     attenuation: float,
                     intensity: wp.array(dtype=wp.float32)
                     ):
@@ -30,12 +31,13 @@ def compute_intensity(pcl: wp.array(dtype=wp.vec3),
                  viewTransform[2,0], viewTransform[2,1], viewTransform[2,2])
     T = wp.vec3(viewTransform[0,3], viewTransform[1,3], viewTransform[2,3])
     sensor_loc = - (wp.transpose(R) @ T)
-    # Will use warp.math.norm_l2() in future release
     incidence = pcl[tid] - sensor_loc
+    # Will use warp.math.norm_l2() in future release
     dist = wp.sqrt(incidence[0]*incidence[0] + incidence[1]*incidence[1] + incidence[2]*incidence[2])
     unit_directs = wp.normalize(pcl[tid] - sensor_loc)
-    cos_theta = wp.dot(unit_directs, normals[tid])
-    intensity[tid] = reflectivity * wp.abs(cos_theta) * wp.exp(-attenuation * dist)
+    cos_theta = wp.dot(-unit_directs, normals[tid])
+    reflectivity = indexToRefl[semantics[tid]]
+    intensity[tid] = reflectivity * cos_theta * wp.exp(-attenuation * dist)
 
 @wp.kernel
 def world2local(viewTransform: wp.mat44,
@@ -77,24 +79,26 @@ def bin_intensity(pcl: wp.array(dtype=wp.vec3),
     wp.atomic_add(bin_sum, x_bin_idx, y_bin_idx, intensity[tid])
     wp.atomic_add(bin_count, x_bin_idx, y_bin_idx, 1)
 
-@wp.kernel
+@wp.kernel # Not being used 
 def average(sum: wp.array(ndim=2, dtype=wp.float32),
             count: wp.array(ndim=2, dtype=wp.int32),
             avg: wp.array(ndim=2, dtype=wp.float32)):
     i, j = wp.tid()
     if count[i, j] > 0:
         avg[i, j] = sum[i, j] / wp.float32(count[i, j])
-    else:
-        avg[i,j] = 0.0
 
 
+@wp.kernel
+def array2d_max(array: wp.array(ndim=2, dtype=wp.float32), 
+              max_value: wp.array(dtype=wp.float32)):
+    i,j = wp.tid()  
+    wp.atomic_max(max_value, 0, array[i, j])
 
-# Simply convert cartesian to polar for easy plotting
 @wp.kernel 
 def process_sonar_data(r: wp.array(ndim=2, dtype=wp.float32),
                        azi: wp.array(ndim=2, dtype=wp.float32),
                        intensity: wp.array(ndim=2, dtype=wp.float32),
-                       max_intensity:wp.float32,
+                       max_intensity: wp.float32,
                        gau_noise: wp.array(ndim=2, dtype=wp.float32),
                        range_ray_noise: wp.array(ndim=2, dtype=wp.float32),
                        offset: wp.float32,
@@ -143,7 +147,6 @@ class ImagingSonarSensor:
         # for sonar map bin size\resolution once load the sensor
         self.bin_sum = wp.zeros(shape=self.r.shape, dtype=wp.float32)
         self.bin_count = wp.zeros(shape=self.r.shape, dtype=wp.int32)
-        self.mean_intensity = wp.zeros(shape=self.r.shape, dtype=wp.float32)
 
 
         # We introduce this factor to adjust raycast density
@@ -236,7 +239,6 @@ class ImagingSonarSensor:
         
         self.bin_sum.zero_()
         self.bin_count.zero_()
-        self.mean_intensity.zero_()
 
         # Enable this feature so that warp will automatically free up GPU mamory 
         # if above certain total percentage usage
@@ -248,27 +250,44 @@ class ImagingSonarSensor:
 
     def scan(self):
         self.scan_data['pcl'] = self.pointcloud_annot.get_data()['data']
-        self.scan_data['normals'] = self.pointcloud_annot.get_data()['info']['pointNormals']
-        self.scan_data['semantics'] = self.pointcloud_annot.get_data()['info']['pointSemantic']
-        self.scan_data['viewTransform'] = self.cameraParams_annot.get_data()['cameraViewTransform'].reshape(4,4).T
-        self.scan_data['idToLabels'] = self.semanticSeg_annot.get_data()['info']['idToLabels']
-
+        if self.scan_data['pcl'].shape[0] != 0:
+            self.scan_data['normals'] = self.pointcloud_annot.get_data()['info']['pointNormals'][:,:3]
+            self.scan_data['semantics'] = self.pointcloud_annot.get_data()['info']['pointSemantic']
+            self.scan_data['viewTransform'] = self.cameraParams_annot.get_data()['cameraViewTransform'].reshape(4,4).T
+            self.scan_data['idToLabels'] = self.semanticSeg_annot.get_data()['info']['idToLabels']
 
 
     def make_sonar_data(self):
+        attenuation = 0.25
 
-        reflectivity = 1
-        attenuation = 0.3
+        # A utility function helps to convert idToLabels into indexToProp array
+        # This manipulation is needed for warp computation framework
+        # indexToProp is an 1-dim array where the values associated with the query property 
+        # are placed at the index corresponding to the key
+        # First two entry are always zero for {'0': {'class': 'BACKGROUND'}, '1': {'class': 'UNLABELLED'}}
+        # eg: indexToProp = [0, 0, 0.1, 1 .....] 
+        def make_indexToProp_array(idToLabels: dict, query_property: str):
+            max_id = max(idToLabels.keys(), default=-1)
+            indexToProp_array = np.zeros((int(max_id)+1,))
+            for id in idToLabels.keys():
+                for property in idToLabels.get(id):
+                    if property == query_property:
+                        indexToProp_array[int(id)] = idToLabels.get(id).get(property)
+            return indexToProp_array
 
-
-        if self.scan_data['pcl'].size != 0:
+        num_points = self.scan_data['pcl'].shape[0]
+        if num_points != 0:
             pcl = wp.array(self.scan_data['pcl'], dtype=wp.vec3)
-            normals=wp.array(self.scan_data['normals'][:,:3], dtype=wp.vec3)
+            normals=wp.array(self.scan_data['normals'], dtype=wp.vec3)
             viewTransform=wp.mat44(self.scan_data['viewTransform'])
-            num_points = pcl.shape[0]
+            semantics = wp.array(self.scan_data['semantics'], wp.int8)
+            indexToRefl = wp.array(make_indexToProp_array(idToLabels=self.scan_data['idToLabels'],
+                                                         query_property='reflectivity'),
+                                                         dtype=wp.float32)
         else:
             return
-        
+
+
         intensity = wp.empty(shape=(num_points,), dtype=wp.float32)
 
         wp.launch(kernel=compute_intensity,
@@ -277,7 +296,8 @@ class ImagingSonarSensor:
                       pcl,
                       normals,
                       viewTransform,
-                      reflectivity,
+                      semantics,
+                      indexToRefl,
                       attenuation,
                   ],
                   outputs=[
@@ -302,7 +322,6 @@ class ImagingSonarSensor:
         
         self.bin_sum.zero_()
         self.bin_count.zero_()
-        self.mean_intensity.zero_()
 
         wp.launch(kernel=bin_intensity,
                   dim=num_points,
@@ -319,47 +338,63 @@ class ImagingSonarSensor:
                       self.bin_count
                   ]
                   )
-        
+        # Intensity binning has switched to summation instead of average
+        # wp.launch(
+        #     kernel=average,
+        #     dim=self.bin_sum.shape,
+        #     inputs=[
+        #         self.bin_sum,
+        #         self.bin_count
+        #     ],
+        #     outputs=[
+        #         self.mean_intensity,
+        #     ]
+        #     )
+        # warp.max(scalar, scalar) has bug. Now using the warp.atomic_max(array, i, value)
+        max_value = wp.zeros(shape=(1,), dtype=wp.float32)
         wp.launch(
-            kernel=average,
             dim=self.bin_sum.shape,
+            kernel=array2d_max,
             inputs=[
                 self.bin_sum,
-                self.bin_count
             ],
             outputs=[
-                self.mean_intensity,
+                max_value
             ]
-            )
-        # wp.max() has bug (in future will avoid moving this back to host)
-        self.max_intensity = np.max(self.mean_intensity.numpy())
-        self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
-        self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
-        print(f"[{self.id}] Writing data")
+        )
+
+        self.max_intensity = max_value.numpy()[0]
+        print(self.max_intensity)
+        if self.writing:
+            self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
+            self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
+            print(f"[{self.id}] Writing intensity and pcl_local")
+        
+        self.make_sonar_map()
         self.id += 1
-
-
-        self.process_sonar_data()
     
-    def process_sonar_data(self):
+    def make_sonar_map(self):
 
         gau_noise_param = 0.2
         ray_noise_param = 0.15
         intensity_offset = 0.2
-        intensity_gain = 1.0
+        intensity_gain = 1.5
+
+        
         
         # Calculate noise
-        gau_noise = np.random.normal(loc=0, scale=gau_noise_param, size=self.mean_intensity.shape)
-        ray_noise = np.random.rayleigh(scale=ray_noise_param, size=self.mean_intensity.shape)
-        range_dependent_ray_noise = self.r**2/self.max_range**2*(1 + np.exp(-np.abs(self.azi)))*ray_noise 
+        gau_noise = np.random.normal(loc=0, scale=gau_noise_param, size=self.bin_sum.shape)
+        ray_noise = np.random.rayleigh(scale=ray_noise_param, size=self.bin_sum.shape)
+        std = self.hori_fov/64
+        range_dependent_ray_noise = self.r**2/self.max_range**2*(1 + np.exp(-self.azi**2/std))*ray_noise 
 
-        sonar_map = wp.empty(shape=self.mean_intensity.shape, dtype=wp.vec3)
+        sonar_map = wp.empty(shape=self.bin_sum.shape, dtype=wp.vec3)
         wp.launch(kernel=process_sonar_data,
                   dim=sonar_map.shape,
                   inputs=[
                       wp.array(self.r, ndim=2, dtype=wp.float32),
                       wp.array(self.azi, ndim=2, dtype=wp.float32),
-                      self.mean_intensity,
+                      self.bin_sum,
                       self.max_intensity,
                       wp.array(gau_noise, ndim=2, dtype=wp.float32),
                       wp.array(range_dependent_ray_noise, ndim=2, dtype=wp.float32),
@@ -371,8 +406,9 @@ class ImagingSonarSensor:
                   ]
                   )
 
-
-        self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=sonar_map)
+        if self.writing:
+            self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=sonar_map)
+            print(f'[{self.id}] Writing sonar_data')
 
 
 

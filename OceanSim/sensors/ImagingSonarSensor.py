@@ -4,9 +4,8 @@ import isaacsim.core.utils.rotations as rotations_utils
 import numpy as np
 from omni.replicator.core.scripts.functional import write_np
 from scipy.stats import binned_statistic_2d
-# TODO #
-# Implement 'pointSemantic': dnarray[...],  #  shape=(<num_points>), dtype=uint8), from PointCloud annotator 
-# to take into account of material property
+
+
 class ImagingSonarSensor:
 
     def __init__(self, prim_path : str, 

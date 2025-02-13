@@ -13,8 +13,10 @@ import omni.timeline
 import omni.ui as ui
 from omni.usd import StageEventType
 from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
-from isaacsim.core.api.objects import FixedCuboid, GroundPlane
-from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim
+
+# Isaac sim import
+from isaacsim.core.api.objects import DynamicCuboid, GroundPlane, FixedCuboid
+from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, RigidPrim
 from isaacsim.core.utils.prims import get_prim_at_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
@@ -26,8 +28,7 @@ from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 
 # Custom import
 from .scenario import ImagingSonarScenario
-from .ImagingSonarSensor_warp import ImagingSonarSensor
-
+from ..sensors.ImagingSonarSensor_warp import ImagingSonarSensor
 
 
 class UIBuilder:
@@ -141,11 +142,10 @@ class UIBuilder:
 
     def _on_init(self):
         self._rob = None
-        self._sea_floor = None
         self._sonar = None
-        self._sensor_location = [0.5, 0.0, 0.0]
-        self._init_rob_pos = np.array([3, -1, 2])
-        self._init_rob_orien = euler_angles_to_quat(np.array([0, 55, 0]), degrees=True)
+        self._sensor_location = [0.3, 0.0, 0.0]
+        self._init_rob_pos = np.array([0, 0, 2])
+        self._init_rob_orien = euler_angles_to_quat(np.array([0, 45, 0]), degrees=True)
         self._rob_mass = 10 #kg Need this value to supress a warning given by automatic mass computation from collider assignment
 
         self._scenario = ImagingSonarScenario()
@@ -180,8 +180,10 @@ class UIBuilder:
 
         # Load the robot
         robot_prim_path = "/rob"
-        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY.usd'
-        self._rob = add_reference_to_stage(usd_path=robot_usd_path,prim_path=robot_prim_path)
+        # robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
+        # self._rob = add_reference_to_stage(usd_path=robot_usd_path,prim_path=robot_prim_path)
+        DynamicCuboid(prim_path=robot_prim_path, size=0.5, color=np.array([0.1,0.5,1]))
+        self._rob = get_prim_at_path(robot_prim_path)
         SingleXFormPrim(robot_prim_path).set_world_pose(position=self._init_rob_pos, orientation=self._init_rob_orien)
 
         
@@ -200,12 +202,23 @@ class UIBuilder:
                                         trans=self._sensor_location)        
 
         #For now use the flat ground plane as the seafloor
-        sea_floor_prim_path = "/SeaFloor"
-        self._sea_floor = GroundPlane(prim_path=sea_floor_prim_path)
+        sea_floor_prim_path = "/World/SeaFloor"
+        GroundPlane(prim_path=sea_floor_prim_path)
         add_update_semantics(prim=get_prim_at_path(sea_floor_prim_path), 
-                             semantic_label='0.1',
+                             semantic_label='0.01',
                              type_label='reflectivity')
         
+        cube_prim_paths = [f'/World/Cube_{i}' for i in range(3)]
+        for i in range(len(cube_prim_paths)):
+            DynamicCuboid(prim_path=cube_prim_paths[i],
+                        position=np.array([1.5, -1 + i, 1]),
+                        color=np.array([0.1+0.3*i, 0, 1]),
+                        size=0.25)
+            add_update_semantics(prim=get_prim_at_path(cube_prim_paths[i]),
+                                semantic_label=f'{0.1 + 0.4*i}',
+                                type_label='reflectivity')
+        
+        RigidPrim(cube_prim_paths)
         
 
     def _setup_scenario(self):
