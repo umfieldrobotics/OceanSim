@@ -2,6 +2,7 @@
 import numpy as np
 import omni.replicator.core as rep
 from omni.replicator.core.scripts.functional import write_np, write_image
+
 # Isaac sim import
 from isaacsim.core.prims import SingleRigidPrim
 from isaacsim.core.utils.prims import get_prim_path
