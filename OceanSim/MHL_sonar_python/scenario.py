@@ -17,7 +17,7 @@ class MHL_sonar_test_Scenario():
         self._running_scenario = False
         self._time = 0.0
 
-        self._output_dir = '/home/haoyu-ma/Desktop/MHL_replica'
+        self._output_dir = '/home/haoyu/Desktop/MHL_replica'
 
 
 

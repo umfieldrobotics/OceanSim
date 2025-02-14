@@ -79,7 +79,7 @@ def bin_intensity(pcl: wp.array(dtype=wp.vec3),
     wp.atomic_add(bin_sum, x_bin_idx, y_bin_idx, intensity[tid])
     wp.atomic_add(bin_count, x_bin_idx, y_bin_idx, 1)
 
-@wp.kernel # Not being used 
+@wp.kernel 
 def average(sum: wp.array(ndim=2, dtype=wp.float32),
             count: wp.array(ndim=2, dtype=wp.int32),
             avg: wp.array(ndim=2, dtype=wp.float32)):
@@ -97,7 +97,8 @@ def all_max(array: wp.array(ndim=2, dtype=wp.float32),
 @wp.kernel
 def range_max(array: wp.array(ndim=2, dtype=wp.float32), 
               max_value: wp.array(dtype=wp.float32)):
-    pass
+    i, j = wp.tid()
+    wp.atomic_max(max_value, i, array[i,j])
 
 @wp.kernel 
 def make_sonar_map_all(r: wp.array(ndim=2, dtype=wp.float32),
@@ -120,7 +121,7 @@ def make_sonar_map_all(r: wp.array(ndim=2, dtype=wp.float32),
     result[i,j] = wp.vec3(r[i,j] * wp.cos(azi[i,j]),
                           r[i,j] * wp.sin(azi[i,j]),
                           intensity[i,j])
-# TODO #
+
 @wp.kernel 
 def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
                        azi: wp.array(ndim=2, dtype=wp.float32),
@@ -131,7 +132,17 @@ def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
                        offset: wp.float32,
                        gain: wp.float32,
                        result: wp.array(ndim=2, dtype=wp.vec3)):
-    pass
+    i, j = wp.tid()
+    intensity[i,j] = intensity[i,j]/max_intensity[i]
+    intensity[i,j] += offset
+    intensity[i,j] *= gain
+    intensity[i,j] *= (0.5 + gau_noise[i,j])
+    intensity[i,j] += range_ray_noise[i,j]
+    intensity[i,j] = wp.clamp(intensity[i,j], wp.float32(0.0), wp.float32(1.0))
+
+    result[i,j] = wp.vec3(r[i,j] * wp.cos(azi[i,j]),
+                          r[i,j] * wp.sin(azi[i,j]),
+                          intensity[i,j])
 
 class ImagingSonarSensor:
 
@@ -448,17 +459,11 @@ class ImagingSonarSensor:
                   ]
                   )
         
-        
-        
-        
-        
-        
-        
-        
+
         
         if self.writing:
-            self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
-            self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
+            # self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
+            # self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
             self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
 
             print(f"[{self.id}] Writing intensity, pcl_local, and sonar map")
