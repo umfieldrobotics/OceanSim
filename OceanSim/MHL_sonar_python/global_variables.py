@@ -7,6 +7,6 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
-EXTENSION_TITLE = "MHLscene"
+EXTENSION_TITLE = "MHL_sonar"
 
-EXTENSION_DESCRIPTION = "MHLscene description"
+EXTENSION_DESCRIPTION = "MHL sonar test"

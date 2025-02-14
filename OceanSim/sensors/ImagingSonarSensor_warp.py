@@ -89,13 +89,18 @@ def average(sum: wp.array(ndim=2, dtype=wp.float32),
 
 
 @wp.kernel
-def array2d_max(array: wp.array(ndim=2, dtype=wp.float32), 
+def all_max(array: wp.array(ndim=2, dtype=wp.float32), 
               max_value: wp.array(dtype=wp.float32)):
     i,j = wp.tid()  
     wp.atomic_max(max_value, 0, array[i, j])
+# TODO #
+@wp.kernel
+def range_max(array: wp.array(ndim=2, dtype=wp.float32), 
+              max_value: wp.array(dtype=wp.float32)):
+    pass
 
 @wp.kernel 
-def process_sonar_data(r: wp.array(ndim=2, dtype=wp.float32),
+def make_sonar_map_all(r: wp.array(ndim=2, dtype=wp.float32),
                        azi: wp.array(ndim=2, dtype=wp.float32),
                        intensity: wp.array(ndim=2, dtype=wp.float32),
                        max_intensity: wp.float32,
@@ -115,10 +120,19 @@ def process_sonar_data(r: wp.array(ndim=2, dtype=wp.float32),
     result[i,j] = wp.vec3(r[i,j] * wp.cos(azi[i,j]),
                           r[i,j] * wp.sin(azi[i,j]),
                           intensity[i,j])
-
 # TODO #
-# Implement 'pointSemantic': dnarray[...],  #  shape=(<num_points>), dtype=uint8), from PointCloud annotator 
-# to take into account of material property
+@wp.kernel 
+def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
+                       azi: wp.array(ndim=2, dtype=wp.float32),
+                       intensity: wp.array(ndim=2, dtype=wp.float32),
+                       max_intensity: wp.array(ndim=1, dtype=wp.float32),
+                       gau_noise: wp.array(ndim=2, dtype=wp.float32),
+                       range_ray_noise: wp.array(ndim=2, dtype=wp.float32),
+                       offset: wp.float32,
+                       gain: wp.float32,
+                       result: wp.array(ndim=2, dtype=wp.vec3)):
+    pass
+
 class ImagingSonarSensor:
 
     def __init__(self, prim_path : str, 
@@ -127,14 +141,14 @@ class ImagingSonarSensor:
                  ):
         
         # Raw parameters from Oculus M370s\MT370s\MD370s
-        self.max_range = 5 # m (max is 200 m in datasheet )
-        self.min_range = 0.2 # m (min is 0.2 m in datasheet)
-        self.range_res = 0.01 # m (datasheet is 0.008 m)
+        self.max_range = 3 # m (max is 200 m in datasheet )
+        self.min_range = 0.5 # m (min is 0.2 m in datasheet)
+        self.range_res = 0.008 # m (datasheet is 0.008 m)
         self.update_rate = 40 # Hz (max update rate) (NOT USED FOR NOW)!!
-        self.hori_fov = 90 # degree (hori_fov is 130 degrees in datasheet)
-        self.vert_fov = 90 # degree (vert_fov is 20 degrees in datasheet)
+        self.hori_fov = 130 # degree (hori_fov is 130 degrees in datasheet)
+        self.vert_fov = 20 # degree (vert_fov is 20 degrees in datasheet)
         self.num_beams = 256 # (max number of beams) (NOT USED FOR NOW)!!
-        self.angular_res = 0.1 # degree (datasheet is 2 deg)
+        self.angular_res = 1.0 # degree (datasheet is 2 deg)
         self.beam_separation = 0.5 # degree
 
         # Generate sonar map's r and z meshgrid
@@ -147,12 +161,13 @@ class ImagingSonarSensor:
         # for sonar map bin size\resolution once load the sensor
         self.bin_sum = wp.zeros(shape=self.r.shape, dtype=wp.float32)
         self.bin_count = wp.zeros(shape=self.r.shape, dtype=wp.int32)
-
+        self.binned_intensity = wp.zeros(shape=self.r.shape, dtype=wp.int32)
+        self.sonar_map = wp.zeros(shape=self.r.shape, dtype=wp.vec3)
 
         # We introduce this factor to adjust raycast density
         # (Equivalently, adjust the beam_separation) 
         # Increase this value by 1 will quadraple the total number of raycasts
-        self.ray_factor = 10 # below 15 is advised for me
+        self.ray_factor = 20 # below 15 is advised for me
 
         self.AR = self.hori_fov / self.vert_fov
         self.hori_res = int(self.ray_factor * (self.hori_fov / self.beam_separation))
@@ -163,7 +178,7 @@ class ImagingSonarSensor:
         # while non-squre pixel is not supported in Isaac sim. See details below.
 
         print(f'resolution: {self.hori_res} x {self.vert_res}')
-        self.camera_prim_path = prim_path + '/Camera'
+        self.camera_prim_path = prim_path + '/Sonar'
         self.camera = Camera(
             prim_path=self.camera_prim_path,
             translation=trans,
@@ -196,7 +211,7 @@ class ImagingSonarSensor:
 
     # Initialize the sensor so that annotator is 
     # loaded on cuda and ready to acquire data
-    # For now, data is generated per simulation tick
+    # Data is generated per simulation tick
     def initialize(self, output_dir : str = None):
         self.writing = False
         self.scan_data = {}
@@ -239,7 +254,8 @@ class ImagingSonarSensor:
         
         self.bin_sum.zero_()
         self.bin_count.zero_()
-
+        self.binned_intensity.zero_()
+        self.sonar_map.zero_()
         # Enable this feature so that warp will automatically free up GPU mamory 
         # if above certain total percentage usage
         if wp.is_mempool_supported:
@@ -247,6 +263,7 @@ class ImagingSonarSensor:
                 wp.set_mempool_enabled()
             wp.set_mempool_release_threshold("cuda:0", 0.6)
         
+        print(f'Sonar is initialized. (Writing: {self.writing})')
 
     def scan(self):
         self.scan_data['pcl'] = self.pointcloud_annot.get_data()['data']
@@ -257,9 +274,7 @@ class ImagingSonarSensor:
             self.scan_data['idToLabels'] = self.semanticSeg_annot.get_data()['info']['idToLabels']
 
 
-    def make_sonar_data(self):
-        attenuation = 0.25
-
+    def make_sonar_data(self, binning_method: str = "sum", normalizing_method: str = "all"):
         # A utility function helps to convert idToLabels into indexToProp array
         # This manipulation is needed for warp computation framework
         # indexToProp is an 1-dim array where the values associated with the query property 
@@ -287,7 +302,9 @@ class ImagingSonarSensor:
         else:
             return
 
-
+        # Intensity parameters
+        attenuation = 0.1
+        
         intensity = wp.empty(shape=(num_points,), dtype=wp.float32)
 
         wp.launch(kernel=compute_intensity,
@@ -322,7 +339,7 @@ class ImagingSonarSensor:
         
         self.bin_sum.zero_()
         self.bin_count.zero_()
-
+        
         wp.launch(kernel=bin_intensity,
                   dim=num_points,
                   inputs=[
@@ -338,79 +355,116 @@ class ImagingSonarSensor:
                       self.bin_count
                   ]
                   )
-        # Intensity binning has switched to summation instead of average
-        # wp.launch(
-        #     kernel=average,
-        #     dim=self.bin_sum.shape,
-        #     inputs=[
-        #         self.bin_sum,
-        #         self.bin_count
-        #     ],
-        #     outputs=[
-        #         self.mean_intensity,
-        #     ]
-        #     )
-        # warp.max(scalar, scalar) has bug. Now using the warp.atomic_max(array, i, value)
-        max_value = wp.zeros(shape=(1,), dtype=wp.float32)
-        wp.launch(
-            dim=self.bin_sum.shape,
-            kernel=array2d_max,
-            inputs=[
-                self.bin_sum,
-            ],
-            outputs=[
-                max_value
-            ]
-        )
-
-        self.max_intensity = max_value.numpy()[0]
-        print(self.max_intensity)
-        if self.writing:
-            self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
-            self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
-            print(f"[{self.id}] Writing intensity and pcl_local")
         
-        self.make_sonar_map()
-        self.id += 1
-    
-    def make_sonar_map(self):
+        self.binned_intensity.zero_()
 
-        gau_noise_param = 0.2
-        ray_noise_param = 0.15
-        intensity_offset = 0.2
-        intensity_gain = 1.5
+        if binning_method == "mean":
+            wp.launch(
+                kernel=average,
+                dim=self.bin_sum.shape,
+                inputs=[
+                    self.bin_sum,
+                    self.bin_count
+                ],
+                outputs=[
+                    self.binned_intensity,
+                ]
+                )
+        if binning_method == "sum":
+            self.binned_intensity = self.bin_sum
 
-        
-        
+        # Sonar map Noise Parameters
+        gau_noise_param = 0.1
+        ray_noise_param = 0.1
+        intensity_offset = 0.0
+        intensity_gain = 1.0
         # Calculate noise
         gau_noise = np.random.normal(loc=0, scale=gau_noise_param, size=self.bin_sum.shape)
         ray_noise = np.random.rayleigh(scale=ray_noise_param, size=self.bin_sum.shape)
         std = self.hori_fov/64
-        range_dependent_ray_noise = self.r**2/self.max_range**2*(1 + np.exp(-self.azi**2/std))*ray_noise 
+        range_dependent_ray_noise = self.r**2/self.max_range**2*(1 + np.exp(-(self.azi-np.pi/2)**2/std))*ray_noise 
 
-        sonar_map = wp.empty(shape=self.bin_sum.shape, dtype=wp.vec3)
-        wp.launch(kernel=process_sonar_data,
-                  dim=sonar_map.shape,
+
+        self.sonar_map.zero_()
+        if normalizing_method == "all":
+            # warp.max(scalar, scalar) has bug. Now using the warp.atomic_max(array, i, value)
+            maximum = wp.zeros(shape=(1,), dtype=wp.float32)
+            wp.launch(
+                dim=self.bin_sum.shape,
+                kernel=all_max,
+                inputs=[
+                    self.binned_intensity,
+                ],
+                outputs=[
+                    maximum
+                ]
+            )
+            maximum = maximum.numpy()[0]
+            wp.launch(
+                  kernel=make_sonar_map_all,
+                  dim=self.sonar_map.shape,
                   inputs=[
                       wp.array(self.r, ndim=2, dtype=wp.float32),
                       wp.array(self.azi, ndim=2, dtype=wp.float32),
-                      self.bin_sum,
-                      self.max_intensity,
+                      self.binned_intensity,
+                      maximum,
                       wp.array(gau_noise, ndim=2, dtype=wp.float32),
                       wp.array(range_dependent_ray_noise, ndim=2, dtype=wp.float32),
                       intensity_offset,
                       intensity_gain
                   ],
                   outputs=[
-                      sonar_map
+                      self.sonar_map
                   ]
                   )
-
+            
+        elif normalizing_method == "range":
+            maximum = wp.zeros(shape=(self.r.shape[0],), dtype=wp.float32)
+            wp.launch(
+                dim=self.bin_sum.shape,
+                kernel=range_max,
+                inputs=[
+                    self.binned_intensity,
+                ],
+                outputs=[
+                    maximum
+                ]
+            )
+            wp.launch(
+                  kernel=make_sonar_map_range,
+                  dim=self.sonar_map.shape,
+                  inputs=[
+                      wp.array(self.r, ndim=2, dtype=wp.float32),
+                      wp.array(self.azi, ndim=2, dtype=wp.float32),
+                      self.binned_intensity,
+                      maximum,
+                      wp.array(gau_noise, ndim=2, dtype=wp.float32),
+                      wp.array(range_dependent_ray_noise, ndim=2, dtype=wp.float32),
+                      intensity_offset,
+                      intensity_gain
+                  ],
+                  outputs=[
+                      self.sonar_map
+                  ]
+                  )
+        
+        
+        
+        
+        
+        
+        
+        
+        
         if self.writing:
-            self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=sonar_map)
-            print(f'[{self.id}] Writing sonar_data')
+            self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
+            self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
+            self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
 
-
+            print(f"[{self.id}] Writing intensity, pcl_local, and sonar map")
+        
+        self.id += 1
+    
 
 
     def close(self):

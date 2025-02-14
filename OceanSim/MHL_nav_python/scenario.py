@@ -6,9 +6,9 @@ from omni.replicator.core.scripts.functional import write_np, write_image
 # Isaac sim import
 from isaacsim.core.prims import SingleRigidPrim
 from isaacsim.core.utils.prims import get_prim_path
-
-
-class MHLScenario():
+from isaacsim.core.utils.rotations import euler_angles_to_quat
+from isaacsim.core.utils.viewports import set_camera_view
+class MHL_straighline_navigation_Scenario():
     def __init__(self):
         self._rob = None
         self._DVL = None
@@ -28,12 +28,16 @@ class MHLScenario():
         self._DVL = DVL
         self._cam = cam
 
-
         self._running_scenario = True
+
+        SingleRigidPrim(prim_path=get_prim_path(self._rob),
+                        translation=np.array([0.0, 0.0, 2.5]),
+                        orientation=euler_angles_to_quat(np.array([0.0, 0.0, 0.0]), degrees=True))
         
+
         self._backend = rep.BackendDispatch({"paths": {"out_dir": self._output_dir}})
         rp = rep.create.render_product(
-            camera='/root/rob/Camera',
+            camera='/World/rob/Camera',
             resolution=(1920,1080),
             )
         
@@ -42,6 +46,7 @@ class MHLScenario():
         self._ldr.attach(rp)
         self._depth.attach(rp)
 
+        set_camera_view(eye=[-2.0, 0.0, 3.0], target=np.array([0.0, 1.25, 0.15]), camera_prim_path="/OmniverseKit_Persp")
 
     def teardown_scenario(self):
         self._rob = None
@@ -65,7 +70,6 @@ class MHLScenario():
         self._singleBeam_buffer.append(self._DVL.get_singleBeam_range())
         self._fourBeam_buffer.append(self._DVL.get_depth())
         self._vel_buffer.append(self._DVL.get_linear_vel())
-        print(self._DVL.get_linear_vel())
         self._backend.schedule(write_image, path=f'cam/rgb_{self._id}.png', data=self._ldr.get_data())
         self._backend.schedule(write_np, path=f'depth/depth_{self._id}.npy', data=self._depth.get_data())
         print(f'writing [{self._id}]')
@@ -77,3 +81,4 @@ class MHLScenario():
         np.save(file=self._output_dir+"/singleBeam.npy", arr=self._singleBeam_buffer)
         np.save(file=self._output_dir+"/fourBeam.npy", arr=self._fourBeam_buffer)   
         print(f'data written to {self._output_dir}')
+

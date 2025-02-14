@@ -69,11 +69,11 @@ class Extension(omni.ext.IExt):
 
         self._menu_items = [
             MenuItemDescription(
-                name="Scenes",
+                name="MHL",
                 onclick_action=(ext_id, f"CreateUIExtension:{EXTENSION_TITLE}"),
                 sub_menu=[
                     make_menu_item_description(
-                        ext_id, "MHL", lambda a=weakref.proxy(self): a._menu_callback()
+                        ext_id, "MHL_nav", lambda a=weakref.proxy(self): a._menu_callback()
                     )
                 ],
             )

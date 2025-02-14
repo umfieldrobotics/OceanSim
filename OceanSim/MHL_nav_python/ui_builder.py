@@ -11,7 +11,6 @@ from isaacsim.core.utils.prims import get_prim_at_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, open_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.semantics import add_update_semantics
-from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.sensors.camera import Camera
@@ -19,7 +18,7 @@ from isaacsim.sensors.camera import Camera
 
 # Custom import
 from ..sensors.DVLsensor import DVLsensor
-from .scenario import MHLScenario
+from .scenario import MHL_straighline_navigation_Scenario
 
 class UIBuilder:
     def __init__(self):
@@ -131,11 +130,9 @@ class UIBuilder:
     ######################################################################################
 
     def _on_init(self):
-        self._rob = None
 
         # Robot parameters
-        self._init_rob_pos = np.array([0.0, 0.0, 2.5])
-        self._init_rob_orien = euler_angles_to_quat(np.array([0.0, 0.0, 0.0]))
+
         self._rob_mass = 10 # kg
         # DVl parameters
         self._DVL = None
@@ -152,42 +149,46 @@ class UIBuilder:
         self._cam_res = (1920, 1080)
         self._cam_pose = ([0.5,0.0,0.0], [0.5,0.5,-0.5,-0.5])
         self._cam_focal = 6
-        self._scenario = MHLScenario()
+        self._scenario = MHL_straighline_navigation_Scenario()
 
-        # Simulation parameters
-
-        self._frequency = 30 # HZ
 
     def _setup_scene(self):
         """
         This function is attached to the Load Button as the setup_scene_fn callback.
         On pressing the Load Button, a new instance of World() is created and then this function is called.
         The user should now load their assets onto the stage and add them to the World Scene.
-
-        In this example, a new stage is loaded explicitly, and all assets are reloaded.
-        If the user is relying on hot-reloading and does not want to reload assets every time,
-        they may perform a check here to see if their desired assets are already on the stage,
-        and avoid loading anything if they are.  In this case, the user would still need to add
-        their assets to the World (which has low overhead).  See commented code section in this function.
         """
         # Open MHL scene
         open_stage("/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_aligned/mhl.usdc")
 
         # Load the robot
-        robot_prim_path = "/root/rob"
+        robot_prim_path = "/World/rob"
         robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
         add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
-        
-        # Toggle rigid body and collider preset for rob
+        # Load the rock
+        rock_prim_path = '/World/rock'
+        rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
+        add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
+
+        # Toggle rigid body and collider preset for rob and rock
         self._rob = get_prim_at_path(robot_prim_path)
         rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(self._rob)
         rob_rigidBody_API.CreateDisableGravityAttr(True)
         rob_rigidBody_API.GetLinearDampingAttr().Set(0.0)
         rob_rigidBody_API.GetAngularDampingAttr().Set(0.0)
-        rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path, 
-                                         translation=self._init_rob_pos,
-                                         orientation=self._init_rob_orien,
+        rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path,
                                          mass=self._rob_mass)
+        
+        rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
+                           translation=np.array([0.0, 3.5, 0.5]),
+                           orientation=euler_angles_to_quat(np.array([0.0,0.0,125]), degrees=True),
+                           collision=True,
+                           )
+        rock_collider_prim.set_collision_approximation('convexDecomposition')
+        rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
+        
+        
+        
         # Initialize the DVL and attach it to the rob already being the rigid body
         self._DVL = DVLsensor(elevation=self._DVL_elevation, 
                               min_range=self._DVL_min_range,
@@ -209,11 +210,7 @@ class UIBuilder:
         SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0],orientation=self._cam_pose[1])
 
 
-        # Set initial viewport view (optional)
-        set_camera_view(eye=[-3.0, 0.0, 8.0], target=self._init_rob_pos, camera_prim_path="/OmniverseKit_Persp")
-
-
-        MHLMesh_prim_path = '/root/mhl'
+        MHLMesh_prim_path = '/World/mhl'
         SingleGeometryPrim(prim_path=MHLMesh_prim_path, collision=True)
 
 
