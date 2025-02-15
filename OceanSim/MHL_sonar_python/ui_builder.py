@@ -158,7 +158,7 @@ class UIBuilder:
         create_new_stage()
         # load MHL scene and turn on collider
         MHL_prim_path = '/World/mhl'
-        MHL_usd_path = "/home/haoyu/isaacsim_assets/mhl.usdc"
+        MHL_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_aligned/mhl.usdc"
         add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
         SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
         add_update_semantics(prim=get_prim_at_path(MHL_prim_path),
@@ -171,7 +171,7 @@ class UIBuilder:
         DynamicCuboid(prim_path=robot_prim_path, size=0.2)
         # Load the rock
         rock_prim_path = '/World/rock'
-        rock_usd_path = '/home/haoyu/isaacsim_assets/rock.usd'
+        rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
         rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
         add_update_semantics(prim=rock_prim,
                              type_label='reflectivity',

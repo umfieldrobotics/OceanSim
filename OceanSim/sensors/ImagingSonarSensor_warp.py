@@ -93,7 +93,7 @@ def all_max(array: wp.array(ndim=2, dtype=wp.float32),
               max_value: wp.array(dtype=wp.float32)):
     i,j = wp.tid()  
     wp.atomic_max(max_value, 0, array[i, j])
-# TODO #
+
 @wp.kernel
 def range_max(array: wp.array(ndim=2, dtype=wp.float32), 
               max_value: wp.array(dtype=wp.float32)):
@@ -133,7 +133,8 @@ def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
                        gain: wp.float32,
                        result: wp.array(ndim=2, dtype=wp.vec3)):
     i, j = wp.tid()
-    intensity[i,j] = intensity[i,j]/max_intensity[i]
+    if max_intensity[i] !=0:
+        intensity[i,j] = intensity[i,j]/max_intensity[i] 
     intensity[i,j] += offset
     intensity[i,j] *= gain
     intensity[i,j] *= (0.5 + gau_noise[i,j])
@@ -350,6 +351,8 @@ class ImagingSonarSensor:
         
         self.bin_sum.zero_()
         self.bin_count.zero_()
+        self.binned_intensity.zero_()
+
         
         wp.launch(kernel=bin_intensity,
                   dim=num_points,
@@ -367,7 +370,6 @@ class ImagingSonarSensor:
                   ]
                   )
         
-        self.binned_intensity.zero_()
 
         if binning_method == "mean":
             wp.launch(
@@ -381,12 +383,13 @@ class ImagingSonarSensor:
                     self.binned_intensity,
                 ]
                 )
+        
         if binning_method == "sum":
             self.binned_intensity = self.bin_sum
 
         # Sonar map Noise Parameters
-        gau_noise_param = 0.1
-        ray_noise_param = 0.1
+        gau_noise_param = 0.2
+        ray_noise_param = 0.05
         intensity_offset = 0.0
         intensity_gain = 1.0
         # Calculate noise
@@ -429,7 +432,7 @@ class ImagingSonarSensor:
                   ]
                   )
             
-        elif normalizing_method == "range":
+        if normalizing_method == "range":
             maximum = wp.zeros(shape=(self.r.shape[0],), dtype=wp.float32)
             wp.launch(
                 dim=self.bin_sum.shape,
@@ -462,8 +465,8 @@ class ImagingSonarSensor:
 
         
         if self.writing:
-            # self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
-            # self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
+            self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
+            self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
             self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
 
             print(f"[{self.id}] Writing intensity, pcl_local, and sonar map")

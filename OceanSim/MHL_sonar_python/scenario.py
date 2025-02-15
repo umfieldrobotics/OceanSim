@@ -17,7 +17,7 @@ class MHL_sonar_test_Scenario():
         self._running_scenario = False
         self._time = 0.0
 
-        self._output_dir = '/home/haoyu/Desktop/MHL_replica'
+        self._output_dir = '/home/haoyu-ma/Desktop/MHL_replica'
 
 
 
@@ -26,8 +26,8 @@ class MHL_sonar_test_Scenario():
         self._rob = rob
         
         self._rob_rigid_prim = SingleRigidPrim(prim_path=get_prim_path(self._rob),
-                                                translation=(0.1, 2.5, 1.1),
-                                                orientation=euler_angles_to_quat(np.array([-38, 0, 90]), 
+                                                translation=(0.1, 2.5, 0.9),
+                                                orientation=euler_angles_to_quat(np.array([-5, 0, 90]), 
                                                                                  degrees=True,
                                                                                  extrinsic=False))
         self._sonar = sonar
@@ -60,7 +60,7 @@ class MHL_sonar_test_Scenario():
         self._time += step
         self._rob_rigid_prim.set_linear_velocity(np.array([-0.1, 0, 0]))
         self._sonar.scan()
-        self._sonar.make_sonar_data()
+        self._sonar.make_sonar_data(normalizing_method = "range")
 
 
 
