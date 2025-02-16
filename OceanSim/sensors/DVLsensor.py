@@ -14,6 +14,9 @@ from isaacsim.sensors.physx import _range_sensor
 # Custom import
 from ..utils.MultivariateNormal import MultivariateNormal
 
+
+# TODO #
+# simulate the sensor dropout when beam ranges are outside of operational range
 class DVLsensor:
     def __init__(self,
                  elevation:float = 22.5, # deg

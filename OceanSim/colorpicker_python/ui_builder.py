@@ -18,8 +18,7 @@ from isaacsim.core.api.objects import DynamicCuboid
 
 
 # Custom import
-from ..sensors.DVLsensor import DVLsensor
-from .scenario import MHL_straighline_navigation_Scenario
+from .scenario import MHL_colorpicker_Scenario
 
 class UIBuilder:
     def __init__(self):
@@ -133,14 +132,6 @@ class UIBuilder:
         # Robot parameters
 
         self._rob_mass = 10 # kg
-        # DVl parameters
-        self._DVL = None
-        self._DVL_elevation = 30.0 # deg
-        self._DVL_min_range = 0.01  # m
-        self._DVL_max_range = 10.0 # m
-        self._DVL_location = np.array([0.0,0.0,-0.2])
-        self._DVL_vel_cov = 0
-        self._DVL_depth_cov = 0
 
 
         # Camera parameters
@@ -148,7 +139,7 @@ class UIBuilder:
         self._cam_res = (1920, 1080)
         self._cam_pose = ([0.5,0.0,0.0], [0.5,0.5,-0.5,-0.5])
         self._cam_focal = 6
-        self._scenario = MHL_straighline_navigation_Scenario()
+        self._scenario = MHL_colorpicker_Scenario()
 
 
     def _setup_scene(self):
@@ -189,17 +180,6 @@ class UIBuilder:
         
         
         
-        # Initialize the DVL and attach it to the rob already being the rigid body
-        self._DVL = DVLsensor(elevation=self._DVL_elevation, 
-                              min_range=self._DVL_min_range,
-                              max_range=self._DVL_max_range,
-                              vel_cov=self._DVL_vel_cov,
-                              depth_cov=self._DVL_depth_cov)
-        self._DVL.attachDVL(rigid_body_path=robot_prim_path, location=self._DVL_location)
-        self._DVL.add_debug_lines()
-        self._DVL.attach_singleBeam(rigid_body_path=robot_prim_path, location=self._DVL_location)
-        self._DVL.add_singleBeam_debug()
-        
         # Attach the front camera
         cam_prim_path = robot_prim_path + '/Camera'
         self._cam = Camera(
@@ -229,7 +209,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._DVL, self._cam)
+        self._scenario.setup_scenario(self._rob, self._cam)
 
     def _on_post_reset_btn(self):
         """
@@ -255,6 +235,7 @@ class UIBuilder:
             step (float): The dt of the current physics step
         """
         self._scenario.update_scenario(step)
+        # self._scenario.update_ui()
 
     def _on_run_scenario_a_text(self):
         """
