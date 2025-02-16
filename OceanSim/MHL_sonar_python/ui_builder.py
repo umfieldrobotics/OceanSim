@@ -157,6 +157,8 @@ class UIBuilder:
         """
         create_new_stage()
         # load MHL scene and turn on collider
+        #TODO
+        # Use MHL scaled
         MHL_prim_path = '/World/mhl'
         MHL_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_aligned/mhl.usdc"
         add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
@@ -166,9 +168,9 @@ class UIBuilder:
                              semantic_label='0.5')
         # Load the robot
         robot_prim_path = "/World/rob"
-        # robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
-        # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
-        DynamicCuboid(prim_path=robot_prim_path, size=0.2)
+        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
+        add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
+        # DynamicCuboid(prim_path=robot_prim_path, size=0.2)
         # Load the rock
         rock_prim_path = '/World/rock'
         rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'

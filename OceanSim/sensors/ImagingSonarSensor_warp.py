@@ -1,10 +1,9 @@
 from isaacsim.sensors.camera import Camera
+from isaacsim.core.utils.carb import get_carb_setting
 import omni.replicator.core as rep
-import isaacsim.core.utils.rotations as rotations_utils
 import numpy as np
 from omni.replicator.core.scripts.functional import write_np
 import warp as wp
-
 
 
 @wp.func
@@ -17,37 +16,39 @@ def cartesian_to_spherical(cart: wp.vec3) -> wp.vec3:
                                     
 
 @wp.kernel
-def compute_intensity(pcl: wp.array(dtype=wp.vec3),
-                    normals: wp.array(dtype=wp.vec3),
+def compute_intensity(pcl: wp.array(ndim=2, dtype=wp.float32),
+                    normals: wp.array(ndim=2, dtype=wp.float32),
                     viewTransform: wp.mat44,
-                    semantics: wp.array(dtype=wp.int8),
+                    semantics: wp.array(ndim=1, dtype=wp.uint32),
                     indexToRefl: wp.array(dtype=wp.float32),
                     attenuation: float,
                     intensity: wp.array(dtype=wp.float32)
                     ):
     tid = wp.tid()
+    pcl_vec = wp.vec3(pcl[tid,0], pcl[tid,1], pcl[tid,2])
+    normal_vec = wp.vec3(normals[tid,0], normals[tid,1],normals[tid,2])
     R = wp.mat33(viewTransform[0,0], viewTransform[0,1], viewTransform[0,2],
                  viewTransform[1,0], viewTransform[1,1], viewTransform[1,2],
                  viewTransform[2,0], viewTransform[2,1], viewTransform[2,2])
     T = wp.vec3(viewTransform[0,3], viewTransform[1,3], viewTransform[2,3])
     sensor_loc = - (wp.transpose(R) @ T)
-    incidence = pcl[tid] - sensor_loc
+    incidence = pcl_vec - sensor_loc
     # Will use warp.math.norm_l2() in future release
     dist = wp.sqrt(incidence[0]*incidence[0] + incidence[1]*incidence[1] + incidence[2]*incidence[2])
-    unit_directs = wp.normalize(pcl[tid] - sensor_loc)
-    cos_theta = wp.dot(-unit_directs, normals[tid])
+    unit_directs = wp.normalize(pcl_vec - sensor_loc)
+    cos_theta = wp.dot(-unit_directs, normal_vec)
     reflectivity = indexToRefl[semantics[tid]]
     intensity[tid] = reflectivity * cos_theta * wp.exp(-attenuation * dist)
 
 @wp.kernel
 def world2local(viewTransform: wp.mat44,
-                pcl_world: wp.array(dtype=wp.vec3),
+                pcl_world: wp.array(ndim=2, dtype=wp.float32),
                 pcl_local: wp.array(dtype=wp.vec3),
                 pcl_local_spher: wp.array(dtype=wp.vec3)):
     tid = wp.tid()
-    pcl_world_homogeneous = wp.vec4(pcl_world[tid][0],
-                          pcl_world[tid][1],
-                          pcl_world[tid][2],
+    pcl_world_homogeneous = wp.vec4(pcl_world[tid,0],
+                          pcl_world[tid,1],
+                          pcl_world[tid,2],
                           wp.float32(1.0)
                           )
     pcl_local_homogeneous = viewTransform @ pcl_world_homogeneous
@@ -149,7 +150,7 @@ class ImagingSonarSensor:
 
     def __init__(self, prim_path : str, 
                  trans : list[float]= [0.0, 0.0, 0.0], 
-                 orients: list[float] = rotations_utils.euler_angles_to_quat(np.array([0,0,0]))
+                 orients: list[float] = [1.0, 0.0, 0.0, 0.0]
                  ):
         
         # Raw parameters from Oculus M370s\MT370s\MD370s
@@ -160,8 +161,8 @@ class ImagingSonarSensor:
         self.hori_fov = 130 # degree (hori_fov is 130 degrees in datasheet)
         self.vert_fov = 20 # degree (vert_fov is 20 degrees in datasheet)
         self.num_beams = 256 # (max number of beams) (NOT USED FOR NOW)!!
-        self.angular_res = 1.0 # degree (datasheet is 2 deg)
-        self.beam_separation = 0.5 # degree
+        self.angular_res = 1 # degree (datasheet is 2 deg)
+        self.beam_separation = 0.5 # degree (used to control the ray density, but too low so scale with a ray_factor)
 
         # Generate sonar map's r and z meshgrid
         self.r, self.azi = np.meshgrid(np.arange(self.min_range,self.max_range,self.range_res),
@@ -188,8 +189,7 @@ class ImagingSonarSensor:
         # is the same as the beam vertical separation. 
         # This is bacause replicator raytracing is specified as resolutions
         # while non-squre pixel is not supported in Isaac sim. See details below.
-
-        print(f'resolution: {self.hori_res} x {self.vert_res}')
+        
         self.camera_prim_path = prim_path + '/Sonar'
         self.camera = Camera(
             prim_path=self.camera_prim_path,
@@ -226,6 +226,7 @@ class ImagingSonarSensor:
     # Data is generated per simulation tick
     def initialize(self, output_dir : str = None):
         self.writing = False
+        self._device = str(wp.get_preferred_device())
         self.scan_data = {}
         self.id = 0
         self.rp = rep.create.render_product(
@@ -236,19 +237,25 @@ class ImagingSonarSensor:
         self.pointcloud_annot = rep.AnnotatorRegistry.get_annotator(
             name="pointcloud",
             init_params={"includeUnlabelled": True},
-            do_array_copy=True
+            do_array_copy=True,
+            device=self._device
             )
         
         self.cameraParams_annot = rep.AnnotatorRegistry.get_annotator(
             name="CameraParams",
-            do_array_copy=True
+            do_array_copy=True,
+            device=self._device
             )
         
         self.semanticSeg_annot = rep.AnnotatorRegistry.get_annotator(
             name='semantic_segmentation',
             init_params={"colorize": False},
-            do_array_copy=True
+            do_array_copy=True,
+            device=self._device
         )
+
+        print(f'Using {self._device}' )
+        print(f'Render query res: {self.hori_res} x {self.vert_res}. Binning res: {self.r.shape[0]} x {self.r.shape[1]}')
         # do_array_copy: If True, retrieve a copy of the data array. 
         # This is recommended for workflows using asynchronous
         # backends to manage the data lifetime. 
@@ -275,13 +282,15 @@ class ImagingSonarSensor:
                 wp.set_mempool_enabled()
             wp.set_mempool_release_threshold("cuda:0", 0.6)
         
-        print(f'Sonar is initialized. (Writing: {self.writing})')
+        print(f'Sonar is initialized. (Writing data: {self.writing})')
 
     def scan(self):
-        self.scan_data['pcl'] = self.pointcloud_annot.get_data()['data']
-        if self.scan_data['pcl'].shape[0] != 0:
-            self.scan_data['normals'] = self.pointcloud_annot.get_data()['info']['pointNormals'][:,:3]
-            self.scan_data['semantics'] = self.pointcloud_annot.get_data()['info']['pointSemantic']
+        # Due to the rendering dt, the first few simulation tick gives empty data.
+        # Ignore scan that gives empty data stream
+        if len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
+            self.scan_data['pcl'] = self.pointcloud_annot.get_data(device=self._device)['data'][0]  # shape :(1,N,3) <class 'warp.types.array'>
+            self.scan_data['normals'] = self.pointcloud_annot.get_data(device=self._device)['info']['pointNormals'][0] # shape :(1,N,4) <class 'warp.types.array'>
+            self.scan_data['semantics'] = self.pointcloud_annot.get_data(device=self._device)['info']['pointSemantic'][0] # shape: (1, N) <class 'warp.types.array'>
             self.scan_data['viewTransform'] = self.cameraParams_annot.get_data()['cameraViewTransform'].reshape(4,4).T
             self.scan_data['idToLabels'] = self.semanticSeg_annot.get_data()['info']['idToLabels']
 
@@ -302,19 +311,25 @@ class ImagingSonarSensor:
                         indexToProp_array[int(id)] = idToLabels.get(id).get(property)
             return indexToProp_array
 
-        num_points = self.scan_data['pcl'].shape[0]
-        if num_points != 0:
-            pcl = wp.array(self.scan_data['pcl'], dtype=wp.vec3)
-            normals=wp.array(self.scan_data['normals'], dtype=wp.vec3)
-            viewTransform=wp.mat44(self.scan_data['viewTransform'])
-            semantics = wp.array(self.scan_data['semantics'], wp.int8)
+        if len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
+            num_points = self.scan_data['pcl'].shape[0]
+            # Convert these small numpy arrays to cuda
             indexToRefl = wp.array(make_indexToProp_array(idToLabels=self.scan_data['idToLabels'],
                                                          query_property='reflectivity'),
                                                          dtype=wp.float32)
+            viewTransform=wp.mat44(self.scan_data['viewTransform'])
+            # directly use warp array loaded on cuda
+            pcl = self.scan_data['pcl']
+            normals = self.scan_data['normals']
+            semantics = self.scan_data['semantics']
         else:
             return
-
+        # TODO Test compute intensity and world2local kernel such that they can directly use annotator output
+        # pcl = wp.array(self.scan_data['pcl'], shape=(num_points,), dtype=wp.vec3)
+        # normals=wp.array(self.scan_data['normals'], dtype=wp.vec3)
+        # semantics = wp.array(self.scan_data['semantics'], wp.int8)
         # Intensity parameters
+        
         attenuation = 0.1
         
         intensity = wp.empty(shape=(num_points,), dtype=wp.float32)
@@ -334,7 +349,6 @@ class ImagingSonarSensor:
                   ]
                 )
                 
-        
         pcl_local =wp.empty(shape=(num_points,), dtype=wp.vec3)
         pcl_spher = wp.empty(shape=(num_points,), dtype=wp.vec3)
         wp.launch(kernel=world2local,
@@ -465,11 +479,10 @@ class ImagingSonarSensor:
 
         
         if self.writing:
-            self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
-            self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
+            # self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
+            # self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
             self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
-
-            print(f"[{self.id}] Writing intensity, pcl_local, and sonar map")
+            print(f"[{self.id}] Writing sonar data to {self.backend.output_dir}")
         
         self.id += 1
     
