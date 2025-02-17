@@ -17,6 +17,7 @@ from ..utils.MultivariateNormal import MultivariateNormal
 
 # TODO #
 # simulate the sensor dropout when beam ranges are outside of operational range
+# Haoyu - please check my implementation
 class DVLsensor:
     def __init__(self,
                  elevation:float = 22.5, # deg
@@ -25,6 +26,7 @@ class DVLsensor:
                  depth_cov = 0,
                  min_range: float = 0.1,
                  max_range: float = 10,
+                 num_beams_out_range_threshold: int = 2
                  ):
         self._elevation = elevation
         self._rotation = rotation
@@ -45,6 +47,10 @@ class DVLsensor:
                                     [0, 1/(2*sinElev), 0, -1/(2*sinElev)],
                                     [1/(4*cosElev), 1/(4*cosElev), 1/(4*cosElev), 1/(4*cosElev)]
                                     ])
+
+        # sensor dropout related params
+        self._dropout = False
+        self._num_beams_out_range_threshold = num_beams_out_range_threshold
         
 
     def attachDVL(self, rigid_body_path:str, location:np.ndarray = np.array([0.0, 0.0, 0.0])):
@@ -112,6 +118,16 @@ class DVLsensor:
                 sample = self._mvn_dep.sample_array()
                 depth[i] += sample[i]
         
+        # check if the sensor is in dropout state
+        depth = np.array(depth)
+        if (np.sum(depth < self._min_range) + np.sum(depth > self._max_range)) >= self._num_beams_out_range_threshold:
+            self._dropout = True
+            # for dropout state, set the corresponding depth to 0 or nan
+            # TODO (haoyu) check which is better
+            depth[depth < self._min_range] = 0
+            depth[depth > self._max_range] = 0
+        else:
+            self._dropout = False
         return depth
     
     
@@ -130,6 +146,8 @@ class DVLsensor:
                 for j in range(3):
                     vel[j] += self._transform[j][i] * sample[i] 
         
+        if self._dropout:
+            return np.zeros(3)
         return vel
 
     def add_debug_lines(self):
