@@ -24,18 +24,16 @@ class MHL_sonar_test_Scenario():
 
     def setup_scenario(self, rob, sonar, cam):
         self._rob = rob
-        
+        self._cam = cam
+
         self._rob_rigid_prim = SingleRigidPrim(prim_path=get_prim_path(self._rob),
-                                                translation=(0.1, 2.5, 1.1),
+                                                translation=(0.0, 0.0, 0.0),
                                                 orientation=euler_angles_to_quat(np.array([-25, 0, 90]), 
                                                                                  degrees=True,
                                                                                  extrinsic=False))
         self._sonar = sonar
         self._sonar.initialize(self._output_dir)
-        self._sonar.scan()
-        self._sonar.make_sonar_data()
-
-        self._cam = cam
+        set_camera_view(eye=np.array([-1,-1,1]), target=self._rob_rigid_prim.get_world_pose()[0])
 
         self._running_scenario = True
         
@@ -59,9 +57,9 @@ class MHL_sonar_test_Scenario():
         
         self._time += step
         self._rob_rigid_prim.set_linear_velocity(np.array([-0.1, 0, 0]))
-        if self._time <= 1.0:
-            self._sonar.scan()
-            self._sonar.make_sonar_data(normalizing_method = "range")
+        # if self._time <= 1.0:
+        self._sonar.scan()
+        self._sonar.make_sonar_data(normalizing_method = "range")
 
 
 

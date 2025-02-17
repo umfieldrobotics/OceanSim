@@ -137,7 +137,7 @@ class UIBuilder:
         self._DVL = None
         self._DVL_elevation = 30.0 # deg
         self._DVL_min_range = 0.01  # m
-        self._DVL_max_range = 10.0 # m
+        self._DVL_max_range = 2.0 # m
         self._DVL_location = np.array([0.0,0.0,-0.2])
         self._DVL_vel_cov = 0
         self._DVL_depth_cov = 0
@@ -158,15 +158,15 @@ class UIBuilder:
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         # Open MHL scene
-        open_stage("/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_aligned/mhl.usdc")
+        open_stage("/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/mhl_scaled.usd")
 
         # Load the robot
-        robot_prim_path = "/World/rob"
+        robot_prim_path = "/MHL/rob"
         # robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
         # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
-        DynamicCuboid(prim_path=robot_prim_path, size=0.5, color=np.array([0.5,0.5,1]))
+        DynamicCuboid(prim_path=robot_prim_path, size=0.25, color=np.array([0.5,0.5,1]))
         # Load the rock
-        rock_prim_path = '/World/rock'
+        rock_prim_path = '/MHL/rock'
         rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
         add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
         
@@ -180,7 +180,7 @@ class UIBuilder:
                                          mass=self._rob_mass)
         
         rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-                           translation=np.array([0.0, 3.5, 0.5]),
+                           translation=np.array([0.0, 2, -2]),
                            orientation=euler_angles_to_quat(np.array([0.0,0.0,125]), degrees=True),
                            collision=True,
                            )
@@ -197,8 +197,6 @@ class UIBuilder:
                               depth_cov=self._DVL_depth_cov)
         self._DVL.attachDVL(rigid_body_path=robot_prim_path, location=self._DVL_location)
         self._DVL.add_debug_lines()
-        self._DVL.attach_singleBeam(rigid_body_path=robot_prim_path, location=self._DVL_location)
-        self._DVL.add_singleBeam_debug()
         
         # Attach the front camera
         cam_prim_path = robot_prim_path + '/Camera'
@@ -210,7 +208,7 @@ class UIBuilder:
         SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0],orientation=self._cam_pose[1])
 
 
-        MHLMesh_prim_path = '/World/mhl'
+        MHLMesh_prim_path = '/MHL/Mesh'
         SingleGeometryPrim(prim_path=MHLMesh_prim_path, collision=True)
 
 

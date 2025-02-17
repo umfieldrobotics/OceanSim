@@ -4,14 +4,14 @@ import omni.timeline
 import omni.ui as ui
 from omni.usd import StageEventType
 from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
-
+import warp as wp
 # Isaac sim import
 from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, SingleGeometryPrim
 from isaacsim.core.utils.prims import get_prim_at_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, open_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.semantics import add_update_semantics
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, combo_floatfield_slider_builder
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.sensors.camera import Camera
 from isaacsim.core.api.objects import DynamicCuboid
@@ -19,6 +19,7 @@ from isaacsim.core.api.objects import DynamicCuboid
 
 # Custom import
 from .scenario import MHL_colorpicker_Scenario
+from ..utils.UWrenderer_utils import UW_render
 
 class UIBuilder:
     def __init__(self):
@@ -90,6 +91,12 @@ class UIBuilder:
         Build a custom UI tool to run your extension.
         This function will be called any time the UI window is closed and reopened.
         """
+        self._colorpicker_provider = ui.ByteImageProvider()
+        N, M = 256, 256
+        self.white_image = np.ones((N, M, 4), dtype=np.uint8) * 255
+        self._colorpicker_provider.set_data_array(self.white_image, [N,M])
+        self._param = np.zeros(9)
+        
         world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
 
         with world_controls_frame:
@@ -121,7 +128,26 @@ class UIBuilder:
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
 
+        color_picker_frame = CollapsableFrame('Color Picker', collapsed=False)
+        self._param_models = []
+        params_labels = [                        
+            "Backscatter_R", "Backscatter_G","Backscatter_B",
+            "Backscatter_coeff_R", "Backscatter_coeff_G", "Backscatter_coeff_B",
+            "Attenuation_coeff_R", "Attenuation_coeff_G", "Attenuation_coeff_B",
+        ]
+        params_type = []
+        with color_picker_frame:
+            with ui.VStack(spacing=10):
 
+                for i in range(9):
+                    param_model, _ = combo_floatfield_slider_builder(label=params_labels[i])
+                    self._param_models.append(param_model)
+                    param_model.add_value_changed_fn(self._on_color_param_changes)
+                with ui.ZStack(height=100):
+                    ui.Rectangle(style={"background_color": 0xFF000000})
+                    
+
+                    ui.ImageWithProvider(self._colorpicker_provider)
 
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
@@ -149,15 +175,15 @@ class UIBuilder:
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         # Open MHL scene
-        open_stage("/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_aligned/mhl.usdc")
+        open_stage("/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/mhl_scaled.usd")
 
         # Load the robot
-        robot_prim_path = "/World/rob"
+        robot_prim_path = "/MHL/rob"
         # robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
         # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         DynamicCuboid(prim_path=robot_prim_path, size=0.5, color=np.array([0.5,0.5,1]))
         # Load the rock
-        rock_prim_path = '/World/rock'
+        rock_prim_path = '/MHL/rock'
         rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
         add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
         
@@ -190,7 +216,7 @@ class UIBuilder:
         SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0],orientation=self._cam_pose[1])
 
 
-        MHLMesh_prim_path = '/World/mhl'
+        MHLMesh_prim_path = '/MHL/Mesh'
         SingleGeometryPrim(prim_path=MHLMesh_prim_path, collision=True)
 
 
@@ -276,3 +302,33 @@ class UIBuilder:
         self._scenario_state_btn.reset()
         self._scenario_state_btn.enabled = False
         self._reset_btn.enabled = False
+
+
+    def _on_color_param_changes(self, model):
+        for i, param_model in zip(range(9), self._param_models):
+            self._param[i] = param_model.get_value_as_float()    
+
+        backscatter_value = wp.vec3f(*self._param[0:3])
+        atten_coeff = wp.vec3f(*self._param[3:6])
+        backscatter_coeff = wp.vec3f(*self._param[6:9])
+        raw_image = wp.array(self.white_image, dtype=wp.uint8, ndim=3) 
+        uw_image = wp.zeros_like(raw_image)
+        depth_image = np.random.random((raw_image.shape[0], raw_image.shape[1]))
+        depth_image = wp.array(depth_image, ndim=2, dtype=wp.float32)
+        wp.launch(
+            dim=(raw_image.shape[0], raw_image.shape[1]),
+            kernel=UW_render,
+            inputs=[
+                raw_image,
+                depth_image,
+                backscatter_value,
+                atten_coeff,
+                backscatter_coeff
+            ],
+            outputs=[
+                uw_image
+            ]
+        )  
+
+
+        self._colorpicker_provider.set_bytes_data_from_gpu(uw_image.ptr, [raw_image.shape[0], raw_image.shape[1]])

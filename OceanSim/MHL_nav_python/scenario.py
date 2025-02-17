@@ -19,7 +19,6 @@ class MHL_straighline_navigation_Scenario():
         self._output_dir = '/home/haoyu-ma/Desktop/MHL_replica'
 
         self._fourBeam_buffer = []
-        self._singleBeam_buffer = []
         self._vel_buffer = []
 
 
@@ -30,14 +29,14 @@ class MHL_straighline_navigation_Scenario():
 
         self._running_scenario = True
 
-        SingleRigidPrim(prim_path=get_prim_path(self._rob),
-                        translation=np.array([0.0, 0.0, 2.5]),
-                        orientation=euler_angles_to_quat(np.array([0.0, 0.0, 0.0]), degrees=True))
+        rob_rigid_prim = SingleRigidPrim(prim_path=get_prim_path(self._rob),
+                                        translation=np.array([0.0, 0.0, 0.0]),
+                                        orientation=euler_angles_to_quat(np.array([0.0, 0.0, 0.0]), degrees=True))
         
 
         self._backend = rep.BackendDispatch({"paths": {"out_dir": self._output_dir}})
         rp = rep.create.render_product(
-            camera='/World/rob/Camera',
+            camera='/MHL/rob/Camera',
             resolution=(1920,1080),
             )
         
@@ -46,7 +45,7 @@ class MHL_straighline_navigation_Scenario():
         self._ldr.attach(rp)
         self._depth.attach(rp)
 
-        set_camera_view(eye=[-2.0, 0.0, 3.0], target=np.array([0.0, 1.25, 0.15]), camera_prim_path="/OmniverseKit_Persp")
+        set_camera_view(eye=[-1.0, 0.0, -1.0], target=rob_rigid_prim.get_world_pose()[0], camera_prim_path="/OmniverseKit_Persp")
 
     def teardown_scenario(self):
         self._rob = None
@@ -67,7 +66,6 @@ class MHL_straighline_navigation_Scenario():
 
         SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([5,0,0]))
 
-        self._singleBeam_buffer.append(self._DVL.get_singleBeam_range())
         self._fourBeam_buffer.append(self._DVL.get_depth())
         self._vel_buffer.append(self._DVL.get_linear_vel())
         self._backend.schedule(write_image, path=f'cam/rgb_{self._id}.png', data=self._ldr.get_data())
@@ -78,7 +76,6 @@ class MHL_straighline_navigation_Scenario():
 
     def save(self):
         np.save(file=self._output_dir+"/vel.npy", arr=self._vel_buffer)
-        np.save(file=self._output_dir+"/singleBeam.npy", arr=self._singleBeam_buffer)
         np.save(file=self._output_dir+"/fourBeam.npy", arr=self._fourBeam_buffer)   
         print(f'data written to {self._output_dir}')
 

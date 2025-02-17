@@ -54,7 +54,7 @@ class MHL_colorpicker_Scenario():
 
         self._backend = rep.BackendDispatch({"paths": {"out_dir": self._output_dir}})
         rp = rep.create.render_product(
-            camera='/World/rob/Camera',
+            camera='/MHL/rob/Camera',
             resolution=(1920,1080),
             )
         
@@ -102,21 +102,9 @@ class MHL_colorpicker_Scenario():
             ]
         )
 
-        # size_x = 256
-        # size_y = 256
-        # num_channels = 4
-        # texture_array = wp.zeros(shape=(size_x, size_y, num_channels), dtype=wp.uint8)
 
         self.image_provider.set_bytes_data_from_gpu(rgba.ptr, [rgba.shape[1], rgba.shape[0]])
-        # rgba = self._ldr.get_data()
-        # self._modified_rgba = rgba.copy()
-        # # Multiply the blue channel (index 2) by the tint factor
-        # self._modified_rgba[:, :, 2] = np.clip(self._modified_rgba[:, :, 2] * 10, 0, 255)
-        # height, width, _ = self._modified_rgba.shape
-        # dimensions = [width, height]
-        # self._backend.schedule(write_image, path=f'cam/rgb_{self._id}.png', data=self._ldr.get_data())
-        # self._backend.schedule(write_np, path=f'depth/depth_{self._id}.npy', data=self._depth.get_data())
-        # print(f'writing [{self._id}]')
+
 
 
         with self.window.frame:

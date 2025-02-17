@@ -157,10 +157,9 @@ class UIBuilder:
         """
         create_new_stage()
         # load MHL scene and turn on collider
-        #TODO
-        # Use MHL scaled
+
         MHL_prim_path = '/World/mhl'
-        MHL_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_aligned/mhl.usdc"
+        MHL_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/mhl_scaled.usd"
         add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
         SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
         add_update_semantics(prim=get_prim_at_path(MHL_prim_path),
@@ -189,7 +188,7 @@ class UIBuilder:
                                          mass=self._rob_mass)
         
         rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-                           translation=np.array([0.0, 3.5, 0.5]),
+                           translation=np.array([0.0, 1, 0.0]),
                            orientation=euler_angles_to_quat(np.array([0.0,0.0,125]), degrees=True),
                            collision=True,
                            )

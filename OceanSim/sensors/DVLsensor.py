@@ -68,7 +68,7 @@ class DVLsensor:
         orients_quat = []
         for i in range(orients_euler.shape[0]):
             orients_quat.append(euler_angles_to_quat(orients_euler[i,:], degrees=True))
-            self._beam_paths.append(sensor_prim_path + "/beam" + str(i))
+            self._beam_paths.append(sensor_prim_path + f"/beam_{i}")
 
             result, sensor = omni.kit.commands.execute(
                 "IsaacSensorCreateLightBeamSensor",
@@ -84,21 +84,6 @@ class DVLsensor:
         else:
             carb.log_error("Beam Sensor fails to be loaded")
     
-    def attach_singleBeam(self, rigid_body_path:str, location:np.ndarray = np.array([0.0, 0.0, 0.0])):
-        # Single beam sensor
-        self._singleBeam_path = self._rigid_body_path + '/DVL' + '/SingleBeam'
-        result, beam_sensor = omni.kit.commands.execute(
-            "IsaacSensorCreateLightBeamSensor",
-            path=self._singleBeam_path,
-            translation= location,
-            min_range=self._min_range,
-            max_range=self._max_range,
-            forward_axis=Gf.Vec3d(0, 0, -1),
-            num_rays=1,
-            )
-    def get_singleBeam_range(self):
-        return self._DVL_interface.get_linear_depth_data(self._singleBeam_path).squeeze()
-
     def get_DVL_interface(self):
         return self._DVL_interface
     
@@ -110,31 +95,28 @@ class DVLsensor:
     
     def get_depth(self):
         depth = []
+        if_hit = []
         for beam_path in self._beam_paths:
             depth.append(self._DVL_interface.get_linear_depth_data(beam_path)[0])
-        
+            if_hit.append(self._DVL_interface.get_beam_hit_data(beam_path)[0])
         if (self._mvn_dep.is_uncertain()):
             for i in range(4):
                 sample = self._mvn_dep.sample_array()
                 depth[i] += sample[i]
-        
         # check if the sensor is in dropout state
-        depth = np.array(depth)
-        if (np.sum(depth < self._min_range) + np.sum(depth > self._max_range)) >= self._num_beams_out_range_threshold:
+        if if_hit.count(False) >= self._num_beams_out_range_threshold:
             self._dropout = True
-            # for dropout state, set the corresponding depth to 0 or nan
-            # TODO (haoyu) check which is better
-            depth[depth < self._min_range] = 0
-            depth[depth > self._max_range] = 0
-        else:
-            self._dropout = False
+            carb.log_warn('DVL measurement is dropped out')
+
+        # set the no hit depth to nan
+        depth = [value if hit else float('nan') for value, hit in zip(depth, if_hit)]
         return depth
     
     
     def get_beam_hit(self):
         beam_hit = []
         for beam_path in self._beam_paths:
-            beam_hit.append(self._DVL_interface.get_beam_hit_data(beam_path).astype(bool).squeeze())
+            beam_hit.append(self._DVL_interface.get_beam_hit_data(beam_path)[0].astype(bool))
         return beam_hit
     
     def get_linear_vel(self):
@@ -146,8 +128,10 @@ class DVLsensor:
                 for j in range(3):
                     vel[j] += self._transform[j][i] * sample[i] 
         
+        # If drop out return zero velocity
         if self._dropout:
             return np.zeros(3)
+        
         return vel
 
     def add_debug_lines(self):
@@ -197,29 +181,6 @@ class DVLsensor:
                     ("IsaacReadLightBeam3.outputs:beamOrigins", "DebugDrawRayCast3.inputs:beamOrigins"),
                     ("IsaacReadLightBeam3.outputs:beamEndPoints", "DebugDrawRayCast3.inputs:beamEndPoints"),
                     ("IsaacReadLightBeam3.outputs:numRays", "DebugDrawRayCast3.inputs:numRays"),
-                ],
-            },
-        )
-
-    def add_singleBeam_debug(self):
-
-        (action_graph, new_nodes, _, _) = og.Controller.edit(
-            {"graph_path": "/singleBeam_debugLines", "evaluator_name": "execution"},
-            {
-                og.Controller.Keys.CREATE_NODES: [
-                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
-                    ("IsaacReadLightBeam0", "isaacsim.sensors.physx.IsaacReadLightBeam"),
-                    ("DebugDrawRayCast0", "isaacsim.util.debug_draw.DebugDrawRayCast"),
-                ],
-                og.Controller.Keys.SET_VALUES: [
-                    ("IsaacReadLightBeam0.inputs:lightbeamPrim", self._singleBeam_path),
-                ],
-                og.Controller.Keys.CONNECT: [
-                    ("OnPlaybackTick.outputs:tick", "IsaacReadLightBeam0.inputs:execIn"),
-                    ("IsaacReadLightBeam0.outputs:execOut", "DebugDrawRayCast0.inputs:exec"),
-                    ("IsaacReadLightBeam0.outputs:beamOrigins", "DebugDrawRayCast0.inputs:beamOrigins"),
-                    ("IsaacReadLightBeam0.outputs:beamEndPoints", "DebugDrawRayCast0.inputs:beamEndPoints"),
-                    ("IsaacReadLightBeam0.outputs:numRays", "DebugDrawRayCast0.inputs:numRays"),
                 ],
             },
         )

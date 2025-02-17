@@ -154,14 +154,14 @@ class ImagingSonarSensor:
                  ):
         
         # Raw parameters from Oculus M370s\MT370s\MD370s
-        self.max_range = 3 # m (max is 200 m in datasheet )
+        self.max_range = 4 # m (max is 200 m in datasheet )
         self.min_range = 0.5 # m (min is 0.2 m in datasheet)
-        self.range_res = 0.008 # m (datasheet is 0.008 m)
+        self.range_res = 0.005 # m (datasheet is 0.008 m)
         self.update_rate = 40 # Hz (max update rate) (NOT USED FOR NOW)!!
-        self.hori_fov = 130 # degree (hori_fov is 130 degrees in datasheet)
+        self.hori_fov = 120 # degree (hori_fov is 130 degrees in datasheet)
         self.vert_fov = 20 # degree (vert_fov is 20 degrees in datasheet)
         self.num_beams = 256 # (max number of beams) (NOT USED FOR NOW)!!
-        self.angular_res = 1 # degree (datasheet is 2 deg)
+        self.angular_res = 0.2 # degree (datasheet is 2 deg)
         self.beam_separation = 0.5 # degree (used to control the ray density, but too low so scale with a ray_factor)
 
         # Generate sonar map's r and z meshgrid
@@ -180,7 +180,7 @@ class ImagingSonarSensor:
         # We introduce this factor to adjust raycast density
         # (Equivalently, adjust the beam_separation) 
         # Increase this value by 1 will quadraple the total number of raycasts
-        self.ray_factor = 20 # below 15 is advised for me
+        self.ray_factor = 25 # below 15 is advised for me
 
         self.AR = self.hori_fov / self.vert_fov
         self.hori_res = int(self.ray_factor * (self.hori_fov / self.beam_separation))
