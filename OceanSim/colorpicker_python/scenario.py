@@ -36,7 +36,7 @@ class MHL_colorpicker_Scenario():
         self._time = 0.0
         
 
-        self._output_dir = '/home/haoyu-ma/Desktop/MHL_replica'
+        self._output_dir = '/home/haoyu/Desktop/MHL_replica'
 
 
 
