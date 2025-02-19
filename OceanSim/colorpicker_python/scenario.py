@@ -11,6 +11,8 @@ from isaacsim.core.utils.prims import get_prim_path
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.viewports import set_camera_view
 
+# Custom import
+from ..utils.UWrenderer_utils import UW_render
 
 class MHL_colorpicker_Scenario():
     def __init__(self):
@@ -18,27 +20,30 @@ class MHL_colorpicker_Scenario():
         self._cam = None
         self._running_scenario = False
         self._time = 0.0
-        
-
-        self._output_dir = '/home/haoyu/Desktop/MHL_replica'
 
 
 
-    def setup_scenario(self, rob, cam):
+    def setup_scenario(self, rob, cam, dvl):
         self._rob = rob
         self._cam = cam
+        self._DVL = dvl
+
+        self._vel_buffer = []
+        self._range_buffer = []
+        self._singleBeam_buffer = []
+        self._output_dir = '/home/haoyu-ma/Desktop/MHL_replica'
+        self._backend = rep.BackendDispatch({"paths": {"out_dir": self._output_dir}})
 
         self._running_scenario = True
         self._device = str(wp.get_preferred_device())
 
         SingleRigidPrim(prim_path=get_prim_path(self._rob),
-                        translation=np.array([0.0, 0.0, 2.5]),
+                        translation=np.array([0.0, 0.0, 0.0]),
                         orientation=euler_angles_to_quat(np.array([0.0, 0.0, 0.0]), degrees=True))
         
 
-        self._backend = rep.BackendDispatch({"paths": {"out_dir": self._output_dir}})
         rp = rep.create.render_product(
-            camera='/MHL/rob/Camera',
+            camera='/World/rob/Camera',
             resolution=(1920,1080),
             )
         
@@ -69,7 +74,7 @@ class MHL_colorpicker_Scenario():
         self._id = 0
 
 
-    def update_scenario(self, step: float):
+    def update_scenario(self, step: float, render_param: np.ndarray):
 
         
         if not self._running_scenario:
@@ -78,12 +83,37 @@ class MHL_colorpicker_Scenario():
         if self._ldr.get_data().size == 0:
             return
         
-        SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([5,0,0]))
+        SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([1,0,0]))
 
-        rgba = self._ldr.get_data()
-        self.image_provider.set_bytes_data_from_gpu(rgba.ptr, [rgba.shape[1], rgba.shape[0]])
+        raw_rgba = self._ldr.get_data()
+        depth_image = self._depth.get_data()
+        backscatter_value = wp.vec3f(*render_param[0:3])
+        atten_coeff = wp.vec3f(*render_param[6:9])
+        backscatter_coeff = wp.vec3f(*render_param[3:6])
+        uw_image = wp.zeros_like(raw_rgba)
+        wp.launch(
+            dim=(raw_rgba.shape[0], raw_rgba.shape[1]),
+            kernel=UW_render,
+            inputs=[
+                raw_rgba,
+                depth_image,
+                backscatter_value,
+                atten_coeff,
+                backscatter_coeff
+            ],
+            outputs=[
+                uw_image
+            ]
+        )  
 
-
+        self.image_provider.set_bytes_data_from_gpu(uw_image.ptr, [uw_image.shape[1], uw_image.shape[0]])
+        self._backend.schedule(write_image, path=f'cam/rgb_{self._id}.png', data=uw_image)
+        # print(self._DVL.get_linear_vel())
+        # print(self._DVL.get_depth())
+        # print(self._DVL.get_single_beam_range())
+        self._vel_buffer.append(self._DVL.get_linear_vel())
+        self._range_buffer.append(self._DVL.get_depth())
+        self._singleBeam_buffer.append(self._DVL.get_single_beam_range())
         self._id += 1
 
 
@@ -91,7 +121,17 @@ class MHL_colorpicker_Scenario():
     
     
     
-    
+    def save(self):
+        # self._backend.schedule(write_np, path='vel.npy', data=self._vel_buffer)
+        # self._backend.schedule(write_np, path='range.npy', data=self._range_buffer)
+        # self._backend.schedule(write_np, path='singlebeam_range.npy', data=self._singleBeam_buffer)
+        np.save(self._output_dir + "/vel.npy", self._vel_buffer)
+        np.save(self._output_dir + "/range.npy", self._range_buffer)
+        np.save(self._output_dir + "/singleBeam.npy", self._singleBeam_buffer)
+
+        print(f'data has been saved to {self._output_dir}')
+
+        
     
     
     

@@ -83,6 +83,20 @@ class DVLsensor:
             self._DVL_interface = _range_sensor.acquire_lightbeam_sensor_interface()
         else:
             carb.log_error("Beam Sensor fails to be loaded")
+
+    def add_single_beam(self):
+        self._single_beam_path = self._rigid_body_path + "/DVL/SingleBeam"
+        result, sensor = omni.kit.commands.execute(
+                "IsaacSensorCreateLightBeamSensor",
+                path=self._single_beam_path,
+                min_range=self._min_range,
+                max_range=self._max_range,
+                forward_axis=Gf.Vec3d(0, 0, -1),
+                num_rays=1,
+                )
+
+    def get_single_beam_range(self):
+        return self._DVL_interface.get_linear_depth_data(self._single_beam_path)[0]
     
     def get_DVL_interface(self):
         return self._DVL_interface

@@ -44,57 +44,57 @@
 
 ##########################################################
 # Viz function for converting raw sonar map data to videos
-import numpy as np
-import matplotlib.pyplot as plt
-import cv2
-import os
-from io import BytesIO
+# import numpy as np
+# import matplotlib.pyplot as plt
+# import cv2
+# import os
+# from io import BytesIO
 
 
-input_folder = "/home/haoyu-ma/Desktop/MHL_replica"  # Folder containing sonar_data_{id}.npy files
-output_video = input_folder + "/output_video.mp4"  # Output video file
-files = sorted([f for f in os.listdir(input_folder) if f.endswith('.npy')] , key=lambda x: int(x.split("_")[2].split(".")[0]))
-# Parameters
-num_frames = len(files)  # Number of frames (scatter plots)
-fps = 8  # Frames per second
-frame_size = (800, 800)  # Width x height of the video frames
-print(files)
-# Create a video writer
-fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for .mp4
-video_writer = cv2.VideoWriter(output_video, fourcc, fps, frame_size)
+# input_folder = "/home/haoyu-ma/Desktop/MHL_replica"  # Folder containing sonar_data_{id}.npy files
+# output_video = input_folder + "/output_video.mp4"  # Output video file
+# files = sorted([f for f in os.listdir(input_folder) if f.endswith('.npy')] , key=lambda x: int(x.split("_")[2].split(".")[0]))
+# # Parameters
+# num_frames = len(files)  # Number of frames (scatter plots)
+# fps = 8  # Frames per second
+# frame_size = (800, 800)  # Width x height of the video frames
+# print(files)
+# # Create a video writer
+# fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for .mp4
+# video_writer = cv2.VideoWriter(output_video, fourcc, fps, frame_size)
 
-colormap = plt.get_cmap('gray')
-# Generate scatter plots and create video frames in memory
-for i in range(num_frames):
-    # Generate random data for the scatter plot (replace this with your data)
-    sonar_data = np.load(input_folder + '/' + files[i])
-    # Create a scatter plot
-    fig = plt.figure(figsize=(8, 8))
-    sonar_data_flat = sonar_data[:,:,2].squeeze()
-    plt.imshow(sonar_data_flat, cmap='gray', aspect=0.5)
-    ax = plt.gca()  
-    # ax.invert_yaxis()
-    ax.invert_xaxis()
-    ax.set_facecolor("black")
+# colormap = plt.get_cmap('gray')
+# # Generate scatter plots and create video frames in memory
+# for i in range(num_frames):
+#     # Generate random data for the scatter plot (replace this with your data)
+#     sonar_data = np.load(input_folder + '/' + files[i])
+#     # Create a scatter plot
+#     fig = plt.figure(figsize=(8, 8))
+#     sonar_data_flat = sonar_data[:,:,2].squeeze()
+#     plt.imshow(sonar_data_flat, cmap='gray', aspect=0.5)
+#     ax = plt.gca()  
+#     # ax.invert_yaxis()
+#     ax.invert_xaxis()
+#     ax.set_facecolor("black")
 
-    buffer = BytesIO()
-    plt.savefig(buffer, format="png", dpi=100)
-    plt.close()
+#     buffer = BytesIO()
+#     plt.savefig(buffer, format="png", dpi=100)
+#     plt.close()
     
-    # Read the buffer into a NumPy array
-    buffer.seek(0)
-    file_bytes = np.asarray(bytearray(buffer.read()), dtype=np.uint8)
-    frame = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+#     # Read the buffer into a NumPy array
+#     buffer.seek(0)
+#     file_bytes = np.asarray(bytearray(buffer.read()), dtype=np.uint8)
+#     frame = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     
 
     
-    # Write the frame to the video
-    video_writer.write(frame)
+#     # Write the frame to the video
+#     video_writer.write(frame)
 
-# Release the video writer
-video_writer.release()
+# # Release the video writer
+# video_writer.release()
 
-print(f"Video saved to {output_video}")
+# print(f"Video saved to {output_video}")
 
 
 ##################################################
