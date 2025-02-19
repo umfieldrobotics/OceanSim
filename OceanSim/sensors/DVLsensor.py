@@ -15,9 +15,6 @@ from isaacsim.sensors.physx import _range_sensor
 from ..utils.MultivariateNormal import MultivariateNormal
 
 
-# TODO #
-# simulate the sensor dropout when beam ranges are outside of operational range
-# Haoyu - please check my implementation
 class DVLsensor:
     def __init__(self,
                  elevation:float = 22.5, # deg
@@ -25,22 +22,25 @@ class DVLsensor:
                  vel_cov = 0,
                  depth_cov = 0,
                  min_range: float = 0.1,
-                 max_range: float = 10,
-                 num_beams_out_range_threshold: int = 2
+                 max_range: float = 100,
+                 num_beams_out_range_threshold: int = 2,
+                 freq: int = None, # Hz
+                 freq_bound: tuple[int] = [5, 100], # Hz
+                 freq_dependenet_range_bound: tuple[float] = [7.5, 50.0], # m
+                 sound_speed: float = 1500, # m/s
                  ):
+        # DVL configuration params
         self._elevation = elevation
         self._rotation = rotation
         self._min_range = min_range
         self._max_range = max_range
+
+        # DVL noise params
         self._mvn_vel = MultivariateNormal(4)
         self._mvn_vel.init_cov(vel_cov)
-
         self._mvn_dep = MultivariateNormal(4)
         self._mvn_dep.init_cov(depth_cov)
         
-        self._rigid_body_path = None
-        self._beam_paths = []
-
         sinElev = np.sin(np.deg2rad(self._elevation))
         cosElev = np.cos(np.deg2rad(self._elevation))
         self._transform = np.array([[1/(2*sinElev), 0, -1/(2*sinElev), 0],
@@ -51,6 +51,24 @@ class DVLsensor:
         # sensor dropout related params
         self._dropout = False
         self._num_beams_out_range_threshold = num_beams_out_range_threshold
+        
+        # Realistic DVL frequency dependent params
+        self._user_static_freq_flag = False
+        if freq is not None:
+            self._user_static_freq_flag = True
+            self._dt = 1/freq
+        else:
+            self._freq_bound = freq_bound
+            self._freq_dependent_range_bound = freq_dependenet_range_bound
+            self._sound_speed = sound_speed
+
+        # Initialization 
+        self._rigid_body_path = None
+        self._beam_paths = []
+        self._elapsed_time_vel = 0.0
+        self._elapsed_time_depth = 0.0
+
+        
         
 
     def attachDVL(self, rigid_body_path:str, location:np.ndarray = np.array([0.0, 0.0, 0.0])):
@@ -126,7 +144,21 @@ class DVLsensor:
         depth = [value if hit else float('nan') for value, hit in zip(depth, if_hit)]
         return depth
     
-    
+    def get_dt(self):
+        if self._user_static_freq_flag:
+            return self._dt
+        else:
+            min_range = min(self.get_depth())
+            if min_range <= self._freq_dependent_range_bound[0]:
+                self._dt = 1 / self._freq_bound[1]
+            elif self._freq_dependent_range_bound[0] < min_range < self._freq_dependent_range_bound[1]:
+                # To avoid abrupt jumps at h_min and h_max, smooth the transitions with linear ramp
+                freq = self._freq_bound[1] - (self._freq_bound[1] - self._sound_speed/(2 * min_range))/(self._freq_dependent_range_bound[1] - self._freq_dependent_range_bound[0]) * (min_range - self._freq_dependent_range_bound[0])
+                self._dt = 1 / freq
+            else:
+                self._dt = 1 / self._freq_bound[0]
+            return self._dt
+        
     def get_beam_hit(self):
         beam_hit = []
         for beam_path in self._beam_paths:
@@ -147,6 +179,31 @@ class DVLsensor:
             return np.zeros(3)
         
         return vel
+    
+
+    def get_linear_vel_fd(self, physics_dt: float):
+        if self.get_dt() < physics_dt:
+            carb.log_warn('Simulation physics_dt is larger than sensor_dt. Reduced to get_linear_vel().')
+        self._elapsed_time_vel += physics_dt
+        if self._elapsed_time_vel >= self.get_dt():
+            self._elapsed_time_vel = 0.0
+            return self.get_linear_vel()
+        else:
+            return float('nan')
+
+    def get_depth_fd(self, physics_dt: float):
+        if self.get_dt() < physics_dt:
+            carb.log_warn('Simulation physics_dt is larger than sensor_dt. Reduced to get_depth().')
+        self._elapsed_time_depth += physics_dt
+        if self._elapsed_time_depth >= self.get_dt():
+            self._elapsed_time_depth = 0.0
+            return self.get_depth()
+        else:
+            return float('nan')
+        
+    def set_freq(self, freq: float):
+        self._user_static_freq_flag = True
+        self._dt = 1 / freq
 
     def add_debug_lines(self):
 
