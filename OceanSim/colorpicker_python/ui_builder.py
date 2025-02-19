@@ -3,6 +3,7 @@ import numpy as np
 import omni.timeline
 import omni.ui as ui
 from omni.usd import StageEventType
+
 from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
 import warp as wp
 # Isaac sim import
@@ -10,16 +11,14 @@ from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, SingleGeometry
 from isaacsim.core.utils.prims import get_prim_at_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, open_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
-from isaacsim.core.utils.semantics import add_update_semantics
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, combo_floatfield_slider_builder
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, combo_floatfield_slider_builder, Button
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.sensors.camera import Camera
 from isaacsim.core.api.objects import DynamicCuboid
 
-
 # Custom import
 from .scenario import MHL_colorpicker_Scenario
-from ..utils.UWrenderer_utils import UW_render
+from ..utils.UWrenderer_utils import *
 
 class UIBuilder:
     def __init__(self):
@@ -91,10 +90,8 @@ class UIBuilder:
         Build a custom UI tool to run your extension.
         This function will be called any time the UI window is closed and reopened.
         """
-        self._colorpicker_provider = ui.ByteImageProvider()
-        N, M = 256, 256
-        self.white_image = np.ones((N, M, 4), dtype=np.uint8) * 255
-        self._colorpicker_provider.set_data_array(self.white_image, [N,M])
+        self._is_annotator_loaded = False
+        self._colorpicker_provider = ui.ByteImageProvider()  
         self._param = np.zeros(9)
         
         world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
@@ -135,20 +132,38 @@ class UIBuilder:
             "Backscatter_coeff_R", "Backscatter_coeff_G", "Backscatter_coeff_B",
             "Attenuation_coeff_R", "Attenuation_coeff_G", "Attenuation_coeff_B",
         ]
-        params_type = []
+        params_types = [
+            'float', 'float', 'float',
+            'float', 'float', 'float',
+            'float', 'float', 'float',
+        ]
+        params_default = [
+            0.0, 0.31, 0.24,
+            0.05, 0.05, 0.2,
+            0.05, 0.05, 0.05
+        ]
+
         with color_picker_frame:
             with ui.VStack(spacing=10):
 
                 for i in range(9):
-                    param_model, _ = combo_floatfield_slider_builder(label=params_labels[i])
+                    param_model, _ = combo_floatfield_slider_builder(
+                        label=params_labels[i],
+                        type=params_types[i],
+                        default_val=params_default[i])
                     self._param_models.append(param_model)
                     param_model.add_value_changed_fn(self._on_color_param_changes)
-                with ui.ZStack(height=100):
+                with ui.ZStack(height=500):
                     ui.Rectangle(style={"background_color": 0xFF000000})
-                    
-
                     ui.ImageWithProvider(self._colorpicker_provider)
 
+                load_pic_button = Button(
+                    label="Load the picture from active camera annotator",
+                    text="Get picture",
+                    on_click_fn=self._on_load_picture
+
+                )
+                
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
     ######################################################################################
@@ -175,7 +190,7 @@ class UIBuilder:
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         # Open MHL scene
-        open_stage("/home/haoyu/isaacsim_assets/USD/mhl_scaled/mhl_3hz_high_smooth_scaled.usd")
+        open_stage("/home/haoyu/isaacsim_assets/USD/mhl_scaled/mhl_scaled.usd")
 
         # Load the robot
         robot_prim_path = "/MHL/rob"
@@ -304,23 +319,40 @@ class UIBuilder:
         self._reset_btn.enabled = False
 
 
+    def _on_load_picture(self):
+        if not self._is_annotator_loaded:
+            try:
+                self._rgba_annot = self._scenario._ldr
+                self._depth_annot = self._scenario._depth
+                self._is_annotator_loaded = True
+                print('Annotator is loaded.')
+            except:
+                print('Annnotator not created. Load the scece first.')
+                return
+        if self._is_annotator_loaded:
+            try:
+                self._raw_rgba = self._rgba_annot.get_data()
+                self._depth_image = self._depth_annot.get_data()
+                self._colorpicker_provider.set_bytes_data_from_gpu(self._raw_rgba.ptr, [self._raw_rgba.shape[1], self._raw_rgba.shape[0]])
+                print('If image generated is distorted. Please run the scene and click again.')
+            except:
+                print('Image capture failed. Please run the scene and click again.')
+
+        
+    
     def _on_color_param_changes(self, model):
         for i, param_model in zip(range(9), self._param_models):
             self._param[i] = param_model.get_value_as_float()    
-
         backscatter_value = wp.vec3f(*self._param[0:3])
-        atten_coeff = wp.vec3f(*self._param[3:6])
-        backscatter_coeff = wp.vec3f(*self._param[6:9])
-        raw_image = wp.array(self.white_image, dtype=wp.uint8, ndim=3) 
-        uw_image = wp.zeros_like(raw_image)
-        depth_image = np.random.random((raw_image.shape[0], raw_image.shape[1]))
-        depth_image = wp.array(depth_image, ndim=2, dtype=wp.float32)
+        atten_coeff = wp.vec3f(*self._param[6:9])
+        backscatter_coeff = wp.vec3f(*self._param[3:6])
+        uw_image = wp.zeros_like(self._raw_rgba)
         wp.launch(
-            dim=(raw_image.shape[0], raw_image.shape[1]),
+            dim=(self._raw_rgba.shape[0], self._raw_rgba.shape[1]),
             kernel=UW_render,
             inputs=[
-                raw_image,
-                depth_image,
+                self._raw_rgba,
+                self._depth_image,
                 backscatter_value,
                 atten_coeff,
                 backscatter_coeff
@@ -330,5 +362,4 @@ class UIBuilder:
             ]
         )  
 
-
-        self._colorpicker_provider.set_bytes_data_from_gpu(uw_image.ptr, [raw_image.shape[0], raw_image.shape[1]])
+        self._colorpicker_provider.set_bytes_data_from_gpu(uw_image.ptr, [uw_image.shape[1], uw_image.shape[0]])

@@ -26,7 +26,10 @@ def UW_render(raw_image: wp.array(ndim=3, dtype=wp.uint8),
     uw_image[i,j,0] = wp.uint8(wp.clamp(UW_RGB[0], wp.float32(0), wp.float32(255)))
     uw_image[i,j,1] = wp.uint8(wp.clamp(UW_RGB[1], wp.float32(0), wp.float32(255)))
     uw_image[i,j,2] = wp.uint8(wp.clamp(UW_RGB[2], wp.float32(0), wp.float32(255)))
-    uw_image[i,j,3] = wp.uint8(255)
+    uw_image[i,j,3] = raw_image[i,j,3]
+
+
+
 
     
     

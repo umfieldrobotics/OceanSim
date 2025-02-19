@@ -11,22 +11,6 @@ from isaacsim.core.utils.prims import get_prim_path
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.viewports import set_camera_view
 
-@wp.kernel
-def add_blue_tint(
-    image: wp.array(ndim=3, dtype=wp.uint8),  # Input/output image (RGBA format)
-    blue_intensity: wp.uint8,            # Intensity of the blue tint (0.0 to 1.0)
-):
-    # Get the thread indices
-    i, j = wp.tid()
-
-    # Get the pixel color (RGBA)
-    blue_pixel = image[i, j, 2]
-
-    # Add blue tint to the blue channel
-    blue_pixel = wp.clamp(blue_pixel + blue_intensity, wp.uint8(0), wp.uint8(255))
-
-    # Write the modified pixel back to the image
-    image[i, j, 2] = blue_pixel
 
 class MHL_colorpicker_Scenario():
     def __init__(self):
@@ -66,12 +50,16 @@ class MHL_colorpicker_Scenario():
         set_camera_view(eye=[-2.0, 0.0, 3.0], target=np.array([0.0, 1.25, 0.15]), camera_prim_path="/OmniverseKit_Persp")
         
         
-        self.window = ui.Window("Camera", width=1280, height=720, visible=True)
+        self.window = ui.Window("Camera", width=1280, height=720 + 40, visible=True)
         self.image_provider = ui.ByteImageProvider()
         with self.window.frame:
-            ui.Image('/home/haoyu-ma/.local/share/ov/pkg/isaac-sim-4.5.0/extsUser/OceanSim/data/icon.png',
-                            fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT,
-                            alignment=ui.Alignment.CENTER)
+            with ui.ZStack(height=720):
+                ui.Rectangle(style={"background_color": 0xFF000000})
+                # ui.Image('/home/haoyu/isaacsim/extsUser/OceanSim/data/icon.png',
+                #         fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT,
+                #         alignment=ui.Alignment.CENTER)
+                ui.ImageWithProvider(self.image_provider, width=1280, height=720)
+
             
 
     def teardown_scenario(self):
@@ -93,22 +81,8 @@ class MHL_colorpicker_Scenario():
         SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([5,0,0]))
 
         rgba = self._ldr.get_data()
-        wp.launch(
-            kernel=add_blue_tint,
-            dim=(rgba.shape[0], rgba.shape[1]),
-            inputs=[
-                rgba,
-                50
-            ]
-        )
-
-
         self.image_provider.set_bytes_data_from_gpu(rgba.ptr, [rgba.shape[1], rgba.shape[0]])
 
-
-
-        with self.window.frame:
-            ui.ImageWithProvider(self.image_provider, width=1000, height=1000)
 
         self._id += 1
 
