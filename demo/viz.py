@@ -100,35 +100,35 @@
 ##################################################
 # Viz function for a single plot of a sonar map
 
-# import numpy as np
-# import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.pyplot as plt
 # import open3d as o3d
 
-# input_folder = "/home/haoyu-ma/Desktop/MHL_replica"  # Folder containing sonar_data_{id}.npy files
+input_folder = "/home/haoyu/Desktop//MHL_replica"  # Folder containing sonar_data_{id}.npy files
 
-# id = 10
-# colormap = plt.get_cmap('gray')  # You can use "plasma", "inferno", "magma", etc.
+id = 10
+colormap = plt.get_cmap('gray')  # You can use "plasma", "inferno", "magma", etc.
 
-# sonar_data = np.load(input_folder + f"/sonar_data_{id}.npy")
-# sonar_data_flat = sonar_data[:,:,2].squeeze()
+sonar_data = np.load(input_folder + f"/sonar_data_{id}.npy")
+sonar_data_flat = sonar_data[:,:,2].squeeze()
 
-# sonar_data = sonar_data.reshape(-1,3)
-# # Create a scatter plot
-# fig = plt.figure(figsize=(8, 8))
-# plt.scatter(sonar_data[:,0], sonar_data[:,1], c=sonar_data[:,2], cmap=colormap, s=0.1, marker='o')
-# plt.colorbar(label="Intensity Value")
-# plt.ylim([0,sonar_data[:,1].max()])
-# ax = plt.gca()  
-# ax.set_facecolor("black")
-# plt.show()
+sonar_data = sonar_data.reshape(-1,3)
+# Create a scatter plot
+fig = plt.figure(figsize=(8, 8))
+plt.scatter(sonar_data[:,0], sonar_data[:,1], c=sonar_data[:,2], cmap=colormap, s=0.1, marker='o')
+plt.colorbar(label="Intensity Value")
+plt.ylim([0,sonar_data[:,1].max()])
+ax = plt.gca()  
+ax.set_facecolor("black")
+plt.show()
 
-# fig = plt.figure(figsize=(8, 8))
-# plt.imshow(sonar_data_flat, cmap='gray', aspect=0.5)
-# ax = plt.gca()  
-# # ax.invert_yaxis()
+fig = plt.figure(figsize=(8, 8))
+plt.imshow(sonar_data_flat, cmap='gray', aspect=0.5)
+ax = plt.gca()  
+ax.invert_yaxis()
 # ax.invert_xaxis()
-# ax.set_facecolor("black")
-# plt.show()
+ax.set_facecolor("black")
+plt.show()
 
 # pcl = np.load(input_folder + f"/pcl_local_{id}.npy")
 # intensity = np.load(input_folder + f"/intensity_{id}.npy")

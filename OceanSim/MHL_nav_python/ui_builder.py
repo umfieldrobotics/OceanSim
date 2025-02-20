@@ -158,17 +158,17 @@ class UIBuilder:
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         # Open MHL scene
-        # open_stage("/home/haoyu/isaacsim_assets/USD/mhl_scaled/MHL_Water.usd")
-        open_stage('/home/haoyu/isaacsim_assets/USD/DVl_test.usd')
+        open_stage("/home/haoyu/isaacsim_assets/USD/mhl_scaled/MHL_Water.usd")
+
         # Load the robot
         robot_prim_path = "/World/rob"
         # robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
         # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         DynamicCuboid(prim_path=robot_prim_path, size=0.25, color=np.array([0.5,0.5,1]))
         # Load the rock
-        # rock_prim_path = '/MHL/rock'
-        # rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
-        # add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
+        rock_prim_path = '/MHL/rock'
+        rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
+        add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
         
         # Toggle rigid body and collider preset for rob and rock
         self._rob = get_prim_at_path(robot_prim_path)
@@ -179,13 +179,13 @@ class UIBuilder:
         rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path,
                                          mass=self._rob_mass)
         
-        # rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-        #                    translation=np.array([0.0, 2, -2]),
-        #                    orientation=euler_angles_to_quat(np.array([0.0,0.0,125]), degrees=True),
-        #                    collision=True,
-        #                    )
-        # rock_collider_prim.set_collision_approximation('convexDecomposition')
-        # rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
+        rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
+                           translation=np.array([0.0, 2, -2]),
+                           orientation=euler_angles_to_quat(np.array([0.0,0.0,125]), degrees=True),
+                           collision=True,
+                           )
+        rock_collider_prim.set_collision_approximation('convexDecomposition')
+        rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
         
         
         
@@ -204,8 +204,8 @@ class UIBuilder:
         SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0],orientation=self._cam_pose[1])
 
 
-        # MHLMesh_prim_path = '/World/mhl_scaled/Mesh'
-        # SingleGeometryPrim(prim_path=MHLMesh_prim_path, collision=True)
+        MHLMesh_prim_path = '/World/mhl_scaled/Mesh'
+        SingleGeometryPrim(prim_path=MHLMesh_prim_path, collision=True)
 
 
     def _setup_scenario(self):

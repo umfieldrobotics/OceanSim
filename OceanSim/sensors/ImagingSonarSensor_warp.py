@@ -145,6 +145,18 @@ def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
     result[i,j] = wp.vec3(r[i,j] * wp.cos(azi[i,j]),
                           r[i,j] * wp.sin(azi[i,j]),
                           intensity[i,j])
+    
+@wp.kernel
+def make_sonar_image(sonar_data: wp.array(ndim=2, dtype=wp.vec3),
+                     sonar_image: wp.array(ndim=3, dtype=wp.uint8)):
+    i, j = wp.tid()
+    height = sonar_data.shape[0] # Just to flip the y axis for image origin is on the left upper corner
+    sonar_rgb = wp.uint8(sonar_data[i,j][2] * wp.float32(255))
+    sonar_image[height-i,j,0] = sonar_rgb
+    sonar_image[height-i,j,1] = sonar_rgb
+    sonar_image[height-i,j,2] = sonar_rgb
+    sonar_image[height-i,j,3] = wp.uint8(255)
+
 
 class ImagingSonarSensor:
 
@@ -152,17 +164,17 @@ class ImagingSonarSensor:
                  trans : list[float]= [0.0, 0.0, 0.0], 
                  orients: list[float] = [1.0, 0.0, 0.0, 0.0]
                  ):
-        
+        # TODO Focal length of the sonar(camera is another parameter that can be varied)
         # Raw parameters from Oculus M370s\MT370s\MD370s
-        self.max_range = 4 # m (max is 200 m in datasheet )
-        self.min_range = 0.5 # m (min is 0.2 m in datasheet)
-        self.range_res = 0.005 # m (datasheet is 0.008 m)
+        self.max_range = 5 # m (max is 200 m in datasheet )
+        self.min_range = 0.2 # m (min is 0.2 m in datasheet)
+        self.range_res = 0.02 # m (datasheet is 0.008 m)
         self.update_rate = 40 # Hz (max update rate) (NOT USED FOR NOW)!!
-        self.hori_fov = 120 # degree (hori_fov is 130 degrees in datasheet)
+        self.hori_fov = 130 # degree (hori_fov is 130 degrees in datasheet)
         self.vert_fov = 20 # degree (vert_fov is 20 degrees in datasheet)
         self.num_beams = 256 # (max number of beams) (NOT USED FOR NOW)!!
-        self.angular_res = 0.2 # degree (datasheet is 2 deg)
-        self.beam_separation = 0.5 # degree (used to control the ray density, but too low so scale with a ray_factor)
+        self.angular_res: float = 0.5 # degree (datasheet is 2 deg)
+        self.beam_separation = 0.5 # degree (used to control the ray density, but too low so ray_factor is introduced)
 
         # Generate sonar map's r and z meshgrid
         self.r, self.azi = np.meshgrid(np.arange(self.min_range,self.max_range,self.range_res),
@@ -176,11 +188,12 @@ class ImagingSonarSensor:
         self.bin_count = wp.zeros(shape=self.r.shape, dtype=wp.int32)
         self.binned_intensity = wp.zeros(shape=self.r.shape, dtype=wp.int32)
         self.sonar_map = wp.zeros(shape=self.r.shape, dtype=wp.vec3)
+        self.sonar_image = wp.zeros(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
 
         # We introduce this factor to adjust raycast density
         # (Equivalently, adjust the beam_separation) 
         # Increase this value by 1 will quadraple the total number of raycasts
-        self.ray_factor = 25 # below 15 is advised for me
+        self.ray_factor = 20 # below 15 is advised for me
 
         self.AR = self.hori_fov / self.vert_fov
         self.hori_res = int(self.ray_factor * (self.hori_fov / self.beam_separation))
@@ -236,7 +249,7 @@ class ImagingSonarSensor:
 
         self.pointcloud_annot = rep.AnnotatorRegistry.get_annotator(
             name="pointcloud",
-            init_params={"includeUnlabelled": True},
+            # init_params={"includeUnlabelled": True},
             do_array_copy=True,
             device=self._device
             )
@@ -275,6 +288,7 @@ class ImagingSonarSensor:
         self.bin_count.zero_()
         self.binned_intensity.zero_()
         self.sonar_map.zero_()
+        self.sonar_image.zero_()
         # Enable this feature so that warp will automatically free up GPU mamory 
         # if above certain total percentage usage
         if wp.is_mempool_supported:
@@ -324,13 +338,10 @@ class ImagingSonarSensor:
             semantics = self.scan_data['semantics']
         else:
             return
-        # TODO Test compute intensity and world2local kernel such that they can directly use annotator output
-        # pcl = wp.array(self.scan_data['pcl'], shape=(num_points,), dtype=wp.vec3)
-        # normals=wp.array(self.scan_data['normals'], dtype=wp.vec3)
-        # semantics = wp.array(self.scan_data['semantics'], wp.int8)
+
         # Intensity parameters
         
-        attenuation = 0.1
+        attenuation = 0.5
         
         intensity = wp.empty(shape=(num_points,), dtype=wp.float32)
 
@@ -402,7 +413,7 @@ class ImagingSonarSensor:
             self.binned_intensity = self.bin_sum
 
         # Sonar map Noise Parameters
-        gau_noise_param = 0.2
+        gau_noise_param = 0.05
         ray_noise_param = 0.05
         intensity_offset = 0.0
         intensity_gain = 1.0
@@ -486,7 +497,19 @@ class ImagingSonarSensor:
         
         self.id += 1
     
-
+    def make_sonar_image(self):
+        self.sonar_image.zero_()
+        wp.launch(
+            dim=self.sonar_map.shape,
+            kernel=make_sonar_image,
+            inputs=[
+                self.sonar_map
+            ],
+            outputs=[
+                self.sonar_image
+            ]
+        )
+        return self.sonar_image
 
     def close(self):
         self.pointcloud_annot.detach(self.rp)

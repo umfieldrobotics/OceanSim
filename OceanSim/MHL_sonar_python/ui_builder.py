@@ -122,7 +122,6 @@ class UIBuilder:
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
 
-        self._outputs_frame = CollapsableFrame("Outputs", collapsed=False)
 
 
 
@@ -134,7 +133,7 @@ class UIBuilder:
 
         # Robot parameters
 
-        self._rob_mass = 10 # kg
+        self._rob_mass = 5 # kg
         # Sonar parameters
         self._sonar = None
 
@@ -159,7 +158,7 @@ class UIBuilder:
         # load MHL scene and turn on collider
 
         MHL_prim_path = '/World/mhl'
-        MHL_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/mhl_scaled.usd"
+        MHL_usd_path = "/home/haoyu/isaacsim_assets/USD/mhl_scaled/MHL_Water.usd"
         add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
         SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
         add_update_semantics(prim=get_prim_at_path(MHL_prim_path),
@@ -167,16 +166,16 @@ class UIBuilder:
                              semantic_label='0.5')
         # Load the robot
         robot_prim_path = "/World/rob"
-        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
-        add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
-        # DynamicCuboid(prim_path=robot_prim_path, size=0.2)
+        # robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
+        # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
+        DynamicCuboid(prim_path=robot_prim_path, size=0.2)
         # Load the rock
         rock_prim_path = '/World/rock'
-        rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
+        rock_usd_path = '/home/haoyu/isaacsim_assets/USD/3D model/rock/rock.usd'
         rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
         add_update_semantics(prim=rock_prim,
                              type_label='reflectivity',
-                             semantic_label='4.0')
+                             semantic_label='2.0')
         
         # Toggle rigid body and collider preset for rob and rock
         self._rob = get_prim_at_path(robot_prim_path)
@@ -188,8 +187,8 @@ class UIBuilder:
                                          mass=self._rob_mass)
         
         rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-                           translation=np.array([0.0, 1, 0.0]),
-                           orientation=euler_angles_to_quat(np.array([0.0,0.0,125]), degrees=True),
+                           translation=np.array([2.0, 0.1, -1.5]),
+                           orientation=euler_angles_to_quat(np.array([0.0,0.0,90]), degrees=True),
                            collision=True,
                            )
         rock_collider_prim.set_collision_approximation('convexDecomposition')
@@ -208,7 +207,8 @@ class UIBuilder:
         
         # Attach the forward looking imaging sonar
         self._sonar = ImagingSonarSensor(prim_path=robot_prim_path,
-                                         trans=self._cam_pose[0])
+                                         trans=self._cam_pose[0],
+                                         orients=euler_angles_to_quat(np.array([0, 30, 0]), degrees=True))
 
     def _setup_scenario(self):
         """
