@@ -180,7 +180,7 @@ class UIBuilder:
         self._cam = None
         self._cam_res = (1920, 1080)
         self._cam_pose = ([0.5,0.0,0.0], [0.5,0.5,-0.5,-0.5])
-        self._cam_focal = 6
+        self._cam_focal = 20
         self._scenario = MHL_colorpicker_Scenario()
 
 
@@ -191,11 +191,11 @@ class UIBuilder:
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         # Open MHL scene
-        open_stage("/home/haoyu-ma/projects/OceanSim_utils/demo/MHL_Water.usd")
+        open_stage("/home/haoyu/isaacsim_assets/USD/mhl_scaled/MHL_Water.usd")
 
         # Load the robot
         robot_prim_path = "/World/rob"
-        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
+        robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
         add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         # DynamicCuboid(prim_path=robot_prim_path, size=0.5, color=np.array([0.5,0.5,1]))
         # Load the rock
@@ -223,7 +223,7 @@ class UIBuilder:
         
         self._DVL = DVLsensor(elevation=30)
         self._DVL.attachDVL(rigid_body_path=get_prim_path(self._rob),
-                            location=np.array([0.0,0.0,-0.1]))
+                            location=np.array([0.0,0.0,-0.01]))
         self._DVL.add_single_beam()
         self._DVL.add_debug_lines()
         # Attach the front camera

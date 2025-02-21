@@ -163,12 +163,12 @@ class UIBuilder:
         SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
         add_update_semantics(prim=get_prim_at_path(MHL_prim_path),
                              type_label='reflectivity',
-                             semantic_label='0.5')
+                             semantic_label='1.0')
         # Load the robot
         robot_prim_path = "/World/rob"
-        # robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
-        # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
-        DynamicCuboid(prim_path=robot_prim_path, size=0.2)
+        robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
+        add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
+        # DynamicCuboid(prim_path=robot_prim_path, size=0.2)
         # Load the rock
         rock_prim_path = '/World/rock'
         rock_usd_path = '/home/haoyu/isaacsim_assets/USD/3D model/rock/rock.usd'
@@ -187,7 +187,7 @@ class UIBuilder:
                                          mass=self._rob_mass)
         
         rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-                           translation=np.array([2.0, 0.1, -1.5]),
+                           translation=np.array([1.0, 0.1, -1.5]),
                            orientation=euler_angles_to_quat(np.array([0.0,0.0,90]), degrees=True),
                            collision=True,
                            )

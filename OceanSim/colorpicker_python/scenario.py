@@ -31,14 +31,14 @@ class MHL_colorpicker_Scenario():
         self._vel_buffer = []
         self._range_buffer = []
         self._singleBeam_buffer = []
-        self._output_dir = '/home/haoyu-ma/Desktop/MHL_replica'
+        self._output_dir = '/home/haoyu/Desktop//MHL_replica'
         self._backend = rep.BackendDispatch({"paths": {"out_dir": self._output_dir}})
 
         self._running_scenario = True
         self._device = str(wp.get_preferred_device())
 
         SingleRigidPrim(prim_path=get_prim_path(self._rob),
-                        translation=np.array([0.0, 0.0, 0.0]),
+                        translation=np.array([0.0, 0.0, 0.7]),
                         orientation=euler_angles_to_quat(np.array([0.0, 0.0, 0.0]), degrees=True))
         
 
@@ -83,7 +83,7 @@ class MHL_colorpicker_Scenario():
         if self._ldr.get_data().size == 0:
             return
         
-        SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([1,0,0]))
+        SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([0.5,0,0]))
 
         raw_rgba = self._ldr.get_data()
         depth_image = self._depth.get_data()
@@ -109,7 +109,7 @@ class MHL_colorpicker_Scenario():
         self.image_provider.set_bytes_data_from_gpu(uw_image.ptr, [uw_image.shape[1], uw_image.shape[0]])
         self._backend.schedule(write_image, path=f'cam/rgb_{self._id}.png', data=uw_image)
         # print(self._DVL.get_linear_vel())
-        # print(self._DVL.get_depth())
+        print(self._DVL.get_depth())
         # print(self._DVL.get_single_beam_range())
         self._vel_buffer.append(self._DVL.get_linear_vel())
         self._range_buffer.append(self._DVL.get_depth())

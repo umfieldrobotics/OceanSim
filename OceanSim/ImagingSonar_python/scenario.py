@@ -15,7 +15,7 @@ class ImagingSonarScenario():
     def setup_scenario(self, rob, sonar):
         self._rob = rob
         self._sonar = sonar        
-        self._sonar.initialize(self._output_dir)
+        self._sonar.initialize()
 
         self._running_scenario = True
 

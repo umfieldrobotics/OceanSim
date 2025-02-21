@@ -76,7 +76,6 @@ def bin_intensity(pcl: wp.array(dtype=wp.vec3),
     # Calculate the bin indices for range and azimuth
     x_bin_idx = wp.int32((x - x_offset) / x_res)
     y_bin_idx = wp.int32((y - y_offset) / y_res)
-    
     wp.atomic_add(bin_sum, x_bin_idx, y_bin_idx, intensity[tid])
     wp.atomic_add(bin_count, x_bin_idx, y_bin_idx, 1)
 
@@ -134,14 +133,16 @@ def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
                        gain: wp.float32,
                        result: wp.array(ndim=2, dtype=wp.vec3)):
     i, j = wp.tid()
+
     if max_intensity[i] !=0:
-        intensity[i,j] = intensity[i,j]/max_intensity[i] 
-    intensity[i,j] += offset
-    intensity[i,j] *= gain
+        intensity[i,j] = intensity[i,j]/max_intensity[i]
+
     intensity[i,j] *= (0.5 + gau_noise[i,j])
     intensity[i,j] += range_ray_noise[i,j]
+    intensity[i,j] += offset
+    intensity[i,j] *= gain
     intensity[i,j] = wp.clamp(intensity[i,j], wp.float32(0.0), wp.float32(1.0))
-
+    # intensity[i,j] = range_ray_noise[i,j]
     result[i,j] = wp.vec3(r[i,j] * wp.cos(azi[i,j]),
                           r[i,j] * wp.sin(azi[i,j]),
                           intensity[i,j])
@@ -150,12 +151,11 @@ def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
 def make_sonar_image(sonar_data: wp.array(ndim=2, dtype=wp.vec3),
                      sonar_image: wp.array(ndim=3, dtype=wp.uint8)):
     i, j = wp.tid()
-    height = sonar_data.shape[0] # Just to flip the y axis for image origin is on the left upper corner
     sonar_rgb = wp.uint8(sonar_data[i,j][2] * wp.float32(255))
-    sonar_image[height-i,j,0] = sonar_rgb
-    sonar_image[height-i,j,1] = sonar_rgb
-    sonar_image[height-i,j,2] = sonar_rgb
-    sonar_image[height-i,j,3] = wp.uint8(255)
+    sonar_image[i,j,0] = sonar_rgb
+    sonar_image[i,j,1] = sonar_rgb
+    sonar_image[i,j,2] = sonar_rgb
+    sonar_image[i,j,3] = wp.uint8(255)
 
 
 class ImagingSonarSensor:
@@ -164,17 +164,21 @@ class ImagingSonarSensor:
                  trans : list[float]= [0.0, 0.0, 0.0], 
                  orients: list[float] = [1.0, 0.0, 0.0, 0.0]
                  ):
-        # TODO Focal length of the sonar(camera is another parameter that can be varied)
         # Raw parameters from Oculus M370s\MT370s\MD370s
-        self.max_range = 5 # m (max is 200 m in datasheet )
+        self.max_range = 3 # m (max is 200 m in datasheet )
         self.min_range = 0.2 # m (min is 0.2 m in datasheet)
-        self.range_res = 0.02 # m (datasheet is 0.008 m)
+        self.range_res = 0.008 # m (datasheet is 0.008 m)
         self.update_rate = 40 # Hz (max update rate) (NOT USED FOR NOW)!!
         self.hori_fov = 130 # degree (hori_fov is 130 degrees in datasheet)
         self.vert_fov = 20 # degree (vert_fov is 20 degrees in datasheet)
         self.num_beams = 256 # (max number of beams) (NOT USED FOR NOW)!!
         self.angular_res: float = 0.5 # degree (datasheet is 2 deg)
-        self.beam_separation = 0.5 # degree (used to control the ray density, but too low so ray_factor is introduced)
+        self.beam_separation = 0.5 # degree (Not USED FOR NOW)!!
+
+        self.hori_res: int = 3000
+
+
+        # This parameter essentially controls the viewing distance from sonar to objects given constant FOV
 
         # Generate sonar map's r and z meshgrid
         self.r, self.azi = np.meshgrid(np.arange(self.min_range,self.max_range,self.range_res),
@@ -193,10 +197,9 @@ class ImagingSonarSensor:
         # We introduce this factor to adjust raycast density
         # (Equivalently, adjust the beam_separation) 
         # Increase this value by 1 will quadraple the total number of raycasts
-        self.ray_factor = 20 # below 15 is advised for me
 
         self.AR = self.hori_fov / self.vert_fov
-        self.hori_res = int(self.ray_factor * (self.hori_fov / self.beam_separation))
+        # self.hori_res = int(self.ray_factor * (self.hori_fov / self.beam_separation))
         self.vert_res = int(self.hori_res / self.AR)
         # By doing this, I am assuming the vertical beam separation
         # is the same as the beam vertical separation. 
@@ -214,6 +217,7 @@ class ImagingSonarSensor:
             near_distance=self.min_range,
             far_distance=self.max_range
         )
+        # self.camera.set_focal_length(self.focal_length)
         # This is a bug. Needs to call initialize() before changing aperture
         # https://forums.developer.nvidia.com/t/error-when-setting-a-cameras-vertical-horizontal-aperture/271314
         self.camera.initialize()
@@ -222,8 +226,8 @@ class ImagingSonarSensor:
         # The reason why we are doing this is because Isaac sim will fix vertical aperture
         # given aspect ratio for mandating square pixles
         # https://forums.developer.nvidia.com/t/how-to-modify-the-cameras-field-of-view/278427/5
-        focal_length = self.camera.get_focal_length()
-        horizontal_aper = 2 * focal_length * np.tan(np.deg2rad(self.hori_fov) / 2)
+        self.focal_length = self.camera.get_focal_length()
+        horizontal_aper = 2 * self.focal_length * np.tan(np.deg2rad(self.hori_fov) / 2)
         self.camera.set_horizontal_aperture(horizontal_aper)
         # Notice if you would like to observe sonar view from linked viewport.
         # Only horizontal fov is displayed correctly while the vertical fov is
@@ -294,7 +298,7 @@ class ImagingSonarSensor:
         if wp.is_mempool_supported:
             if not wp.is_mempool_enabled:
                 wp.set_mempool_enabled()
-            wp.set_mempool_release_threshold("cuda:0", 0.6)
+            wp.set_mempool_release_threshold("cuda:0", 0.85)
         
         print(f'Sonar is initialized. (Writing data: {self.writing})')
 
@@ -341,7 +345,7 @@ class ImagingSonarSensor:
 
         # Intensity parameters
         
-        attenuation = 0.5
+        attenuation = 0.1
         
         intensity = wp.empty(shape=(num_points,), dtype=wp.float32)
 
@@ -413,15 +417,16 @@ class ImagingSonarSensor:
             self.binned_intensity = self.bin_sum
 
         # Sonar map Noise Parameters
-        gau_noise_param = 0.05
+        gau_noise_param = 0.2
         ray_noise_param = 0.05
         intensity_offset = 0.0
         intensity_gain = 1.0
         # Calculate noise
         gau_noise = np.random.normal(loc=0, scale=gau_noise_param, size=self.bin_sum.shape)
         ray_noise = np.random.rayleigh(scale=ray_noise_param, size=self.bin_sum.shape)
-        std = self.hori_fov/64
-        range_dependent_ray_noise = self.r**2/self.max_range**2*(1 + np.exp(-(self.azi-np.pi/2)**2/std))*ray_noise 
+        std = self.hori_fov/30000
+        peak = 1.5
+        range_dependent_ray_noise = (self.r/self.max_range)**2*(1 + peak*np.exp(-(self.azi-np.pi/2)**2/std))*ray_noise 
 
 
         self.sonar_map.zero_()
