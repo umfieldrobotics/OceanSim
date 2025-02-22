@@ -4,34 +4,25 @@ import omni.timeline
 import omni.ui as ui
 from omni.usd import StageEventType
 from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
-import warp as wp
-import yaml
-from PIL import Image
-
 
 # Isaac sim import
+from isaacsim.core.api.objects import DynamicCuboid
 from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, SingleGeometryPrim
-from isaacsim.core.utils.prims import get_prim_at_path, get_prim_path
-from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, open_stage
+from isaacsim.core.utils.prims import get_prim_at_path
+from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, combo_floatfield_slider_builder, Button, StringField
+from isaacsim.core.utils.semantics import add_update_semantics
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.sensors.camera import Camera
-from isaacsim.core.api.objects import DynamicCuboid
-from isaacsim.core.utils.extensions import get_extension_path, get_extension_id, get_extension_path_from_name
 
 
 # Custom import
-from .scenario import MHL_colorpicker_Scenario
-from ..utils.UWrenderer_utils import UW_render
-from ..sensors.DVLsensor import DVLsensor
-
-
+from ..sensors.ImagingSonarSensor_warp import ImagingSonarSensor
+from .scenario import MHL_test4_Scenario
 
 class UIBuilder:
     def __init__(self):
-
-
         # Frames are sub-windows that can contain multiple UI elements
         self.frames = []
         # UI elements created using a UIElementWrapper instance
@@ -39,8 +30,6 @@ class UIBuilder:
 
         # Get access to the timeline to control stop/pause/play programmatically
         self._timeline = omni.timeline.get_timeline_interface()
-        # A flag indicating if the scenario is loaded at least once (helpful for UI module to see if scenario variables are created)
-        self._is_scenario_setup = False
 
         # Run initialization for the provided example
         self._on_init()
@@ -102,19 +91,6 @@ class UIBuilder:
         Build a custom UI tool to run your extension.
         This function will be called any time the UI window is closed and reopened.
         """
-        self._extension_path = get_extension_path_from_name("OceanSim")
-        demo_image_path = self._extension_path + "/demo/demo_rgb.png"
-        demo_depth_path = self._extension_path + '/demo/demo_depth.npy'
-        demo_image = Image.open(demo_image_path).convert('RGBA')
-        self._demo_rgba = wp.array(data=np.array(demo_image), dtype=wp.uint8, ndim=3)      
-        self._demo_depth = wp.array(data=np.load(file=demo_depth_path),
-                              dtype=wp.float32,
-                              ndim=2)
-        self._demo_res = [self._demo_rgba.shape[1], self._demo_rgba.shape[0]]
-        self._demo_provider = ui.ByteImageProvider()
-        self._demo_provider.set_bytes_data_from_gpu(self._demo_rgba.ptr, self._demo_res)  
-        self._param = np.zeros(9)
-
         world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
 
         with world_controls_frame:
@@ -146,62 +122,9 @@ class UIBuilder:
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
 
-        color_picker_frame = CollapsableFrame('Color Picker', collapsed=False)
-        self._param_models = []
-        params_labels = [                        
-            "Backscatter_R", "Backscatter_G","Backscatter_B",
-            "Backscatter_coeff_R", "Backscatter_coeff_G", "Backscatter_coeff_B",
-            "Attenuation_coeff_R", "Attenuation_coeff_G", "Attenuation_coeff_B",
-        ]
-        params_types = [
-            'float', 'float', 'float',
-            'float', 'float', 'float',
-            'float', 'float', 'float',
-        ]
-        params_default = [
-            0.0, 0.31, 0.24,
-            0.05, 0.05, 0.2,
-            0.05, 0.05, 0.05
-        ]
-        self._param = params_default
-        with color_picker_frame:
-            with ui.VStack(spacing=10):
 
-                for i in range(9):
-                    param_model, param_slider = combo_floatfield_slider_builder(
-                        label=params_labels[i],
-                        type=params_types[i],
-                        default_val=params_default[i])
-                    self._param_models.append(param_model)
-                    param_model.add_value_changed_fn(self._on_color_param_changes)
-                    
-                with ui.ZStack(height=300):
-                    ui.Rectangle(style={"background_color": 0xFF000000})
-                    ui.ImageWithProvider(self._demo_provider,
-                                         style={'alignment': ui.Alignment.CENTER,
-                                                "fill_policy": ui.FillPolicy.PRESERVE_ASPECT_FIT})
-                self.save_dir_field = StringField(
-                    label='YAML saving Path',
-                    tooltip='Save the render parameter and reference pic into this directory',
-                    use_folder_picker=True
-                )
-                
-                self.wrapped_ui_elements.append(self.save_dir_field)
-                with ui.HStack(width=600):
-                    self.file_name_field = StringField(
-                        label='File name',
-                        tooltip='label your yaml file',
-                        default_value='render_param_0'
-                    )
-                    save_button = Button(
-                        text="Save",
-                        label='',
-                        on_click_fn=self._on_save_param
-                    )
-                
-                    self.wrapped_ui_elements.append(self.file_name_field)
-                    self.wrapped_ui_elements.append(save_button)
-                
+
+
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
     ######################################################################################
@@ -210,16 +133,17 @@ class UIBuilder:
 
         # Robot parameters
 
-        self._rob_mass = 10 # kg
-
+        self._rob_mass = 5 # kg
+        # Sonar parameters
+        self._sonar = None
 
         # Camera parameters
         self._cam = None
         self._cam_res = (1920, 1080)
-        self._cam_pose = ([0.5,0.0,0.0], [0.5,0.5,-0.5,-0.5])
-        self._cam_focal = 20
-        self._scenario = MHL_colorpicker_Scenario()
-        self._is_scenario_setup = True
+
+        self._cam_focal = 21.1
+        # Scenario
+        self._scenario = MHL_test4_Scenario()
 
 
     def _setup_scene(self):
@@ -228,20 +152,30 @@ class UIBuilder:
         On pressing the Load Button, a new instance of World() is created and then this function is called.
         The user should now load their assets onto the stage and add them to the World Scene.
         """
-        # Open MHL scene
-        open_stage("/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/MHL_Water.usd")
+        create_new_stage()
+        # load MHL scene and turn on collider
 
+        MHL_prim_path = '/World/MHL'
+        MHL_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/MHL_Water.usd"
+        add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
+        SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
+        add_update_semantics(prim=get_prim_at_path('/World/MHL/mhl_scaled/Mesh/mesh'),
+                             type_label='reflectivity',
+                             semantic_label='1.0')
         # Load the robot
         robot_prim_path = "/World/rob"
         # robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
         # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
-        DynamicCuboid(prim_path=robot_prim_path, size=0.5, color=np.array([0.5,0.5,1]))
+        DynamicCuboid(prim_path=robot_prim_path, size=0.2)
         # Load the rock
-        # rock_prim_path = '/MHL/rock'
-        # rock_usd_path = '/home/haoyu/isaacsim_assets/USD/3D model/rock/rock.usd'
-        # add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
+        rock_prim_path = "/World/rock"
+        rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
+        rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
+        add_update_semantics(prim=get_prim_at_path('/World/rock/Mesh/mesh'),
+                             type_label='reflectivity',
+                             semantic_label='2.0')
         
-        # # Toggle rigid body and collider preset for rob and rock
+        # Toggle rigid body and collider preset for rob and rock
         self._rob = get_prim_at_path(robot_prim_path)
         rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(self._rob)
         rob_rigidBody_API.CreateDisableGravityAttr(True)
@@ -250,20 +184,16 @@ class UIBuilder:
         rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path,
                                          mass=self._rob_mass)
         
-        # rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-        #                    translation=np.array([0.0, 3.5, 0.5]),
-        #                    orientation=euler_angles_to_quat(np.array([0.0,0.0,125]), degrees=True),
-        #                    collision=True,
-        #                    )
-        # rock_collider_prim.set_collision_approximation('convexDecomposition')
-        # rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
+        rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
+                           translation=np.array([-0.24005, 0.04302, -1.55]),
+                           orientation=euler_angles_to_quat(np.array([-0.797,-1.337,89.835]), degrees=True, extrinsic=False),
+                           collision=True,
+                           )
+        rock_collider_prim.set_collision_approximation('convexDecomposition')
+        rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
         
         
-        # self._DVL = DVLsensor(elevation=30)
-        # self._DVL.attachDVL(rigid_body_path=get_prim_path(self._rob),
-        #                     location=np.array([0.0,0.0,-0.01]))
-        # self._DVL.add_single_beam()
-        # self._DVL.add_debug_lines()
+        
         # Attach the front camera
         cam_prim_path = robot_prim_path + '/Camera'
         self._cam = Camera(
@@ -271,17 +201,22 @@ class UIBuilder:
             resolution=self._cam_res,
             )
         self._cam.set_focal_length(0.1 * self._cam_focal)
-        SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0], orientation=self._cam_pose[1])
-
-
-        MHLMesh_prim_path = '/World/mhl_scaled/Mesh/mesh'
-        SingleGeometryPrim(prim_path=MHLMesh_prim_path, collision=True)
-
+        self._cam.set_clipping_range(0.1, 100)
+        SingleXFormPrim(cam_prim_path).set_local_pose(translation=[0.0,0.0,0.1],
+                                                      orientation=euler_angles_to_quat(np.array([90,-90,0.0]),
+                                                                                       degrees=True,
+                                                                                       extrinsic=False))
+        
+        # Attach the forward looking imaging sonar
+        self._sonar = ImagingSonarSensor(prim_path=robot_prim_path,
+                                         trans=[0.5, 0.0, 0.1],
+                                         orients=euler_angles_to_quat(np.array([0, -69, -90]), degrees=True, extrinsic=True), # manually set this angle!!!
+                                         hori_res=3000)
 
     def _setup_scenario(self):
         """
         This function is attached to the Load Button as the setup_post_load_fn callback.
-        The user may assume that their assets have been loaded by their setup_scene_fn callback, that
+        The user may assume that their assets have been loaded by t setup_scene_fn callback, that
         their objects are properly initialized, and that the timeline is paused on timestep 0.
         """
         self._reset_scenario()
@@ -293,7 +228,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._cam)
+        self._scenario.setup_scenario(self._rob, self._sonar, self._cam)
 
     def _on_post_reset_btn(self):
         """
@@ -301,7 +236,7 @@ class UIBuilder:
         The user may assume that their objects are properly initialized, and that the timeline is paused on timestep 0.
 
         They may also assume that objects that were added to the World.Scene have been moved to their default positions.
-        I.e. the cube prim will move back to the position it was in when it was created in self._setup_scene().
+        I.e. the cube prim will move back to the posiheirtion it was in when it was created in self._setup_scene().
         """
         self._reset_scenario()
 
@@ -318,7 +253,7 @@ class UIBuilder:
         Args:
             step (float): The dt of the current physics step
         """
-        self._scenario.update_scenario(step, self._param)
+        self._scenario.update_scenario(step)
 
     def _on_run_scenario_a_text(self):
         """
@@ -346,7 +281,7 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
-        # self._scenario.save()
+        self._scenario.save()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().
@@ -359,55 +294,3 @@ class UIBuilder:
         self._scenario_state_btn.reset()
         self._scenario_state_btn.enabled = False
         self._reset_btn.enabled = False
-
-
-
-    
-    def _on_color_param_changes(self, model):
-        for i, param_model in zip(range(9), self._param_models):
-            self._param[i] = param_model.get_value_as_float()    
-        self._update_demo_render()
-        if self._is_scenario_setup:
-            self._scenario.update_camera_render(self._param)
-
-
-    def _update_demo_render(self):
-
-            self._uw_image = wp.zeros_like(self._demo_rgba)
-            wp.launch(
-                dim=np.flip(self._demo_res),
-                kernel=UW_render,
-                inputs=[
-                    self._demo_rgba,
-                    self._demo_depth,
-                    wp.vec3f(*self._param[0:3]),
-                    wp.vec3f(*self._param[6:9]),
-                    wp.vec3f(*self._param[3:6])
-                ],
-                outputs=[
-                    self._uw_image
-                ]
-            )  
-            
-            self._demo_provider.set_bytes_data_from_gpu(self._uw_image.ptr, self._demo_res)
-    
-    def _on_save_param(self):
-        data = {
-            "backscatter_value":self._param[0:3],
-            'atten_coeff': self._param[6:9],
-            'backscatter_coeff': self._param[3:6]
-            }
-        save_dir = self.save_dir_field.get_value()
-        yaml_path = save_dir + f"{self.file_name_field.get_value()}.yaml"
-        png_path = save_dir + f"{self.file_name_field.get_value()}.png"
-        with open(yaml_path, 'w') as file:
-            try:
-                yaml.dump(data, file, sort_keys=False)
-                output_demo_image = Image.fromarray(self._uw_image.numpy(), 'RGBA')
-                output_demo_image.save(png_path)
-                print(f"Underwater render parameters written to {yaml_path}")
-            except yaml.YAMLError as e:
-                print(f"Error writing YAML file: {e}")
-
-
-    

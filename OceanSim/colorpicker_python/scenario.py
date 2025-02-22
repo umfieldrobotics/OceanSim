@@ -18,6 +18,8 @@ class MHL_colorpicker_Scenario():
     def __init__(self):
         self._rob = None
         self._cam = None
+        self.raw_rgba = None
+        self.depth_image = None
         self._running_scenario = False
         self._time = 0.0
 
@@ -26,8 +28,7 @@ class MHL_colorpicker_Scenario():
     def setup_scenario(self, rob, cam):
         self._rob = rob
         self._cam = cam
-        self.raw_rgba = None
-        self.depth_image = None
+
         # self._vel_buffer = []
         # self._range_buffer = []
         # self._singleBeam_buffer = []
@@ -99,29 +100,30 @@ class MHL_colorpicker_Scenario():
             
     
     def update_camera_render(self, render_param: np.ndarray):
-        if self.raw_rgba.size !=0:
-            backscatter_value = wp.vec3f(*render_param[0:3])
-            atten_coeff = wp.vec3f(*render_param[6:9])
-            backscatter_coeff = wp.vec3f(*render_param[3:6])
-            uw_image = wp.zeros_like(self.raw_rgba)
-            wp.launch(
-                dim=(self.raw_rgba.shape[0], self.raw_rgba.shape[1]),
-                kernel=UW_render,
-                inputs=[
-                    self.raw_rgba,
-                    self.depth_image,
-                    backscatter_value,
-                    atten_coeff,
-                    backscatter_coeff
-                ],
-                outputs=[
-                    uw_image
-                ]
-            )  
-            
-            self.image_provider.set_bytes_data_from_gpu(uw_image.ptr, [uw_image.shape[1], uw_image.shape[0]])
+        if self.raw_rgba is not None:
+            if self.raw_rgba.size !=0:
+                backscatter_value = wp.vec3f(*render_param[0:3])
+                atten_coeff = wp.vec3f(*render_param[6:9])
+                backscatter_coeff = wp.vec3f(*render_param[3:6])
+                uw_image = wp.zeros_like(self.raw_rgba)
+                wp.launch(
+                    dim=(self.raw_rgba.shape[0], self.raw_rgba.shape[1]),
+                    kernel=UW_render,
+                    inputs=[
+                        self.raw_rgba,
+                        self.depth_image,
+                        backscatter_value,
+                        atten_coeff,
+                        backscatter_coeff
+                    ],
+                    outputs=[
+                        uw_image
+                    ]
+                )  
+                
+                self.image_provider.set_bytes_data_from_gpu(uw_image.ptr, [uw_image.shape[1], uw_image.shape[0]])
 
-    
+        
     
     def save(self):
         np.save(self._output_dir + "/vel.npy", self._vel_buffer)

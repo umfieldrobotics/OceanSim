@@ -36,5 +36,12 @@ name = "OceanSim.colorpicker_python"
 
 [[python.module]]
 name = "OceanSim.MHL_test_python"
+
 [[python.module]]
 name = "OceanSim.MHL_test2_python"
+
+[[python.module]]
+name = "OceanSim.MHL_test3_python"
+
+[[python.module]]
+name = "OceanSim.MHL_test4_python"

@@ -48,6 +48,7 @@ This class sets up standard useful callback functions in UIBuilder:
 class Extension(omni.ext.IExt):
     def on_startup(self, ext_id: str):
         """Initialize extension and UI elements"""
+
         self.ext_id = ext_id
         self._usd_context = omni.usd.get_context()
 
@@ -72,7 +73,7 @@ class Extension(omni.ext.IExt):
                 onclick_action=(ext_id, f"CreateUIExtension:{EXTENSION_TITLE}"),
                 sub_menu=[
                     make_menu_item_description(
-                        ext_id, "Color Picker", lambda a=weakref.proxy(self): a._menu_callback()
+                        ext_id, "MHL_test3", lambda a=weakref.proxy(self): a._menu_callback()
                     )
                 ],
             )
