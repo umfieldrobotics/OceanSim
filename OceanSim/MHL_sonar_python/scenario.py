@@ -79,7 +79,7 @@ class MHL_sonar_test_Scenario():
             return
         
         self._time += step
-        self._rob_rigid_prim.set_linear_velocity(np.array([1, 0, 0]))
+        # self._rob_rigid_prim.set_linear_velocity(np.array([1, 0, 0]))
         # self._sonar.scan()
         self._sonar.make_sonar_data(normalizing_method = "range")
         self._sonar_provider.set_bytes_data_from_gpu(self._sonar.make_sonar_image().ptr, 

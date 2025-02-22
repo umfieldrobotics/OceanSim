@@ -151,11 +151,12 @@ def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
 def make_sonar_image(sonar_data: wp.array(ndim=2, dtype=wp.vec3),
                      sonar_image: wp.array(ndim=3, dtype=wp.uint8)):
     i, j = wp.tid()
+    width = sonar_data.shape[1]
     sonar_rgb = wp.uint8(sonar_data[i,j][2] * wp.float32(255))
-    sonar_image[i,j,0] = sonar_rgb
-    sonar_image[i,j,1] = sonar_rgb
-    sonar_image[i,j,2] = sonar_rgb
-    sonar_image[i,j,3] = wp.uint8(255)
+    sonar_image[i,width-j,0] = sonar_rgb
+    sonar_image[i,width-j,1] = sonar_rgb
+    sonar_image[i,width-j,2] = sonar_rgb
+    sonar_image[i,width-j,3] = wp.uint8(255)
 
 
 class ImagingSonarSensor:

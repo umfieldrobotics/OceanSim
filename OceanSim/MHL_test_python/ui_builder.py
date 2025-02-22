@@ -19,7 +19,7 @@ from isaacsim.sensors.camera import Camera
 
 # Custom import
 from ..sensors.ImagingSonarSensor_warp import ImagingSonarSensor
-from .scenario import MHL_sonar_test_Scenario
+from .scenario import MHL_test_Scenario
 
 class UIBuilder:
     def __init__(self):
@@ -140,12 +140,10 @@ class UIBuilder:
         # Camera parameters
         self._cam = None
         self._cam_res = (1920, 1080)
-        self._cam_pose = (np.array([0.25, 0.0, 0.0]), 
-                          np.array([0.5,0.5,-0.5,-0.5]))
-        self._cam_focal = 13
-        
+
+        self._cam_focal = 21.1
         # Scenario
-        self._scenario = MHL_sonar_test_Scenario()
+        self._scenario = MHL_test_Scenario()
 
 
     def _setup_scene(self):
@@ -157,11 +155,11 @@ class UIBuilder:
         create_new_stage()
         # load MHL scene and turn on collider
 
-        MHL_prim_path = '/World/mhl'
-        MHL_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/MHL_Water.usd"
+        MHL_prim_path = '/World/MHL'
+        MHL_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/mhl_scaled.usd"
         add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
         SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
-        add_update_semantics(prim=get_prim_at_path(MHL_prim_path),
+        add_update_semantics(prim=get_prim_at_path('/World/MHL/Mesh/mesh'),
                              type_label='reflectivity',
                              semantic_label='1.0')
         # Load the robot
@@ -170,10 +168,10 @@ class UIBuilder:
         # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         DynamicCuboid(prim_path=robot_prim_path, size=0.2)
         # Load the rock
-        rock_prim_path = '/World/rock'
+        rock_prim_path = "/World/rock"
         rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
         rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
-        add_update_semantics(prim=rock_prim,
+        add_update_semantics(prim=get_prim_at_path('/World/rock/Mesh/mesh'),
                              type_label='reflectivity',
                              semantic_label='2.0')
         
@@ -187,8 +185,8 @@ class UIBuilder:
                                          mass=self._rob_mass)
         
         rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-                           translation=np.array([1.0, 0.1, -1.5]),
-                           orientation=euler_angles_to_quat(np.array([0.0,0.0,90]), degrees=True),
+                           translation=np.array([-0.24005, 0.04302, -1.55]),
+                           orientation=euler_angles_to_quat(np.array([-0.797,-1.337,89.835]), degrees=True, extrinsic=False),
                            collision=True,
                            )
         rock_collider_prim.set_collision_approximation('convexDecomposition')
@@ -203,13 +201,17 @@ class UIBuilder:
             resolution=self._cam_res,
             )
         self._cam.set_focal_length(0.1 * self._cam_focal)
-        SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0],orientation=self._cam_pose[1])
+        self._cam.set_clipping_range(0.1, 100)
+        SingleXFormPrim(cam_prim_path).set_local_pose(translation=[0.0,0.0,0.1],
+                                                      orientation=euler_angles_to_quat(np.array([90,-90,0.0]),
+                                                                                       degrees=True,
+                                                                                       extrinsic=False))
         
         # Attach the forward looking imaging sonar
         self._sonar = ImagingSonarSensor(prim_path=robot_prim_path,
-                                         trans=self._cam_pose[0],
-                                         orients=euler_angles_to_quat(np.array([0, 30, 0]), degrees=True),
-                                         hori_res=6000)
+                                         trans=[0.5, 0.0, 0.1],
+                                         orients=euler_angles_to_quat(np.array([0, -69, -90]), degrees=True, extrinsic=True), # manually set this angle!!!
+                                         hori_res=3000)
 
     def _setup_scenario(self):
         """
