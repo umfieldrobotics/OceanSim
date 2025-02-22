@@ -23,16 +23,16 @@ class MHL_colorpicker_Scenario():
 
 
 
-    def setup_scenario(self, rob, cam, dvl):
+    def setup_scenario(self, rob, cam):
         self._rob = rob
         self._cam = cam
-        self._DVL = dvl
-
-        self._vel_buffer = []
-        self._range_buffer = []
-        self._singleBeam_buffer = []
-        self._output_dir = '/home/haoyu/Desktop//MHL_replica'
-        self._backend = rep.BackendDispatch({"paths": {"out_dir": self._output_dir}})
+        self.raw_rgba = None
+        self.depth_image = None
+        # self._vel_buffer = []
+        # self._range_buffer = []
+        # self._singleBeam_buffer = []
+        # self._output_dir = '/home/haoyu/Desktop//MHL_replica'
+        # self._backend = rep.BackendDispatch({"paths": {"out_dir": self._output_dir}})
 
         self._running_scenario = True
         self._device = str(wp.get_preferred_device())
@@ -60,10 +60,12 @@ class MHL_colorpicker_Scenario():
         with self.window.frame:
             with ui.ZStack(height=720):
                 ui.Rectangle(style={"background_color": 0xFF000000})
-                # ui.Image('/home/haoyu/isaacsim/extsUser/OceanSim/data/icon.png',
-                #         fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT,
-                #         alignment=ui.Alignment.CENTER)
-                ui.ImageWithProvider(self.image_provider, width=1280, height=720)
+                ui.Label('Run the scenario for image to be received',
+                         style={'font_size': 55,'alignment': ui.Alignment.CENTER},
+                         word_wrap=True)
+                ui.ImageWithProvider(self.image_provider, width=1280, height=720,
+                                     style={'fill_policy': ui.FillPolicy.PRESERVE_ASPECT_FIT,
+                                    'alignment' :ui.Alignment.CENTER})
 
             
 
@@ -82,49 +84,46 @@ class MHL_colorpicker_Scenario():
         self._time += step
         if self._ldr.get_data().size == 0:
             return
-        
+        self.raw_rgba = self._ldr.get_data()
+        self.depth_image = self._depth.get_data()        
         SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([0.5,0,0]))
-
-        raw_rgba = self._ldr.get_data()
-        depth_image = self._depth.get_data()
-        backscatter_value = wp.vec3f(*render_param[0:3])
-        atten_coeff = wp.vec3f(*render_param[6:9])
-        backscatter_coeff = wp.vec3f(*render_param[3:6])
-        uw_image = wp.zeros_like(raw_rgba)
-        wp.launch(
-            dim=(raw_rgba.shape[0], raw_rgba.shape[1]),
-            kernel=UW_render,
-            inputs=[
-                raw_rgba,
-                depth_image,
-                backscatter_value,
-                atten_coeff,
-                backscatter_coeff
-            ],
-            outputs=[
-                uw_image
-            ]
-        )  
-
-        self.image_provider.set_bytes_data_from_gpu(uw_image.ptr, [uw_image.shape[1], uw_image.shape[0]])
-        self._backend.schedule(write_image, path=f'cam/rgb_{self._id}.png', data=uw_image)
-        # print(self._DVL.get_linear_vel())
-        print(self._DVL.get_depth())
-        # print(self._DVL.get_single_beam_range())
-        self._vel_buffer.append(self._DVL.get_linear_vel())
-        self._range_buffer.append(self._DVL.get_depth())
-        self._singleBeam_buffer.append(self._DVL.get_single_beam_range())
+        
+        self.update_camera_render(render_param)
+        # self._backend.schedule(write_image, path=f'cam/rgb_{self._id}.png', data=uw_image)
+        # self._vel_buffer.append(self._DVL.get_linear_vel())
+        # self._range_buffer.append(self._DVL.get_depth())
+        # self._singleBeam_buffer.append(self._DVL.get_single_beam_range())
         self._id += 1
 
+       
+            
+    
+    def update_camera_render(self, render_param: np.ndarray):
+        if self.raw_rgba.size !=0:
+            backscatter_value = wp.vec3f(*render_param[0:3])
+            atten_coeff = wp.vec3f(*render_param[6:9])
+            backscatter_coeff = wp.vec3f(*render_param[3:6])
+            uw_image = wp.zeros_like(self.raw_rgba)
+            wp.launch(
+                dim=(self.raw_rgba.shape[0], self.raw_rgba.shape[1]),
+                kernel=UW_render,
+                inputs=[
+                    self.raw_rgba,
+                    self.depth_image,
+                    backscatter_value,
+                    atten_coeff,
+                    backscatter_coeff
+                ],
+                outputs=[
+                    uw_image
+                ]
+            )  
+            
+            self.image_provider.set_bytes_data_from_gpu(uw_image.ptr, [uw_image.shape[1], uw_image.shape[0]])
 
-    
-    
     
     
     def save(self):
-        # self._backend.schedule(write_np, path='vel.npy', data=self._vel_buffer)
-        # self._backend.schedule(write_np, path='range.npy', data=self._range_buffer)
-        # self._backend.schedule(write_np, path='singlebeam_range.npy', data=self._singleBeam_buffer)
         np.save(self._output_dir + "/vel.npy", self._vel_buffer)
         np.save(self._output_dir + "/range.npy", self._range_buffer)
         np.save(self._output_dir + "/singleBeam.npy", self._singleBeam_buffer)

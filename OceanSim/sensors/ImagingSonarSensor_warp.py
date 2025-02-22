@@ -4,7 +4,7 @@ import omni.replicator.core as rep
 import numpy as np
 from omni.replicator.core.scripts.functional import write_np
 import warp as wp
-
+import carb
 
 @wp.func
 def cartesian_to_spherical(cart: wp.vec3) -> wp.vec3:
@@ -142,7 +142,7 @@ def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
     intensity[i,j] += offset
     intensity[i,j] *= gain
     intensity[i,j] = wp.clamp(intensity[i,j], wp.float32(0.0), wp.float32(1.0))
-    # intensity[i,j] = range_ray_noise[i,j]
+
     result[i,j] = wp.vec3(r[i,j] * wp.cos(azi[i,j]),
                           r[i,j] * wp.sin(azi[i,j]),
                           intensity[i,j])
@@ -162,23 +162,29 @@ class ImagingSonarSensor:
 
     def __init__(self, prim_path : str, 
                  trans : list[float]= [0.0, 0.0, 0.0], 
-                 orients: list[float] = [1.0, 0.0, 0.0, 0.0]
+                 orients: list[float] = [1.0, 0.0, 0.0, 0.0], # quaternion
+                 min_range: float = 0.2, # m
+                 max_range: float = 3.0, # m
+                 range_res: float = 0.008, # deg
+                 hori_fov: float = 130.0, # deg
+                 vert_fov: float = 20.0, # deg
+                 angular_res: float = 0.5, # deg
+                 hori_res: int = 3000 # isaac camera render product only accepts square pixel, 
+                                      # for now vertical res is automatically set with ratio of hori_fov vs.vert_fov 
                  ):
         # Raw parameters from Oculus M370s\MT370s\MD370s
-        self.max_range = 3 # m (max is 200 m in datasheet )
-        self.min_range = 0.2 # m (min is 0.2 m in datasheet)
-        self.range_res = 0.008 # m (datasheet is 0.008 m)
-        self.update_rate = 40 # Hz (max update rate) (NOT USED FOR NOW)!!
-        self.hori_fov = 130 # degree (hori_fov is 130 degrees in datasheet)
-        self.vert_fov = 20 # degree (vert_fov is 20 degrees in datasheet)
-        self.num_beams = 256 # (max number of beams) (NOT USED FOR NOW)!!
-        self.angular_res: float = 0.5 # degree (datasheet is 2 deg)
-        self.beam_separation = 0.5 # degree (Not USED FOR NOW)!!
+        self.max_range = max_range # m (max is 200 m in datasheet )
+        self.min_range = min_range # m (min is 0.2 m in datasheet)
+        self.range_res = range_res # m (datasheet is 0.008 m)
+        self.hori_fov = hori_fov # degree (hori_fov is 130 degrees in datasheet)
+        self.vert_fov = vert_fov # degree (vert_fov is 20 degrees in datasheet)
+        self.angular_res = angular_res # degree (datasheet is 2 deg)
+        self.hori_res= hori_res
 
-        self.hori_res: int = 3000
+        # self.beam_separation = 0.5 # degree (Not USED FOR NOW)!!
+        # self.num_beams = 256 # (max number of beams) (NOT USED FOR NOW)!!
+        # self.update_rate = 40 # Hz (max update rate) (NOT USED FOR NOW)!!
 
-
-        # This parameter essentially controls the viewing distance from sonar to objects given constant FOV
 
         # Generate sonar map's r and z meshgrid
         self.r, self.azi = np.meshgrid(np.arange(self.min_range,self.max_range,self.range_res),
@@ -194,15 +200,11 @@ class ImagingSonarSensor:
         self.sonar_map = wp.zeros(shape=self.r.shape, dtype=wp.vec3)
         self.sonar_image = wp.zeros(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
 
-        # We introduce this factor to adjust raycast density
-        # (Equivalently, adjust the beam_separation) 
-        # Increase this value by 1 will quadraple the total number of raycasts
 
         self.AR = self.hori_fov / self.vert_fov
-        # self.hori_res = int(self.ray_factor * (self.hori_fov / self.beam_separation))
         self.vert_res = int(self.hori_res / self.AR)
         # By doing this, I am assuming the vertical beam separation
-        # is the same as the beam vertical separation. 
+        # is the same as the beam horizontal separation. 
         # This is bacause replicator raytracing is specified as resolutions
         # while non-squre pixel is not supported in Isaac sim. See details below.
         
@@ -235,13 +237,20 @@ class ImagingSonarSensor:
         
         # Future: maybe able to increase W or H resolution and cut out data points outside of the view
         # But this method requires us to think about math about combinations 
-        # of f and A_h will enable us to cut out the least number of points.
+        # of f and A_h that will enable us to cut out the least number of points.
 
 
     # Initialize the sensor so that annotator is 
     # loaded on cuda and ready to acquire data
     # Data is generated per simulation tick
-    def initialize(self, output_dir : str = None):
+
+    # do_array_copy: If True, retrieve a copy of the data array. 
+    # This is recommended for workflows using asynchronous
+    # backends to manage the data lifetime. 
+    # Can be set to False to gain performance if the data is 
+    # expected to be used immediately within the writer. Defaults to True.
+
+    def initialize(self, output_dir : str = None, if_array_copy: bool = True):
         self.writing = False
         self._device = str(wp.get_preferred_device())
         self.scan_data = {}
@@ -254,30 +263,25 @@ class ImagingSonarSensor:
         self.pointcloud_annot = rep.AnnotatorRegistry.get_annotator(
             name="pointcloud",
             # init_params={"includeUnlabelled": True},
-            do_array_copy=True,
+            do_array_copy=if_array_copy,
             device=self._device
             )
         
         self.cameraParams_annot = rep.AnnotatorRegistry.get_annotator(
             name="CameraParams",
-            do_array_copy=True,
+            do_array_copy=if_array_copy,
             device=self._device
             )
         
         self.semanticSeg_annot = rep.AnnotatorRegistry.get_annotator(
             name='semantic_segmentation',
             init_params={"colorize": False},
-            do_array_copy=True,
+            do_array_copy=if_array_copy,
             device=self._device
         )
 
-        print(f'Using {self._device}' )
-        print(f'Render query res: {self.hori_res} x {self.vert_res}. Binning res: {self.r.shape[0]} x {self.r.shape[1]}')
-        # do_array_copy: If True, retrieve a copy of the data array. 
-        # This is recommended for workflows using asynchronous
-        # backends to manage the data lifetime. 
-        # Can be set to False to gain performance if the data is 
-        # expected to be used immediately within the writer. Defaults to True.
+        carb.log_info(f'Using {self._device}' )
+        carb.log_info(f'Render query res: {self.hori_res} x {self.vert_res}. Binning res: {self.r.shape[0]} x {self.r.shape[1]}')
 
         self.pointcloud_annot.attach(self.rp)
         self.cameraParams_annot.attach(self.rp)
@@ -293,32 +297,42 @@ class ImagingSonarSensor:
         self.binned_intensity.zero_()
         self.sonar_map.zero_()
         self.sonar_image.zero_()
-        # Enable this feature so that warp will automatically free up GPU mamory 
-        # if above certain total percentage usage
-        if wp.is_mempool_supported:
-            if not wp.is_mempool_enabled:
-                wp.set_mempool_enabled()
-            wp.set_mempool_release_threshold("cuda:0", 0.85)
+
         
-        print(f'Sonar is initialized. (Writing data: {self.writing})')
+        carb.log_info(f'Sonar is initialized. (Writing data sets to {self.writing})')
 
     def scan(self):
-        # Due to the rendering dt, the first few simulation tick gives empty data.
+        # Due to the time to load annotator to cuda, the first few simulation tick gives no annotator in memory.
+        # This would also reult error when no mesh within the sonar fov
         # Ignore scan that gives empty data stream
         if len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
             self.scan_data['pcl'] = self.pointcloud_annot.get_data(device=self._device)['data'][0]  # shape :(1,N,3) <class 'warp.types.array'>
             self.scan_data['normals'] = self.pointcloud_annot.get_data(device=self._device)['info']['pointNormals'][0] # shape :(1,N,4) <class 'warp.types.array'>
             self.scan_data['semantics'] = self.pointcloud_annot.get_data(device=self._device)['info']['pointSemantic'][0] # shape: (1, N) <class 'warp.types.array'>
-            self.scan_data['viewTransform'] = self.cameraParams_annot.get_data()['cameraViewTransform'].reshape(4,4).T
-            self.scan_data['idToLabels'] = self.semanticSeg_annot.get_data()['info']['idToLabels']
+            self.scan_data['viewTransform'] = self.cameraParams_annot.get_data()['cameraViewTransform'].reshape(4,4).T # 4 by 4 np.ndarray extrinsic matrix
+            self.scan_data['idToLabels'] = self.semanticSeg_annot.get_data()['info']['idToLabels'] # dict 
+            return True
+        else:
+            return False
 
 
-    def make_sonar_data(self, binning_method: str = "sum", normalizing_method: str = "all"):
+    def make_sonar_data(self, 
+                        binning_method: str = "sum", 
+                        normalizing_method: str = "range",
+                        query_prop: str ='reflectivity', # Do not modify this if not developing the sensor.
+                        attenuation: float = 0.1, # Control the attentuation along distance when computing attenuation
+                        gau_noise_param: float = 0.2, # multiplicative noise coefficient 
+                        ray_noise_param: float = 0.05, # additive noise parameter
+                        intensity_offset: float = 0.0, # offset intensity after normalization
+                        intensity_gain: float = 1.0, # scale intensity after normalization
+                        central_peak: float = 2, # control the strength of the central strong reflection
+                        central_std: float = 0.001, # control the spread of the centrol strong reflection
+                        ):
         # A utility function helps to convert idToLabels into indexToProp array
-        # This manipulation is needed for warp computation framework
+        # This manipulation facilitates warp computation framework
         # indexToProp is an 1-dim array where the values associated with the query property 
         # are placed at the index corresponding to the key
-        # First two entry are always zero for {'0': {'class': 'BACKGROUND'}, '1': {'class': 'UNLABELLED'}}
+        # First two entry are always zero because {'0': {'class': 'BACKGROUND'}, '1': {'class': 'UNLABELLED'}}
         # eg: indexToProp = [0, 0, 0.1, 1 .....] 
         def make_indexToProp_array(idToLabels: dict, query_property: str):
             max_id = max(idToLabels.keys(), default=-1)
@@ -329,11 +343,12 @@ class ImagingSonarSensor:
                         indexToProp_array[int(id)] = idToLabels.get(id).get(property)
             return indexToProp_array
 
-        if len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
+        # if len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
+        if self.scan():
             num_points = self.scan_data['pcl'].shape[0]
-            # Convert these small numpy arrays to cuda
+            # Load these small numpy arrays to cuda
             indexToRefl = wp.array(make_indexToProp_array(idToLabels=self.scan_data['idToLabels'],
-                                                         query_property='reflectivity'),
+                                                         query_property=query_prop),
                                                          dtype=wp.float32)
             viewTransform=wp.mat44(self.scan_data['viewTransform'])
             # directly use warp array loaded on cuda
@@ -343,12 +358,8 @@ class ImagingSonarSensor:
         else:
             return
 
-        # Intensity parameters
-        
-        attenuation = 0.1
-        
+        # Compute intensity for each ray query     
         intensity = wp.empty(shape=(num_points,), dtype=wp.float32)
-
         wp.launch(kernel=compute_intensity,
                   dim=num_points,
                   inputs=[
@@ -364,6 +375,7 @@ class ImagingSonarSensor:
                   ]
                 )
                 
+        # Transform pointcloud from world cooridates to sonar local
         pcl_local =wp.empty(shape=(num_points,), dtype=wp.vec3)
         pcl_spher = wp.empty(shape=(num_points,), dtype=wp.vec3)
         wp.launch(kernel=world2local,
@@ -378,6 +390,8 @@ class ImagingSonarSensor:
                     ]
                 )
         
+        # Collapse three dimensional intensity data to 2D
+        # Simply sum intensity return and compute number of return that falls into the same bin
         self.bin_sum.zero_()
         self.bin_count.zero_()
         self.binned_intensity.zero_()
@@ -399,7 +413,7 @@ class ImagingSonarSensor:
                   ]
                   )
         
-
+        # Process intensity data by either sum as it is or averaging
         if binning_method == "mean":
             wp.launch(
                 kernel=average,
@@ -416,20 +430,18 @@ class ImagingSonarSensor:
         if binning_method == "sum":
             self.binned_intensity = self.bin_sum
 
-        # Sonar map Noise Parameters
-        gau_noise_param = 0.2
-        ray_noise_param = 0.05
-        intensity_offset = 0.0
-        intensity_gain = 1.0
-        # Calculate noise
+
+        # Calculate additive rayleigh noise (range dependent and mimic central beam)
+        # Calculate multiplicative gaussian noise
         gau_noise = np.random.normal(loc=0, scale=gau_noise_param, size=self.bin_sum.shape)
         ray_noise = np.random.rayleigh(scale=ray_noise_param, size=self.bin_sum.shape)
-        std = self.hori_fov/30000
-        peak = 1.5
-        range_dependent_ray_noise = (self.r/self.max_range)**2*(1 + peak*np.exp(-(self.azi-np.pi/2)**2/std))*ray_noise 
+        range_dependent_ray_noise = (self.r/self.max_range)**2*(1 + central_peak*np.exp(-(self.azi-np.pi/2)**2/central_std))*ray_noise 
 
+        # Normalizing intensity at each bin either by global maximum or rangewise maximum
 
         self.sonar_map.zero_()
+
+        # Compute global maximum
         if normalizing_method == "all":
             # warp.max(scalar, scalar) has bug. Now using the warp.atomic_max(array, i, value)
             maximum = wp.zeros(shape=(1,), dtype=wp.float32)
@@ -440,10 +452,11 @@ class ImagingSonarSensor:
                     self.binned_intensity,
                 ],
                 outputs=[
-                    maximum
+                    maximum # wp.array of shape (1,)
                 ]
             )
             maximum = maximum.numpy()[0]
+            # Apply noise, normalize by global maximum, and convert (r, azi) to (x,y) for plotting
             wp.launch(
                   kernel=make_sonar_map_all,
                   dim=self.sonar_map.shape,
@@ -463,6 +476,7 @@ class ImagingSonarSensor:
                   )
             
         if normalizing_method == "range":
+            # Compute rangewise maximum
             maximum = wp.zeros(shape=(self.r.shape[0],), dtype=wp.float32)
             wp.launch(
                 dim=self.bin_sum.shape,
@@ -471,9 +485,10 @@ class ImagingSonarSensor:
                     self.binned_intensity,
                 ],
                 outputs=[
-                    maximum
+                    maximum      # wp.array of shape (number of range bins, )
                 ]
             )
+            # Apply noise, normalize by range maximum, and convert (r, azi) to (x,y) for plotting
             wp.launch(
                   kernel=make_sonar_map_range,
                   dim=self.sonar_map.shape,
@@ -493,7 +508,7 @@ class ImagingSonarSensor:
                   )
         
 
-        
+        # Write data to the dir
         if self.writing:
             # self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
             # self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
@@ -502,6 +517,8 @@ class ImagingSonarSensor:
         
         self.id += 1
     
+
+    # This is a utility function that converts sonar_data to grey scale sonar image for viewport visualization
     def make_sonar_image(self):
         self.sonar_image.zero_()
         wp.launch(
@@ -516,9 +533,21 @@ class ImagingSonarSensor:
         )
         return self.sonar_image
 
+    def get_range(self):
+        return [self.min_range, self.max_range]
+    
+    def get_fov(self):
+        return [self.hori_fov, self.vert_fov]
+    
+    def get_res(self):
+        return [self.hori_res, self.vert_res]
+    
+    # Detach the annotator from render product and clear the data cache
     def close(self):
         self.pointcloud_annot.detach(self.rp)
         self.cameraParams_annot.detach(self.rp)
+        self.semanticSeg_annot.detach(self.rp)
 
-        self.pointcloud_annot = None
-        self.cameraParams_annot = None
+        rep.AnnotatorCache.clear(self.pointcloud_annot)
+        rep.AnnotatorCache.clear(self.cameraParams_annot)
+        rep.AnnotatorCache.clear(self.semanticSeg_annot)

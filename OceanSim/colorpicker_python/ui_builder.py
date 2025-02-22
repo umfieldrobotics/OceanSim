@@ -11,7 +11,7 @@ from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, SingleGeometry
 from isaacsim.core.utils.prims import get_prim_at_path, get_prim_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, open_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, combo_floatfield_slider_builder, Button
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, combo_floatfield_slider_builder, Button, StringField
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.sensors.camera import Camera
 from isaacsim.core.api.objects import DynamicCuboid
@@ -91,6 +91,7 @@ class UIBuilder:
         Build a custom UI tool to run your extension.
         This function will be called any time the UI window is closed and reopened.
         """
+        self._camera_prim_path = None
         self._is_annotator_loaded = False
         self._colorpicker_provider = ui.ByteImageProvider()  
         self._param = np.zeros(9)
@@ -148,22 +149,30 @@ class UIBuilder:
             with ui.VStack(spacing=10):
 
                 for i in range(9):
-                    param_model, _ = combo_floatfield_slider_builder(
+                    param_model, param_slider = combo_floatfield_slider_builder(
                         label=params_labels[i],
                         type=params_types[i],
                         default_val=params_default[i])
                     self._param_models.append(param_model)
                     param_model.add_value_changed_fn(self._on_color_param_changes)
-                with ui.ZStack(height=500):
+                    
+                with ui.ZStack(height=300):
                     ui.Rectangle(style={"background_color": 0xFF000000})
-                    ui.ImageWithProvider(self._colorpicker_provider)
-
+                    ui.ImageWithProvider(self._colorpicker_provider,
+                                         style={'alignment': ui.Alignment.CENTER,
+                                                "fill_policy": ui.FillPolicy.PRESERVE_ASPECT_FIT})
+                camera_prim_path_field = StringField(
+                    label='Camera Prim Path',
+                    tooltip='Paste your camera prim path in here',
+                    on_value_changed_fn=self._on_camera_changed_fn
+                )
+                self.wrapped_ui_elements.append(camera_prim_path_field)
                 load_pic_button = Button(
-                    label="Load the picture from active camera annotator",
+                    label="Load Picture",
                     text="Get picture",
                     on_click_fn=self._on_load_picture
-
                 )
+                self.wrapped_ui_elements.append(load_pic_button)
                 
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
@@ -221,11 +230,11 @@ class UIBuilder:
         # rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
         
         
-        self._DVL = DVLsensor(elevation=30)
-        self._DVL.attachDVL(rigid_body_path=get_prim_path(self._rob),
-                            location=np.array([0.0,0.0,-0.01]))
-        self._DVL.add_single_beam()
-        self._DVL.add_debug_lines()
+        # self._DVL = DVLsensor(elevation=30)
+        # self._DVL.attachDVL(rigid_body_path=get_prim_path(self._rob),
+        #                     location=np.array([0.0,0.0,-0.01]))
+        # self._DVL.add_single_beam()
+        # self._DVL.add_debug_lines()
         # Attach the front camera
         cam_prim_path = robot_prim_path + '/Camera'
         self._cam = Camera(
@@ -234,7 +243,7 @@ class UIBuilder:
             )
         self._cam.set_focal_length(0.1 * self._cam_focal)
         SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0], orientation=self._cam_pose[1])
-        
+
 
         MHLMesh_prim_path = '/World/mhl_scaled/Mesh/mesh'
         SingleGeometryPrim(prim_path=MHLMesh_prim_path, collision=True)
@@ -255,7 +264,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._cam, self._DVL)
+        self._scenario.setup_scenario(self._rob, self._cam)
 
     def _on_post_reset_btn(self):
         """
@@ -308,7 +317,7 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
-        self._scenario.save()
+        # self._scenario.save()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().
@@ -347,23 +356,4 @@ class UIBuilder:
     def _on_color_param_changes(self, model):
         for i, param_model in zip(range(9), self._param_models):
             self._param[i] = param_model.get_value_as_float()    
-        backscatter_value = wp.vec3f(*self._param[0:3])
-        atten_coeff = wp.vec3f(*self._param[6:9])
-        backscatter_coeff = wp.vec3f(*self._param[3:6])
-        uw_image = wp.zeros_like(self._raw_rgba)
-        wp.launch(
-            dim=(self._raw_rgba.shape[0], self._raw_rgba.shape[1]),
-            kernel=UW_render,
-            inputs=[
-                self._raw_rgba,
-                self._depth_image,
-                backscatter_value,
-                atten_coeff,
-                backscatter_coeff
-            ],
-            outputs=[
-                uw_image
-            ]
-        )  
-
-        self._colorpicker_provider.set_bytes_data_from_gpu(uw_image.ptr, [uw_image.shape[1], uw_image.shape[0]])
+        self._scenario.update_camera_render(self._param)

@@ -166,9 +166,9 @@ class UIBuilder:
                              semantic_label='1.0')
         # Load the robot
         robot_prim_path = "/World/rob"
-        robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
-        add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
-        # DynamicCuboid(prim_path=robot_prim_path, size=0.2)
+        # robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
+        # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
+        DynamicCuboid(prim_path=robot_prim_path, size=0.2)
         # Load the rock
         rock_prim_path = '/World/rock'
         rock_usd_path = '/home/haoyu/isaacsim_assets/USD/3D model/rock/rock.usd'
@@ -208,7 +208,8 @@ class UIBuilder:
         # Attach the forward looking imaging sonar
         self._sonar = ImagingSonarSensor(prim_path=robot_prim_path,
                                          trans=self._cam_pose[0],
-                                         orients=euler_angles_to_quat(np.array([0, 30, 0]), degrees=True))
+                                         orients=euler_angles_to_quat(np.array([0, 30, 0]), degrees=True),
+                                         hori_res=6000)
 
     def _setup_scenario(self):
         """
