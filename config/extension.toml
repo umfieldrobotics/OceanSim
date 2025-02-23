@@ -26,6 +26,12 @@ icon = "data/icon.png"
 name = "OceanSim.ImagingSonar_python"
 
 [[python.module]]
+name = "OceanSim.UW_Camera_python"
+
+[[python.module]]
+name = "OceanSim.Barometer_python"
+
+[[python.module]]
 name = "OceanSim.MHL_nav_python"
 
 [[python.module]]

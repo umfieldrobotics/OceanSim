@@ -5,24 +5,28 @@ import omni.ui as ui
 from omni.usd import StageEventType
 from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
 
+
+
 # Isaac sim import
 from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, SingleGeometryPrim
-from isaacsim.core.utils.prims import get_prim_at_path
+from isaacsim.core.utils.prims import get_prim_at_path, get_prim_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, open_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
-from isaacsim.core.utils.semantics import add_update_semantics
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, combo_floatfield_slider_builder, Button, StringField
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
-from isaacsim.sensors.camera import Camera
 from isaacsim.core.api.objects import DynamicCuboid
+from isaacsim.core.utils.extensions import get_extension_path, get_extension_id, get_extension_path_from_name
 
 
 # Custom import
-from ..sensors.DVLsensor import DVLsensor
-from .scenario import MHL_straighline_navigation_Scenario
+from .scenario import UW_Camera_Scenario
+from ..sensors.UW_Camera import UW_Camera
+
 
 class UIBuilder:
     def __init__(self):
+
+
         # Frames are sub-windows that can contain multiple UI elements
         self.frames = []
         # UI elements created using a UIElementWrapper instance
@@ -30,6 +34,8 @@ class UIBuilder:
 
         # Get access to the timeline to control stop/pause/play programmatically
         self._timeline = omni.timeline.get_timeline_interface()
+        # A flag indicating if the scenario is loaded at least once (helpful for UI module to see if scenario variables are created)
+        self._is_scenario_setup = False
 
         # Run initialization for the provided example
         self._on_init()
@@ -91,6 +97,8 @@ class UIBuilder:
         Build a custom UI tool to run your extension.
         This function will be called any time the UI window is closed and reopened.
         """
+        self._extension_path = get_extension_path_from_name("OceanSim")
+
         world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
 
         with world_controls_frame:
@@ -122,8 +130,7 @@ class UIBuilder:
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
 
-
-
+                
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
     ######################################################################################
@@ -133,22 +140,15 @@ class UIBuilder:
         # Robot parameters
 
         self._rob_mass = 10 # kg
-        # DVl parameters
-        self._DVL = None
-        self._DVL_elevation = 30.0 # deg
-        self._DVL_min_range = 0.01  # m
-        self._DVL_max_range = 20.0 # m
-        self._DVL_location = np.array([0.0,0.0,-0.2])
-        self._DVL_vel_cov = 0
-        self._DVL_depth_cov = 0
 
 
         # Camera parameters
         self._cam = None
         self._cam_res = (1920, 1080)
         self._cam_pose = ([0.5,0.0,0.0], [0.5,0.5,-0.5,-0.5])
-        self._cam_focal = 6
-        self._scenario = MHL_straighline_navigation_Scenario()
+        self._cam_focal = 20
+        self._scenario = UW_Camera_Scenario()
+        self._is_scenario_setup = True
 
 
     def _setup_scene(self):
@@ -162,15 +162,11 @@ class UIBuilder:
 
         # Load the robot
         robot_prim_path = "/World/rob"
-        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
-        add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
-        # DynamicCuboid(prim_path=robot_prim_path, size=0.25, color=np.array([0.5,0.5,1]))
-        # Load the rock
-        rock_prim_path = '/MHL/rock'
-        rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
-        add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
+        # robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
+        # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
+        DynamicCuboid(prim_path=robot_prim_path, size=0.5, color=np.array([0.5,0.5,1]))
         
-        # Toggle rigid body and collider preset for rob and rock
+        # # Toggle rigid body and collider preset for rob and rock
         self._rob = get_prim_at_path(robot_prim_path)
         rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(self._rob)
         rob_rigidBody_API.CreateDisableGravityAttr(True)
@@ -179,32 +175,16 @@ class UIBuilder:
         rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path,
                                          mass=self._rob_mass)
         
-        rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-                           translation=np.array([0.0, 2, -2]),
-                           orientation=euler_angles_to_quat(np.array([0.0,0.0,125]), degrees=True),
-                           collision=True,
-                           )
-        rock_collider_prim.set_collision_approximation('convexDecomposition')
-        rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
-        
-        
-        
-        # Initialize the DVL and attach it to the rob already being the rigid body
-        self._DVL = DVLsensor()
-        self._DVL.attachDVL(rigid_body_path=robot_prim_path, location=self._DVL_location)
-        self._DVL.add_debug_lines()
-        
-        # Attach the front camera
-        cam_prim_path = robot_prim_path + '/Camera'
-        self._cam = Camera(
+        cam_prim_path = robot_prim_path + '/UW_Camera'
+        self._cam = UW_Camera(
             prim_path=cam_prim_path,
             resolution=self._cam_res,
             )
         self._cam.set_focal_length(0.1 * self._cam_focal)
-        SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0],orientation=self._cam_pose[1])
+        SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0], orientation=self._cam_pose[1])
 
 
-        MHLMesh_prim_path = '/World/mhl_scaled/Mesh'
+        MHLMesh_prim_path = '/World/mhl_scaled/Mesh/mesh'
         SingleGeometryPrim(prim_path=MHLMesh_prim_path, collision=True)
 
 
@@ -223,7 +203,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._DVL, self._cam)
+        self._scenario.setup_scenario(self._rob, self._cam)
 
     def _on_post_reset_btn(self):
         """
@@ -276,7 +256,6 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
-        # self._scenario.save()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().
@@ -289,3 +268,10 @@ class UIBuilder:
         self._scenario_state_btn.reset()
         self._scenario_state_btn.enabled = False
         self._reset_btn.enabled = False
+
+
+
+
+
+
+    
