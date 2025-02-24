@@ -1,11 +1,15 @@
 from isaacsim.sensors.camera import Camera
 from isaacsim.core.utils.carb import get_carb_setting
 import omni.replicator.core as rep
+import omni.ui as ui
 import numpy as np
 from omni.replicator.core.scripts.functional import write_np
 import warp as wp
 import carb
 
+
+
+# TODO add viewport destroyer 
 @wp.func
 def cartesian_to_spherical(cart: wp.vec3) -> wp.vec3:
     r = wp.sqrt(cart[0]*cart[0] + cart[1]*cart[1] + cart[2]*cart[2])
@@ -251,8 +255,9 @@ class ImagingSonarSensor:
     # Can be set to False to gain performance if the data is 
     # expected to be used immediately within the writer. Defaults to True.
 
-    def initialize(self, output_dir : str = None, if_array_copy: bool = True):
+    def initialize(self, output_dir : str = None, viewport: bool = True, if_array_copy: bool = True):
         self.writing = False
+        self._viewport = viewport
         self._device = str(wp.get_preferred_device())
         self.scan_data = {}
         self.id = 0
@@ -263,7 +268,7 @@ class ImagingSonarSensor:
 
         self.pointcloud_annot = rep.AnnotatorRegistry.get_annotator(
             name="pointcloud",
-            # init_params={"includeUnlabelled": True},
+            init_params={"includeUnlabelled": True},
             do_array_copy=if_array_copy,
             device=self._device
             )
@@ -281,8 +286,8 @@ class ImagingSonarSensor:
             device=self._device
         )
 
-        carb.log_info(f'Using {self._device}' )
-        carb.log_info(f'Render query res: {self.hori_res} x {self.vert_res}. Binning res: {self.r.shape[0]} x {self.r.shape[1]}')
+        print(f'Sonar using {self._device}' )
+        print(f'Sonar render query res: {self.hori_res} x {self.vert_res}. Binning res: {self.r.shape[0]} x {self.r.shape[1]}')
 
         self.pointcloud_annot.attach(self.rp)
         self.cameraParams_annot.attach(self.rp)
@@ -291,8 +296,11 @@ class ImagingSonarSensor:
         if output_dir is not None:
             self.writing = True
             self.backend = rep.BackendDispatch({"paths": {"out_dir": output_dir}})
+        if self._viewport:
+            self.make_sonar_viewport()
         
-        
+        print(f'Sonar is initialized. (Writing data sets to {self.writing})')
+
         self.bin_sum.zero_()
         self.bin_count.zero_()
         self.binned_intensity.zero_()
@@ -300,7 +308,6 @@ class ImagingSonarSensor:
         self.sonar_image.zero_()
 
         
-        carb.log_info(f'Sonar is initialized. (Writing data sets to {self.writing})')
 
     def scan(self):
         # Due to the time to load annotator to cuda, the first few simulation tick gives no annotator in memory.
@@ -508,7 +515,7 @@ class ImagingSonarSensor:
                   ]
                   )
         
-
+        
         # Write data to the dir
         if self.writing:
             # self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
@@ -516,6 +523,10 @@ class ImagingSonarSensor:
             self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
             print(f"[{self.id}] Writing sonar data to {self.backend.output_dir}")
         
+        if self._viewport:
+            self._sonar_provider.set_bytes_data_from_gpu(self.make_sonar_image().ptr, 
+                                                    [self.sonar_map.shape[1], self.sonar_map.shape[0]])        
+            
         self.id += 1
     
 
@@ -533,6 +544,34 @@ class ImagingSonarSensor:
             ]
         )
         return self.sonar_image
+    
+
+    def make_sonar_viewport(self):
+
+        sonar_range = self.get_range()
+        range_tick = np.round(np.linspace(sonar_range[0], sonar_range[1], 10), 2)
+
+        self._sonar_provider = ui.ByteImageProvider()
+        self._window = ui.Window("Sonar", width=800, height=800, visible=True)
+        with self._window.frame:
+            with ui.ZStack(height=720 + 40 ):
+                ui.Rectangle(style={"background_color": 0xFF000000})
+                ui.Label('Run the scenario for image to be received',
+                         style={'font_size': 55,'alignment': ui.Alignment.CENTER},
+                         word_wrap=True)
+                sonar_image_provider = ui.ImageWithProvider(self._sonar_provider, 
+                                    style={"width": 720, 
+                                        "height": 720, 
+                                        "fill_policy" : ui.FillPolicy.STRETCH,
+                                        'alignment': ui.Alignment.CENTER})
+                ui.Line(alignment=ui.Alignment.LEFT,
+                        style={'border_width': 2,
+                                'color':ui.color.white })
+                with ui.VStack(style={"spacing":720/(range_tick.size-1)}):
+                    for i in range(range_tick.size):
+                        ui.Label(str(range_tick[i]),style={'font_size': 15,'alignment': ui.Alignment.LEFT})
+
+
 
     def get_range(self):
         return [self.min_range, self.max_range]

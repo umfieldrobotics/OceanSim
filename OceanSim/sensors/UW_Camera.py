@@ -12,6 +12,9 @@ import carb
 
 # Custom import
 from ..utils.UWrenderer_utils import UW_render
+
+
+# TODO add viewport destroyer and annotator cleaning
 class UW_Camera(Camera):
 
     def __init__(self, 

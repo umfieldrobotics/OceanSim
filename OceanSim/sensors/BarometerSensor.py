@@ -12,9 +12,8 @@ from isaacsim.core.api.physics_context import PhysicsContext
 # Custom import
 from ..utils.MultivariateNormal import MultivariateNormal
 
-# TODO: @Haoyu - we should try to not let user define the g and water_surface_z.
-# for g we should get it from scene definition
-# for water_surface_z we should get it from the water surface you added
+# TODO: Can not automatically resolve water surface height, need to write a separate class for water surface 
+# (essentially a warp kernel connecting to a plane mesh)
 class BarometerSensor(BaseSensor):
     def __init__(self, 
                  prim_path, 

@@ -51,3 +51,15 @@ name = "OceanSim.MHL_test3_python"
 
 [[python.module]]
 name = "OceanSim.MHL_test4_python"
+
+[[python.module]]
+name = "OceanSim.experiment1_python"
+
+[[python.module]]
+name = "OceanSim.experiment2_python"
+
+[[python.module]]
+name = "OceanSim.experiment3_python"
+
+[[python.module]]
+name = "OceanSim.experiment4_python"
