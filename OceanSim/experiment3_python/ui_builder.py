@@ -14,12 +14,12 @@ from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.semantics import add_update_semantics
 from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
-from isaacsim.sensors.camera import Camera
 
 
 # Custom import
 from ..sensors.ImagingSonarSensor_warp import ImagingSonarSensor
-from .scenario import Exp3_Scenario
+from ..sensors.UW_Camera import UW_Camera
+from .scenario import pier_Scenario
 
 class UIBuilder:
     def __init__(self):
@@ -141,11 +141,15 @@ class UIBuilder:
         self._cam = None
         self._cam_res = (1920, 1080)
 
-        self._cam_focal = 21.1
+        self._cam_focal = 8.0
         # Scenario
-        self._scenario = Exp3_Scenario()
+        self._scenario = pier_Scenario()
 
-
+    def _add_domelight(self):
+        domelight = UsdLux.DomeLight.Define(get_current_stage(), Sdf.Path('/World/Domelight'))
+        domelight.CreateIntensityAttr(1000)
+        SingleXFormPrim(str(domelight.GetPath())).set_world_pose(position=np.array([0.0, 0.0, 100]))
+       
     def _setup_scene(self):
         """
         This function is attached to the Load Button as the setup_scene_fn callback.
@@ -153,29 +157,25 @@ class UIBuilder:
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         create_new_stage()
-        # load MHL scene and turn on collider
+        self._add_domelight()
 
-        MHL_prim_path = '/World/MHL'
-        MHL_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/MHL_Water.usd"
-        add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
-        SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
-        add_update_semantics(prim=get_prim_at_path('/World/MHL/mhl_scaled/Mesh/mesh'),
+
+        scene_prim_path = '/World/MHL'
+        scene_usd_path = '/home/haoyu/isaacsim_assets/USD/mhl_scaled/mhl_scaled.usd'
+        add_reference_to_stage(usd_path=scene_usd_path, prim_path=scene_prim_path)
+        SingleGeometryPrim(prim_path=scene_prim_path, collision=True)
+        add_update_semantics(prim=get_prim_at_path('/World/MHL/Mesh/mesh'),
                              type_label='reflectivity',
                              semantic_label='1.0')
+
+        
         # Load the robot
         robot_prim_path = "/World/rob"
         # robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
         # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         DynamicCuboid(prim_path=robot_prim_path, size=0.2)
-        # Load the rock
-        rock_prim_path = "/World/rock"
-        rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
-        rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
-        add_update_semantics(prim=get_prim_at_path('/World/rock/Mesh/mesh'),
-                             type_label='reflectivity',
-                             semantic_label='2.0')
         
-        # Toggle rigid body and collider preset for rob and rock
+        # Toggle rigid body and collider preset for rob
         self._rob = get_prim_at_path(robot_prim_path)
         rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(self._rob)
         rob_rigidBody_API.CreateDisableGravityAttr(True)
@@ -184,34 +184,23 @@ class UIBuilder:
         rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path,
                                          mass=self._rob_mass)
         
-        rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-                           translation=np.array([-0.24005, 0.04302, -1.55]),
-                           orientation=euler_angles_to_quat(np.array([-0.797,-1.337,89.835]), degrees=True, extrinsic=False),
-                           collision=True,
-                           )
-        rock_collider_prim.set_collision_approximation('convexDecomposition')
-        rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
-        
-        
+        rob_xform_path = robot_prim_path + '/rob_xform'
+        SingleXFormPrim(rob_xform_path)
         
         # Attach the front camera
-        cam_prim_path = robot_prim_path + '/Camera'
-        self._cam = Camera(
+        cam_prim_path = rob_xform_path + '/UW_Camera'
+        self._cam = UW_Camera(
             prim_path=cam_prim_path,
             resolution=self._cam_res,
+            translation=[0.2,0.0,0.0],
             )
         self._cam.set_focal_length(0.1 * self._cam_focal)
         self._cam.set_clipping_range(0.1, 100)
-        SingleXFormPrim(cam_prim_path).set_local_pose(translation=[0.0,0.0,0.1],
-                                                      orientation=euler_angles_to_quat(np.array([90,-90,0.0]),
-                                                                                       degrees=True,
-                                                                                       extrinsic=False))
+        
         
         # Attach the forward looking imaging sonar
-        self._sonar = ImagingSonarSensor(prim_path=robot_prim_path,
-                                         trans=[0.5, 0.0, 0.1],
-                                         orients=euler_angles_to_quat(np.array([0, -69, -90]), degrees=True, extrinsic=True), # manually set this angle!!!
-                                         hori_res=3000)
+        sonar_prim_path = rob_xform_path + '/ImagingSonar'
+        self._sonar = ImagingSonarSensor(prim_path=sonar_prim_path)
 
     def _setup_scenario(self):
         """
@@ -281,7 +270,6 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
-        self._scenario.save()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().

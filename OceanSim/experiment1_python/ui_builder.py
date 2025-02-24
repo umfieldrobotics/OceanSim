@@ -141,7 +141,7 @@ class UIBuilder:
         self._cam = None
         self._cam_res = (1920, 1080)
 
-        self._cam_focal = 21.1
+        self._cam_focal = 8.0
         # Scenario
         self._scenario = pier_Scenario()
 
@@ -168,6 +168,8 @@ class UIBuilder:
         add_update_semantics(prim=get_prim_at_path('/World/Pier/Mesh'),
                              type_label='reflectivity',
                              semantic_label='1.0')
+
+        
         # Load the robot
         robot_prim_path = "/World/rob"
         # robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
@@ -183,28 +185,26 @@ class UIBuilder:
         rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path,
                                          mass=self._rob_mass)
         
-        
+        rob_xform_path = robot_prim_path + '/rob_xform'
+        SingleXFormPrim(rob_xform_path)
         
         # Attach the front camera
-        cam_prim_path = robot_prim_path + '/UW_Camera'
+        cam_prim_path = rob_xform_path + '/UW_Camera'
         self._cam = UW_Camera(
             prim_path=cam_prim_path,
             resolution=self._cam_res,
-            translation=[0.5,0.0,0.0],
-            orientation=euler_angles_to_quat(np.array([0.0,0.0,90]),
-                                                        degrees=True,
-                                                        )
+            translation=[0.2,0.0,0.0],
             )
         self._cam.set_focal_length(0.1 * self._cam_focal)
         self._cam.set_clipping_range(0.1, 100)
         
         
         # Attach the forward looking imaging sonar
-        self._sonar = ImagingSonarSensor(prim_path=robot_prim_path,
-                                         trans=[0.5, 0.0, 0.1],
-                                         orients=euler_angles_to_quat(np.array([0, 0, 0]), degrees=True, extrinsic=True),
+        sonar_prim_path = rob_xform_path + '/ImagingSonar'
+        self._sonar = ImagingSonarSensor(prim_path=sonar_prim_path,
+                                         translation=[0.5, 0.0, 0.1],
                                          max_range= 100,
-                                         range_res=0.5,
+                                         range_res= 0.5,
                                          hori_res=3000)
 
     def _setup_scenario(self):

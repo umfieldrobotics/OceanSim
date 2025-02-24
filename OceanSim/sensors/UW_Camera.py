@@ -32,7 +32,6 @@ class UW_Camera(Camera):
 
         super().__init__(prim_path, name, frequency, dt, resolution, position, orientation, translation, render_product_path)
 
-
     def initialize(self, 
                    UW_param: np.ndarray = np.array([0.0, 0.31, 0.24, 0.05, 0.05, 0.2, 0.05, 0.05, 0.05 ]),
                    viewport: bool = True,
@@ -52,7 +51,7 @@ class UW_Camera(Camera):
                     self._backscatter_value = wp.vec3f(*yaml_content['backscatter_value'])
                     self._atten_coeff = wp.vec3f(*yaml_content['atten_coeff'])
                     self._backscatter_coeff = wp.vec3f(*yaml_content['backscatter_coeff'])
-                    print("Underwater render parameters loaded successfully:")
+                    print(f"UW_Camera on {str(self._device)}. Using loaded render parameters:")
                     print(yaml_content)
                 except yaml.YAMLError as exc:
                     carb.log_error(f"Error reading YAML file: {exc}")
@@ -60,7 +59,7 @@ class UW_Camera(Camera):
             self._backscatter_value = wp.vec3f(*UW_param[0:3])
             self._atten_coeff = wp.vec3f(*UW_param[6:9])
             self._backscatter_coeff = wp.vec3f(*UW_param[3:6])
-            print(f'Using default render parameters.')
+            print(f'UW_Camera on {str(self._device)}. Using default render parameters.')
 
         
         self._rgba_annot = rep.AnnotatorRegistry.get_annotator('LdrColor', device=str(self._device))
@@ -134,9 +133,13 @@ class UW_Camera(Camera):
 
         if self._viewport:
             self.ui_destroy()
-
-
+            
+        print('[UW_Camera] Annotator detached. AnnotatorCache cleaned.')
+    
+    
     def ui_destroy(self):
         for elem in self.wrapped_ui_elements:
             elem.destroy()
+
+        
        

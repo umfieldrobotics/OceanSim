@@ -15,7 +15,7 @@ class ImagingSonarScenario():
     def setup_scenario(self, rob, sonar):
         self._rob = rob
         self._sonar = sonar        
-        self._sonar.initialize()
+        self._sonar.sonar_initialize()
 
         self._running_scenario = True
 
@@ -23,10 +23,11 @@ class ImagingSonarScenario():
 
 
     def teardown_scenario(self):
-        self._rob = None
         if self._sonar is not None:
             self._sonar.close()
-        
+        self._rob = None
+        self._sonar = None
+
         self._running_scenario = False
         self._time = 0.0
 
@@ -36,5 +37,4 @@ class ImagingSonarScenario():
         if not self._running_scenario:
             return
         self._time += step
-        self._sonar.scan()
         self._sonar.make_sonar_data()

@@ -28,12 +28,12 @@ class pier_Scenario():
         self._rob = rob
 
         self._rob_rigid_prim = SingleRigidPrim(prim_path=get_prim_path(self._rob),
-                                                translation=(0.0, 0.0, 0.0),
-                                                orientation=euler_angles_to_quat(np.array([0.0, 0.0, 131]), 
+                                                translation=(-7.0, 8.0, 0.0),
+                                                orientation=euler_angles_to_quat(np.array([0.0, 0.0, 90]), 
                                                                                  degrees=True,
                                                                                  extrinsic=False))
         self._sonar = sonar
-        self._sonar.initialize()
+        self._sonar.sonar_initialize()
 
         self._cam = cam
         self._cam.initialize()
@@ -52,6 +52,7 @@ class pier_Scenario():
         self._running_scenario = False
         if self._sonar is not None:
             self._sonar.close()
+        if self._cam is not None:
             self._cam.close()
         
         self._rob = None

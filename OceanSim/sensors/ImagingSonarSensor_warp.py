@@ -6,8 +6,10 @@ import numpy as np
 from omni.replicator.core.scripts.functional import write_np
 import warp as wp
 import carb
-
+# Future TODO
 # In future release, wrap this class around the Isaac Camera class or RTX lidar
+
+
 @wp.func
 def cartesian_to_spherical(cart: wp.vec3) -> wp.vec3:
     r = wp.sqrt(cart[0]*cart[0] + cart[1]*cart[1] + cart[2]*cart[2])
@@ -161,11 +163,17 @@ def make_sonar_image(sonar_data: wp.array(ndim=2, dtype=wp.vec3),
     sonar_image[i,width-j,3] = wp.uint8(255)
 
 
-class ImagingSonarSensor:
-
-    def __init__(self, prim_path : str, 
-                 trans : list[float]= [0.0, 0.0, 0.0], 
-                 orients: list[float] = [1.0, 0.0, 0.0, 0.0], # quaternion
+class ImagingSonarSensor(Camera):
+    def __init__(self, 
+                 prim_path, 
+                 name = "ImagingSonar", 
+                 frequency = None, 
+                 dt = None, 
+                 position = None, 
+                 orientation = None, 
+                 translation = None, 
+                 render_product_path = None,
+                 physics_sim_view = None,
                  min_range: float = 0.2, # m
                  max_range: float = 3.0, # m
                  range_res: float = 0.008, # deg
@@ -211,37 +219,36 @@ class ImagingSonarSensor:
         # This is bacause replicator raytracing is specified as resolutions
         # while non-squre pixel is not supported in Isaac sim. See details below.
         
-        self.camera_prim_path = prim_path + '/Sonar'
-        self.camera = Camera(
-            prim_path=self.camera_prim_path,
-            translation=trans,
-            orientation=orients,
-            resolution=(self.hori_res, self.vert_res)
-            )
-        self.camera.set_clipping_range(
+        super().__init__(prim_path=prim_path, 
+                         name=name, 
+                         frequency=frequency,
+                         dt=dt, 
+                         resolution=[self.hori_res, self.vert_res],
+                         position=position, 
+                         orientation=orientation, 
+                         translation=translation, 
+                         render_product_path=render_product_path)
+
+        self.set_clipping_range(
             near_distance=self.min_range,
             far_distance=self.max_range
         )
-        # self.camera.set_focal_length(self.focal_length)
         # This is a bug. Needs to call initialize() before changing aperture
         # https://forums.developer.nvidia.com/t/error-when-setting-a-cameras-vertical-horizontal-aperture/271314
-        self.camera.initialize()
+        # This line initialize the camera
+        self.initialize(physics_sim_view)
 
         # Assume the default focal length to compute the desired horizontal aperture
         # The reason why we are doing this is because Isaac sim will fix vertical aperture
         # given aspect ratio for mandating square pixles
         # https://forums.developer.nvidia.com/t/how-to-modify-the-cameras-field-of-view/278427/5
-        self.focal_length = self.camera.get_focal_length()
+        self.focal_length = self.get_focal_length()
         horizontal_aper = 2 * self.focal_length * np.tan(np.deg2rad(self.hori_fov) / 2)
-        self.camera.set_horizontal_aperture(horizontal_aper)
+        self.set_horizontal_aperture(horizontal_aper)
         # Notice if you would like to observe sonar view from linked viewport.
         # Only horizontal fov is displayed correctly while the vertical fov is
         # followed by your viewport aspect ratio settings.
         
-        # Future: maybe able to increase W or H resolution and cut out data points outside of the view
-        # But this method requires us to think about math about combinations 
-        # of f and A_h that will enable us to cut out the least number of points.
-
 
     # Initialize the sensor so that annotator is 
     # loaded on cuda and ready to acquire data
@@ -253,20 +260,16 @@ class ImagingSonarSensor:
     # Can be set to False to gain performance if the data is 
     # expected to be used immediately within the writer. Defaults to True.
 
-    def initialize(self, output_dir : str = None, viewport: bool = True, if_array_copy: bool = True):
+    def sonar_initialize(self, output_dir : str = None, viewport: bool = True, include_unlabelled = False, if_array_copy: bool = True):
         self.writing = False
         self._viewport = viewport
         self._device = str(wp.get_preferred_device())
         self.scan_data = {}
         self.id = 0
-        self.rp = rep.create.render_product(
-            camera=self.camera_prim_path,
-            resolution=(self.hori_res, self.vert_res)
-            )
 
         self.pointcloud_annot = rep.AnnotatorRegistry.get_annotator(
             name="pointcloud",
-            init_params={"includeUnlabelled": True},
+            init_params={"includeUnlabelled": include_unlabelled},
             do_array_copy=if_array_copy,
             device=self._device
             )
@@ -287,9 +290,9 @@ class ImagingSonarSensor:
         print(f'Sonar using {self._device}' )
         print(f'Sonar render query res: {self.hori_res} x {self.vert_res}. Binning res: {self.r.shape[0]} x {self.r.shape[1]}')
 
-        self.pointcloud_annot.attach(self.rp)
-        self.cameraParams_annot.attach(self.rp)
-        self.semanticSeg_annot.attach(self.rp)
+        self.pointcloud_annot.attach(self._render_product_path)
+        self.cameraParams_annot.attach(self._render_product_path)
+        self.semanticSeg_annot.attach(self._render_product_path)
         
         if output_dir is not None:
             self.writing = True
@@ -308,7 +311,7 @@ class ImagingSonarSensor:
         
 
     def scan(self):
-        # Due to the time to load annotator to cuda, the first few simulation tick gives no annotator in memory.
+        # Due to the time to load annotator to cuda, the first few simulation tick gives no annotation in memory.
         # This would also reult error when no mesh within the sonar fov
         # Ignore scan that gives empty data stream
         if len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
@@ -349,7 +352,6 @@ class ImagingSonarSensor:
                         indexToProp_array[int(id)] = idToLabels.get(id).get(property)
             return indexToProp_array
 
-        # if len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
         if self.scan():
             num_points = self.scan_data['pcl'].shape[0]
             # Load these small numpy arrays to cuda
@@ -461,6 +463,7 @@ class ImagingSonarSensor:
                     maximum # wp.array of shape (1,)
                 ]
             )
+            # TODO in future release, this will be fixed so everything stays on CUDA
             maximum = maximum.numpy()[0]
             # Apply noise, normalize by global maximum, and convert (r, azi) to (x,y) for plotting
             wp.launch(
@@ -547,15 +550,17 @@ class ImagingSonarSensor:
     def make_sonar_viewport(self):
         self.wrapped_ui_elements = []
 
-        sonar_range = self.get_range()
-        range_tick = np.round(np.linspace(sonar_range[0], sonar_range[1], 10), 2)
+        range_tick_num = 10
+        range_tick = np.round(np.linspace(self.min_range, self.max_range, range_tick_num), 2)
 
+        azi_tick_num = 10
+        azi_tick = np.round(np.linspace(90-self.hori_fov/2, 90+self.hori_fov/2, azi_tick_num))
         self._sonar_provider = ui.ByteImageProvider()
         self._window = ui.Window("Sonar", width=800, height=800, visible=True)
         
         with self._window.frame:
-            with ui.ZStack(height=720 + 40 ):
-                ui.Rectangle(style={"background_color": 0xFF000000})
+            with ui.ZStack(height=720, width = 720):
+                ui.Rectangle(widthstyle={"background_color": 0xFF000000})
                 ui.Label('Run the scenario for image to be received',
                          style={'font_size': 55,'alignment': ui.Alignment.CENTER},
                          word_wrap=True)
@@ -568,10 +573,17 @@ class ImagingSonarSensor:
                 ui.Line(alignment=ui.Alignment.LEFT,
                         style={'border_width': 2,
                                 'color':ui.color.white })
-                with ui.VStack(style={"spacing":720/(range_tick.size-1)}):
-                    for i in range(range_tick.size):
-                        ui.Label(str(range_tick[i]),style={'font_size': 15,'alignment': ui.Alignment.LEFT})
-
+                with ui.VGrid(row_height = 720/(range_tick_num-1)):
+                    for i in range(range_tick_num-1):
+                        with ui.ZStack():
+                            ui.Rectangle(style={'border_color': ui.color.white, 'background_color': ui.color.transparent,'border_width': 0.05, 'margin': 0})
+                            ui.Label(str(range_tick[i]) + ' m',style={'font_size': 15,'alignment': ui.Alignment.LEFT, 'margin':2})
+                with ui.HGrid(column_width = 720/(azi_tick_num-1), direction=ui.Direction.RIGHT_TO_LEFT):
+                    for i in range(azi_tick_num-1):
+                        with ui.ZStack():
+                            ui.Rectangle(style={'border_color': ui.color.white, 'background_color': ui.color.transparent,'border_width': 0.05, 'margin': 0})
+                            ui.Label(str(azi_tick[i]) + "°",style={'font_size': 15,'alignment': ui.Alignment.RIGHT, 'margin':2})                           
+                ui.Label(str(range_tick[-1]) +" m", style={'font_size': 15, "alignment":ui.Alignment.LEFT_BOTTOM, 'margin':2})
         
         self.wrapped_ui_elements.append(sonar_image_provider)
         self.wrapped_ui_elements.append(self._sonar_provider)
@@ -583,18 +595,20 @@ class ImagingSonarSensor:
     def get_fov(self):
         return [self.hori_fov, self.vert_fov]
     
-    def get_res(self):
-        return [self.hori_res, self.vert_res]
+
     
     # Detach the annotator from render product and clear the data cache
     def close(self):
-        self.pointcloud_annot.detach(self.rp)
-        self.cameraParams_annot.detach(self.rp)
-        self.semanticSeg_annot.detach(self.rp)
+        self.pointcloud_annot.detach(self._render_product_path)
+        self.cameraParams_annot.detach(self._render_product_path)
+        self.semanticSeg_annot.detach(self._render_product_path)
 
         rep.AnnotatorCache.clear(self.pointcloud_annot)
         rep.AnnotatorCache.clear(self.cameraParams_annot)
         rep.AnnotatorCache.clear(self.semanticSeg_annot)
+
+
+        print('[Sonar] Annotator detached. AnnotatorCache cleaned.')
 
         if self._viewport:
             self.ui_destroy()

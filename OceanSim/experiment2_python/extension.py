@@ -73,7 +73,7 @@ class Extension(omni.ext.IExt):
                 onclick_action=(ext_id, f"CreateUIExtension:{EXTENSION_TITLE}"),
                 sub_menu=[
                     make_menu_item_description(
-                        ext_id, "Exp_2", lambda a=weakref.proxy(self): a._menu_callback()
+                        ext_id, "mall", lambda a=weakref.proxy(self): a._menu_callback()
                     )
                 ],
             )

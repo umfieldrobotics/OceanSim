@@ -197,9 +197,9 @@ class UIBuilder:
         # Set the default viewport view angle
         set_camera_view(eye=[-0.5, 0.5, 5.0], target=self._init_rob_pos, camera_prim_path="/OmniverseKit_Persp")
 
-
-        self._sonar = ImagingSonarSensor(prim_path=robot_prim_path,
-                                        trans=self._sensor_location)        
+        sensor_prim_path = robot_prim_path + '/Sonar'
+        self._sonar = ImagingSonarSensor(prim_path=sensor_prim_path,
+                                        translation=self._sensor_location)        
 
         #For now use the flat ground plane as the seafloor
         sea_floor_prim_path = "/World/SeaFloor"

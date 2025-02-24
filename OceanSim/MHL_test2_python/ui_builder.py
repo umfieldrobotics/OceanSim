@@ -156,7 +156,9 @@ class UIBuilder:
         # load MHL scene and turn on collider
 
         MHL_prim_path = '/World/MHL'
-        MHL_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/mhl_scaled.usd"
+        # MHL_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/mhl_scaled.usd"
+        MHL_usd_path = '/home/haoyu/isaacsim_assets/USD/mhl_scaled/mhl_scaled.usd'
+
         add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
         SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
         add_update_semantics(prim=get_prim_at_path('/World/MHL/Mesh/mesh'),
@@ -169,7 +171,9 @@ class UIBuilder:
         DynamicCuboid(prim_path=robot_prim_path, size=0.2)
         # Load the rock
         rock_prim_path = "/World/rock"
-        rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
+        # rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
+        rock_usd_path = '/home/haoyu/isaacsim_assets/USD/3D model/rock/rock.usd'
+
         rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
         add_update_semantics(prim=get_prim_at_path('/World/rock/Mesh/mesh'),
                              type_label='reflectivity',
@@ -199,18 +203,19 @@ class UIBuilder:
         self._cam = Camera(
             prim_path=cam_prim_path,
             resolution=self._cam_res,
+            translation=[0.0,0.0,0.1],
             )
         self._cam.set_focal_length(0.1 * self._cam_focal)
         self._cam.set_clipping_range(0.1, 100)
-        SingleXFormPrim(cam_prim_path).set_local_pose(translation=[0.0,0.0,0.1],
-                                                      orientation=euler_angles_to_quat(np.array([90,-90,0.0]),
+        SingleXFormPrim(cam_prim_path).set_local_pose(orientation=euler_angles_to_quat(np.array([90,-90,0.0]),
                                                                                        degrees=True,
                                                                                        extrinsic=False))
         
         # Attach the forward looking imaging sonar
-        self._sonar = ImagingSonarSensor(prim_path=robot_prim_path,
-                                         trans=[0.5, 0.0, 0.1],
-                                         orients=euler_angles_to_quat(np.array([0, -69, -90]), degrees=True, extrinsic=True), # manually set this angle!!!
+        sonar_prim_path = robot_prim_path + '/Sonar'
+        self._sonar = ImagingSonarSensor(prim_path=sonar_prim_path,
+                                         translation=[0.5, 0.0, 0.1],
+                                         orientation=euler_angles_to_quat(np.array([0, -69, -90]), degrees=True, extrinsic=True), # manually set this angle!!!
                                          hori_res=3000)
 
     def _setup_scenario(self):
@@ -281,7 +286,6 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
-        self._scenario.save()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().
