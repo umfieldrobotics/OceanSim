@@ -14,7 +14,6 @@ import carb
 from ..utils.UWrenderer_utils import UW_render
 
 
-# TODO add viewport destroyer and annotator cleaning
 class UW_Camera(Camera):
 
     def __init__(self, 
@@ -100,7 +99,7 @@ class UW_Camera(Camera):
             )  
             
             if self._viewport:
-                self.image_provider.set_bytes_data_from_gpu(uw_image.ptr, self.get_resolution())
+                self._provider.set_bytes_data_from_gpu(uw_image.ptr, self.get_resolution())
             if self._writing:
                 self._writing_backend.schedule(write_image, path=f'UW_image_{self._id}.png', data=uw_image)
                 print(f'[{self._id}] Underwater rendered image saved to {self._writing_backend.output_dir}')
@@ -108,16 +107,36 @@ class UW_Camera(Camera):
             self._id += 1
 
     def make_viewport(self):
+        self.wrapped_ui_elements = []
         self.window = ui.Window("UW_Camera", width=1280, height=720 + 40, visible=True)
-        self.image_provider = ui.ByteImageProvider()
+        self._provider = ui.ByteImageProvider()
         with self.window.frame:
             with ui.ZStack(height=720):
                 ui.Rectangle(style={"background_color": 0xFF000000})
                 ui.Label('Run the scenario for image to be received',
                          style={'font_size': 55,'alignment': ui.Alignment.CENTER},
                          word_wrap=True)
-                ui.ImageWithProvider(self.image_provider, width=1280, height=720,
+                image_provider = ui.ImageWithProvider(self._provider, width=1280, height=720,
                                      style={'fill_policy': ui.FillPolicy.PRESERVE_ASPECT_FIT,
                                     'alignment' :ui.Alignment.CENTER})
-                
+        
+        self.wrapped_ui_elements.append(image_provider)
+        self.wrapped_ui_elements.append(self._provider)
+        self.wrapped_ui_elements.append(self.window)
+
+    # Detach the annotator from render product and clear the data cache
+    def close(self):
+        self._rgba_annot.detach(self._render_product_path)
+        self._depth_annot.detach(self._render_product_path)
+
+        rep.AnnotatorCache.clear(self._rgba_annot)
+        rep.AnnotatorCache.clear(self._depth_annot)
+
+        if self._viewport:
+            self.ui_destroy()
+
+
+    def ui_destroy(self):
+        for elem in self.wrapped_ui_elements:
+            elem.destroy()
        

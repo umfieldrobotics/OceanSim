@@ -7,9 +7,7 @@ from omni.replicator.core.scripts.functional import write_np
 import warp as wp
 import carb
 
-
-
-# TODO add viewport destroyer 
+# In future release, wrap this class around the Isaac Camera class or RTX lidar
 @wp.func
 def cartesian_to_spherical(cart: wp.vec3) -> wp.vec3:
     r = wp.sqrt(cart[0]*cart[0] + cart[1]*cart[1] + cart[2]*cart[2])
@@ -547,12 +545,14 @@ class ImagingSonarSensor:
     
 
     def make_sonar_viewport(self):
+        self.wrapped_ui_elements = []
 
         sonar_range = self.get_range()
         range_tick = np.round(np.linspace(sonar_range[0], sonar_range[1], 10), 2)
 
         self._sonar_provider = ui.ByteImageProvider()
         self._window = ui.Window("Sonar", width=800, height=800, visible=True)
+        
         with self._window.frame:
             with ui.ZStack(height=720 + 40 ):
                 ui.Rectangle(style={"background_color": 0xFF000000})
@@ -564,6 +564,7 @@ class ImagingSonarSensor:
                                         "height": 720, 
                                         "fill_policy" : ui.FillPolicy.STRETCH,
                                         'alignment': ui.Alignment.CENTER})
+                
                 ui.Line(alignment=ui.Alignment.LEFT,
                         style={'border_width': 2,
                                 'color':ui.color.white })
@@ -571,7 +572,10 @@ class ImagingSonarSensor:
                     for i in range(range_tick.size):
                         ui.Label(str(range_tick[i]),style={'font_size': 15,'alignment': ui.Alignment.LEFT})
 
-
+        
+        self.wrapped_ui_elements.append(sonar_image_provider)
+        self.wrapped_ui_elements.append(self._sonar_provider)
+        self.wrapped_ui_elements.append(self._window)
 
     def get_range(self):
         return [self.min_range, self.max_range]
@@ -591,3 +595,11 @@ class ImagingSonarSensor:
         rep.AnnotatorCache.clear(self.pointcloud_annot)
         rep.AnnotatorCache.clear(self.cameraParams_annot)
         rep.AnnotatorCache.clear(self.semanticSeg_annot)
+
+        if self._viewport:
+            self.ui_destroy()
+
+
+    def ui_destroy(self):
+        for elem in self.wrapped_ui_elements:
+            elem.destroy()

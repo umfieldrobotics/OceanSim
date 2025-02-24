@@ -48,12 +48,15 @@ class pier_Scenario():
     
     
     def teardown_scenario(self):
-        self._rob = None
-        self._sonar = None
-        self._cam = None
+
         self._running_scenario = False
         if self._sonar is not None:
             self._sonar.close()
+            self._cam.close()
+        
+        self._rob = None
+        self._sonar = None
+        self._cam = None
         
         self._time = 0.0
 
@@ -68,6 +71,7 @@ class pier_Scenario():
 
         self._cam.render()
         self._sonar.make_sonar_data()
+
 
         # self._rob_rigid_prim.set_linear_velocity(np.array([1, 0, 0]))
         

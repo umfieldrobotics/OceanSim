@@ -161,7 +161,8 @@ class UIBuilder:
 
 
         scene_prim_path = '/World/Pier'
-        scene_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/Pier/pier.usd"
+        # scene_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/Pier/pier.usd"
+        scene_usd_path = '/home/haoyu/isaacsim_assets/USD/Pier/pier.usd'
         add_reference_to_stage(usd_path=scene_usd_path, prim_path=scene_prim_path)
         SingleGeometryPrim(prim_path=scene_prim_path, collision=True)
         add_update_semantics(prim=get_prim_at_path('/World/Pier/Mesh'),
