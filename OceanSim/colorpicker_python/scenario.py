@@ -80,7 +80,7 @@ class Colorpicker_Scenario():
                 backscatter_value = wp.vec3f(*render_param[0:3])
                 atten_coeff = wp.vec3f(*render_param[6:9])
                 backscatter_coeff = wp.vec3f(*render_param[3:6])
-                uw_image = wp.zeros_like(self.raw_rgba)
+                self.uw_image = wp.zeros_like(self.raw_rgba)
                 wp.launch(
                     dim=(self.raw_rgba.shape[0], self.raw_rgba.shape[1]),
                     kernel=UW_render,
@@ -92,11 +92,11 @@ class Colorpicker_Scenario():
                         backscatter_coeff
                     ],
                     outputs=[
-                        uw_image
+                        self.uw_image
                     ]
                 )  
                 
-                self.image_provider.set_bytes_data_from_gpu(uw_image.ptr, [uw_image.shape[1], uw_image.shape[0]])
+                self.image_provider.set_bytes_data_from_gpu(self.uw_image.ptr, [self.uw_image.shape[1], self.uw_image.shape[0]])
 
     def make_window(self):
 

@@ -25,7 +25,6 @@ from ..utils.UWrenderer_utils import UW_render
 class UIBuilder:
     def __init__(self):
 
-
         # Frames are sub-windows that can contain multiple UI elements
         self.frames = []
         # UI elements created using a UIElementWrapper instance
@@ -106,6 +105,7 @@ class UIBuilder:
         self._demo_res = [self._demo_rgba.shape[1], self._demo_rgba.shape[0]]
         self._demo_provider = ui.ByteImageProvider()
         self._demo_provider.set_bytes_data_from_gpu(self._demo_rgba.ptr, self._demo_res)  
+        self._uw_image = None
         self._param = np.zeros(9)
 
         world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
@@ -144,6 +144,7 @@ class UIBuilder:
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
 
+
         color_picker_frame = CollapsableFrame('Color Picker', collapsed=False)
         self._param_models = []
         params_labels = [                        
@@ -172,7 +173,7 @@ class UIBuilder:
                         default_val=params_default[i])
                     self._param_models.append(param_model)
                     param_model.add_value_changed_fn(self._on_color_param_changes)
-                    
+                    self._on_color_param_changes(param_model)
                 with ui.ZStack(height=300):
                     ui.Rectangle(style={"background_color": 0xFF000000})
                     ui.ImageWithProvider(self._demo_provider,
@@ -193,12 +194,18 @@ class UIBuilder:
                     )
                     save_button = Button(
                         text="Save",
-                        label='',
+                        label='Save render parameters',
                         on_click_fn=self._on_save_param
                     )
+                save_viewport_button = Button(
+                    text='Save viewport',
+                    label='',
+                    on_click_fn=self._on_save_viewport
+                )
                 
-                    self.wrapped_ui_elements.append(self.file_name_field)
-                    self.wrapped_ui_elements.append(save_button)
+        self.wrapped_ui_elements.append(self.file_name_field)
+        self.wrapped_ui_elements.append(save_button)
+        self.wrapped_ui_elements.append(save_viewport_button)
                 
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
@@ -221,7 +228,7 @@ class UIBuilder:
             open_stage(self.scene_path_field.get_value())
             print('USD scene is loaded.')
         except:
-            carb.log_error('Path is not valid or scene can not be opened.')
+            print('Path is not valid or scene can not be opened. Default to current stage')
 
 
 
@@ -338,22 +345,42 @@ class UIBuilder:
             self._demo_provider.set_bytes_data_from_gpu(self._uw_image.ptr, self._demo_res)
     
     def _on_save_param(self):
-        data = {
-            "backscatter_value":self._param[0:3],
-            'atten_coeff': self._param[6:9],
-            'backscatter_coeff': self._param[3:6]
-            }
-        save_dir = self.save_dir_field.get_value()
-        yaml_path = save_dir + f"{self.file_name_field.get_value()}.yaml"
-        png_path = save_dir + f"{self.file_name_field.get_value()}.png"
-        with open(yaml_path, 'w') as file:
-            try:
-                yaml.dump(data, file, sort_keys=False)
-                output_demo_image = Image.fromarray(self._uw_image.numpy(), 'RGBA')
-                output_demo_image.save(png_path)
-                print(f"Underwater render parameters written to {yaml_path}")
-            except yaml.YAMLError as e:
-                print(f"Error writing YAML file: {e}")
+        if self.save_dir_field.get_value() != "":
+            data = {
+                "backscatter_value":self._param[0:3],
+                'atten_coeff': self._param[6:9],
+                'backscatter_coeff': self._param[3:6]
+                }
+            save_dir = self.save_dir_field.get_value()
+            yaml_path = save_dir + f"{self.file_name_field.get_value()}.yaml"
+            png_path = save_dir + f"{self.file_name_field.get_value()}.png"
+            with open(yaml_path, 'w') as file:
+                try:
+                    yaml.dump(data, file, sort_keys=False)
+                    output_demo_image = Image.fromarray(self._uw_image.numpy(), 'RGBA')
+                    output_demo_image.save(png_path)
+                    print(f"Underwater render parameters written to {yaml_path}")
+                except yaml.YAMLError as e:
+                    print(f"Error writing YAML file: {e}")
+        else:
+            carb.log_error('Saving directory is empty.')
 
+    def _on_save_viewport(self):
+        if self._scenario_state_btn.enabled:
+            if self.save_dir_field.get_value() != "":
+                save_dir = self.save_dir_field.get_value()
+                raw_rgba = self._scenario.raw_rgba.numpy()
+                depth = self._scenario.depth_image.numpy()
+                rendered_image = self._scenario.uw_image.numpy()
+                np.save(file=save_dir + '/viewport_depth.npy', arr=depth)
+                raw_image = Image.fromarray(raw_rgba, 'RGBA')
+                uw_image = Image.fromarray(rendered_image, 'RGBA')
+                raw_image.save(save_dir + '/viewport_raw_rgba.png')
+                uw_image.save(save_dir + '/viewport_uw_rgba.png')
+                print(f'viewport result written to {save_dir}.')
+            else:
 
-    
+                carb.log_error('Saving directory is empty.')
+
+        else:
+            print('Load a scenario first.')

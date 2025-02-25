@@ -13,12 +13,12 @@ from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.semantics import add_update_semantics
 from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
-from isaacsim.sensors.camera import Camera
 from isaacsim.core.api.objects import DynamicCuboid
 
 
 # Custom import
 from ..sensors.DVLsensor import DVLsensor
+from ..sensors.UW_Camera import UW_Camera
 from .scenario import MHL_straighline_navigation_Scenario
 
 class UIBuilder:
@@ -130,24 +130,6 @@ class UIBuilder:
 
     def _on_init(self):
 
-        # Robot parameters
-
-        self._rob_mass = 10 # kg
-        # DVl parameters
-        self._DVL = None
-        self._DVL_elevation = 30.0 # deg
-        self._DVL_min_range = 0.01  # m
-        self._DVL_max_range = 20.0 # m
-        self._DVL_location = np.array([0.0,0.0,-0.2])
-        self._DVL_vel_cov = 0
-        self._DVL_depth_cov = 0
-
-
-        # Camera parameters
-        self._cam = None
-        self._cam_res = (1920, 1080)
-        self._cam_pose = ([0.5,0.0,0.0], [0.5,0.5,-0.5,-0.5])
-        self._cam_focal = 6
         self._scenario = MHL_straighline_navigation_Scenario()
 
 
@@ -166,9 +148,9 @@ class UIBuilder:
         add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         # DynamicCuboid(prim_path=robot_prim_path, size=0.25, color=np.array([0.5,0.5,1]))
         # Load the rock
-        rock_prim_path = '/MHL/rock'
-        rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
-        add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
+        # rock_prim_path = '/MHL/rock'
+        # rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
+        # add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
         
         # Toggle rigid body and collider preset for rob and rock
         self._rob = get_prim_at_path(robot_prim_path)
@@ -177,33 +159,34 @@ class UIBuilder:
         rob_rigidBody_API.GetLinearDampingAttr().Set(0.0)
         rob_rigidBody_API.GetAngularDampingAttr().Set(0.0)
         rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path,
-                                         mass=self._rob_mass)
+                                         mass=10)
         
-        rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-                           translation=np.array([0.0, 2, -2]),
-                           orientation=euler_angles_to_quat(np.array([0.0,0.0,125]), degrees=True),
-                           collision=True,
-                           )
-        rock_collider_prim.set_collision_approximation('convexDecomposition')
-        rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
+        # rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
+        #                    translation=np.array([0.0, 2, -2]),
+        #                    orientation=euler_angles_to_quat(np.array([0.0,0.0,125]), degrees=True),
+        #                    collision=True,
+        #                    )
+        # rock_collider_prim.set_collision_approximation('convexDecomposition')
+        # rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
         
         
         
         # Initialize the DVL and attach it to the rob already being the rigid body
-        self._DVL = DVLsensor()
-        self._DVL.attachDVL(rigid_body_path=robot_prim_path, location=self._DVL_location)
+        self._DVL = DVLsensor(elevation=35)
+        self._DVL.attachDVL(rigid_body_path=robot_prim_path, location=np.array([0.0, 0.0, -0.05]))
+        self._DVL.add_single_beam()
         self._DVL.add_debug_lines()
         
         # Attach the front camera
-        cam_prim_path = robot_prim_path + '/Camera'
-        self._cam = Camera(
+        cam_prim_path = robot_prim_path + '/UW_Camera'
+        self._cam = UW_Camera(
             prim_path=cam_prim_path,
-            resolution=self._cam_res,
+            resolution=[1920, 1080],
             )
-        self._cam.set_focal_length(0.1 * self._cam_focal)
-        SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0],orientation=self._cam_pose[1])
-
-
+        self._cam.set_focal_length(0.1 * 9)
+        self._cam.set_local_pose(orientation=euler_angles_to_quat(np.array([0.0, 10, 0.0]), 
+                                                                  degrees=True,
+                                                                  extrinsic=False))
         MHLMesh_prim_path = '/World/mhl_scaled/Mesh'
         SingleGeometryPrim(prim_path=MHLMesh_prim_path, collision=True)
 

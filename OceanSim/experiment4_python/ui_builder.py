@@ -17,9 +17,7 @@ from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 
 
 # Custom import
-from ..sensors.ImagingSonarSensor_warp import ImagingSonarSensor
-from ..sensors.UW_Camera import UW_Camera
-from .scenario import pier_Scenario
+from .scenario import figure_Scenario
 
 class UIBuilder:
     def __init__(self):
@@ -134,16 +132,9 @@ class UIBuilder:
         # Robot parameters
 
         self._rob_mass = 5 # kg
-        # Sonar parameters
-        self._sonar = None
 
-        # Camera parameters
-        self._cam = None
-        self._cam_res = (1920, 1080)
-
-        self._cam_focal = 8.0
         # Scenario
-        self._scenario = pier_Scenario()
+        self._scenario = figure_Scenario()
 
     def _add_domelight(self):
         domelight = UsdLux.DomeLight.Define(get_current_stage(), Sdf.Path('/World/Domelight'))
@@ -157,12 +148,12 @@ class UIBuilder:
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         create_new_stage()
-        self._add_domelight()
+        # self._add_domelight()
 
 
         scene_prim_path = '/World/MHL'
-        # scene_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/Pier/pier.usd"
-        scene_usd_path = '/home/haoyu/isaacsim_assets/USD/mhl_scaled/MHL_Water.usd'
+        scene_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/MHL_Water.usd"
+        # scene_usd_path = '/home/haoyu/isaacsim_assets/USD/mhl_scaled/MHL_Water.usd'
         add_reference_to_stage(usd_path=scene_usd_path, prim_path=scene_prim_path)
         SingleGeometryPrim(prim_path=scene_prim_path, collision=True)
         # add_update_semantics(prim=get_prim_at_path('/World/Mall/Mesh/Ruins_of_the_underwater_shopping_mall'),
@@ -171,8 +162,10 @@ class UIBuilder:
         # Load the robot
         robot_prim_path = "/World/rob"
         # robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
-        # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
-        DynamicCuboid(prim_path=robot_prim_path, size=0.2)
+        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
+
+        add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
+        # DynamicCuboid(prim_path=robot_prim_path, size=0.2)
         
         # Toggle rigid body and collider preset for rob
         self._rob = get_prim_at_path(robot_prim_path)
@@ -183,29 +176,20 @@ class UIBuilder:
         rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path,
                                          mass=self._rob_mass)
         
+        # Load the rock
+        rock_prim_path = "/World/rock"
+        rock_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/3d_model/rock/rock.usd'
+        # rock_usd_path = '/home/haoyu/isaacsim_assets/USD/3D model/rock/rock.usd'
+        rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
+        rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
+                           translation=np.array([-0.24005, 0.04302, -1.55]),
+                           orientation=euler_angles_to_quat(np.array([-0.797,-1.337,89.835]), degrees=True, extrinsic=False),
+                           collision=True,
+                           )
+        rock_collider_prim.set_collision_approximation('convexDecomposition')
+        rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
         
-        
-        # Attach the front camera
-        cam_prim_path = robot_prim_path + '/UW_Camera'
-        self._cam = UW_Camera(
-            prim_path=cam_prim_path,
-            resolution=self._cam_res,
-            translation=[0.2,0.0,0.0],
-            )
-        self._cam.set_focal_length(0.1 * self._cam_focal)
-        self._cam.set_clipping_range(0.1, 100)
-        
-        
-        # Attach the forward looking imaging sonar
-        sonar_prim_path = robot_prim_path + '/ImagingSonar'
-        self._sonar = ImagingSonarSensor(prim_path=sonar_prim_path,
-                                         translation=[0.5, 0.0, 0.0],
-                                         hori_fov=100,
-                                         vert_fov=45,
-                                         max_range= 3,
-                                         range_res=0.008,
-                                         angular_res=0.2,
-                                         hori_res=3000)
+
 
     def _setup_scenario(self):
         """
@@ -222,7 +206,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._sonar, self._cam)
+        self._scenario.setup_scenario(self._rob)
 
     def _on_post_reset_btn(self):
         """

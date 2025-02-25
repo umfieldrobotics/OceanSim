@@ -2,8 +2,7 @@
 import numpy as np
 import omni.replicator.core as rep
 from omni.replicator.core.scripts.functional import write_image, write_json, write_np
-import omni.ui as ui
-import warp as wp
+
 
 # Isaac sim import
 from isaacsim.core.prims import SingleRigidPrim
@@ -11,20 +10,17 @@ from isaacsim.core.utils.prims import get_prim_path, get_prim_at_path
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.viewports import set_camera_view
 
-class pier_Scenario():
+class figure_Scenario():
     def __init__(self):
         self._rob = None
-        self._sonar = None
-        self._cam = None
+
         self._running_scenario = False
         self._time = 0.0
 
-        self._output_dir = '/home/haoyu-ma/Desktop/MHL_replica'
 
 
 
-
-    def setup_scenario(self, rob, sonar, cam):
+    def setup_scenario(self, rob):
         self._rob = rob
 
         self._rob_rigid_prim = SingleRigidPrim(prim_path=get_prim_path(self._rob),
@@ -32,11 +28,9 @@ class pier_Scenario():
                                                 orientation=euler_angles_to_quat(np.array([-11, 0.0, 90]), 
                                                                                  degrees=True,
                                                                                  extrinsic=False))
-        self._sonar = sonar
-        self._sonar.sonar_initialize(include_unlabelled=True)
 
-        self._cam = cam
-        self._cam.initialize()
+
+
 
         set_camera_view(eye=np.array([1,1,1]), target=self._rob_rigid_prim.get_world_pose()[0])
         
@@ -50,14 +44,11 @@ class pier_Scenario():
     def teardown_scenario(self):
 
         self._running_scenario = False
-        if self._sonar is not None:
-            self._sonar.close()
-        if self._cam is not None:
-            self._cam.close()
+
+
         
         self._rob = None
-        self._sonar = None
-        self._cam = None
+
         
         self._time = 0.0
 
@@ -70,8 +61,7 @@ class pier_Scenario():
         
         self._time += step
 
-        self._cam.render()
-        self._sonar.make_sonar_data()
+
 
 
         # self._rob_rigid_prim.set_linear_velocity(np.array([1, 0, 0]))
