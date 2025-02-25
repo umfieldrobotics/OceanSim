@@ -28,17 +28,17 @@ class pier_Scenario():
         self._rob = rob
 
         self._rob_rigid_prim = SingleRigidPrim(prim_path=get_prim_path(self._rob),
-                                                translation=(0.0, -5.0, 0.0),
+                                                translation=(0.0, 0.0, 0.0),
                                                 orientation=euler_angles_to_quat(np.array([-11, 0.0, 90]), 
                                                                                  degrees=True,
                                                                                  extrinsic=False))
         self._sonar = sonar
-        self._sonar.sonar_initialize()
+        self._sonar.sonar_initialize(include_unlabelled=True)
 
         self._cam = cam
         self._cam.initialize()
 
-        set_camera_view(eye=np.array([5,5,5]), target=self._rob_rigid_prim.get_world_pose()[0])
+        set_camera_view(eye=np.array([1,1,1]), target=self._rob_rigid_prim.get_world_pose()[0])
         
             
         self._running_scenario = True

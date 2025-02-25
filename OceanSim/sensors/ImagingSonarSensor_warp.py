@@ -345,7 +345,7 @@ class ImagingSonarSensor(Camera):
         # eg: indexToProp = [0, 0, 0.1, 1 .....] 
         def make_indexToProp_array(idToLabels: dict, query_property: str):
             max_id = max(idToLabels.keys(), default=-1)
-            indexToProp_array = np.zeros((int(max_id)+1,))
+            indexToProp_array = np.ones((int(max_id)+1,))
             for id in idToLabels.keys():
                 for property in idToLabels.get(id):
                     if property == query_property:

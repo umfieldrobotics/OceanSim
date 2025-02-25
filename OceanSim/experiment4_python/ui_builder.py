@@ -160,14 +160,14 @@ class UIBuilder:
         self._add_domelight()
 
 
-        scene_prim_path = '/World/Mall'
+        scene_prim_path = '/World/MHL'
         # scene_usd_path = "/home/haoyu-ma/projects/OceanSim_utils/assets/usd/Pier/pier.usd"
-        scene_usd_path = '/home/haoyu/isaacsim_assets/USD/Collected_mall/mall.usd'
+        scene_usd_path = '/home/haoyu/isaacsim_assets/USD/mhl_scaled/MHL_Water.usd'
         add_reference_to_stage(usd_path=scene_usd_path, prim_path=scene_prim_path)
         SingleGeometryPrim(prim_path=scene_prim_path, collision=True)
-        add_update_semantics(prim=get_prim_at_path('/World/Mall/Mesh/Ruins_of_the_underwater_shopping_mall'),
-                             type_label='reflectivity',
-                             semantic_label='1.0')
+        # add_update_semantics(prim=get_prim_at_path('/World/Mall/Mesh/Ruins_of_the_underwater_shopping_mall'),
+        #                      type_label='reflectivity',
+        #                      semantic_label='1.0')
         # Load the robot
         robot_prim_path = "/World/rob"
         # robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
@@ -202,8 +202,8 @@ class UIBuilder:
                                          translation=[0.5, 0.0, 0.0],
                                          hori_fov=100,
                                          vert_fov=45,
-                                         max_range= 60,
-                                         range_res=0.1,
+                                         max_range= 3,
+                                         range_res=0.008,
                                          angular_res=0.2,
                                          hori_res=3000)
 

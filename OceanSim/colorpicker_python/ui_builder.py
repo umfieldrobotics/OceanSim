@@ -3,28 +3,22 @@ import numpy as np
 import omni.timeline
 import omni.ui as ui
 from omni.usd import StageEventType
-from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
 import warp as wp
 import yaml
 from PIL import Image
-
+import carb
 
 # Isaac sim import
-from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, SingleGeometryPrim
-from isaacsim.core.utils.prims import get_prim_at_path, get_prim_path
+
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, open_stage
-from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, combo_floatfield_slider_builder, Button, StringField
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
-from isaacsim.sensors.camera import Camera
-from isaacsim.core.api.objects import DynamicCuboid
 from isaacsim.core.utils.extensions import get_extension_path, get_extension_id, get_extension_path_from_name
 
 
 # Custom import
-from .scenario import MHL_colorpicker_Scenario
+from .scenario import Colorpicker_Scenario
 from ..utils.UWrenderer_utils import UW_render
-from ..sensors.DVLsensor import DVLsensor
 
 
 
@@ -40,7 +34,6 @@ class UIBuilder:
         # Get access to the timeline to control stop/pause/play programmatically
         self._timeline = omni.timeline.get_timeline_interface()
         # A flag indicating if the scenario is loaded at least once (helpful for UI module to see if scenario variables are created)
-        self._is_scenario_setup = False
 
         # Run initialization for the provided example
         self._on_init()
@@ -119,6 +112,11 @@ class UIBuilder:
 
         with world_controls_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
+                self.scene_path_field = StringField(
+                    label='Path to USD',
+                    tooltip='Input the path to your USD scene file',
+                )            
+                self.wrapped_ui_elements.append(self.scene_path_field)    
                 self._load_btn = LoadButton(
                     "Load Button", "LOAD", setup_scene_fn=self._setup_scene, setup_post_load_fn=self._setup_scenario
                 )
@@ -210,16 +208,7 @@ class UIBuilder:
 
         # Robot parameters
 
-        self._rob_mass = 10 # kg
-
-
-        # Camera parameters
-        self._cam = None
-        self._cam_res = (1920, 1080)
-        self._cam_pose = ([0.5,0.0,0.0], [0.5,0.5,-0.5,-0.5])
-        self._cam_focal = 20
-        self._scenario = MHL_colorpicker_Scenario()
-        self._is_scenario_setup = True
+        self._scenario = Colorpicker_Scenario()
 
 
     def _setup_scene(self):
@@ -228,54 +217,12 @@ class UIBuilder:
         On pressing the Load Button, a new instance of World() is created and then this function is called.
         The user should now load their assets onto the stage and add them to the World Scene.
         """
-        # Open MHL scene
-        open_stage("/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/MHL_Water.usd")
+        try: 
+            open_stage(self.scene_path_field.get_value())
+            print('USD scene is loaded.')
+        except:
+            carb.log_error('Path is not valid or scene can not be opened.')
 
-        # Load the robot
-        robot_prim_path = "/World/rob"
-        # robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
-        # add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
-        DynamicCuboid(prim_path=robot_prim_path, size=0.5, color=np.array([0.5,0.5,1]))
-        # Load the rock
-        # rock_prim_path = '/MHL/rock'
-        # rock_usd_path = '/home/haoyu/isaacsim_assets/USD/3D model/rock/rock.usd'
-        # add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
-        
-        # # Toggle rigid body and collider preset for rob and rock
-        self._rob = get_prim_at_path(robot_prim_path)
-        rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(self._rob)
-        rob_rigidBody_API.CreateDisableGravityAttr(True)
-        rob_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-        rob_rigidBody_API.GetAngularDampingAttr().Set(0.0)
-        rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path,
-                                         mass=self._rob_mass)
-        
-        # rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-        #                    translation=np.array([0.0, 3.5, 0.5]),
-        #                    orientation=euler_angles_to_quat(np.array([0.0,0.0,125]), degrees=True),
-        #                    collision=True,
-        #                    )
-        # rock_collider_prim.set_collision_approximation('convexDecomposition')
-        # rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path)
-        
-        
-        # self._DVL = DVLsensor(elevation=30)
-        # self._DVL.attachDVL(rigid_body_path=get_prim_path(self._rob),
-        #                     location=np.array([0.0,0.0,-0.01]))
-        # self._DVL.add_single_beam()
-        # self._DVL.add_debug_lines()
-        # Attach the front camera
-        cam_prim_path = robot_prim_path + '/Camera'
-        self._cam = Camera(
-            prim_path=cam_prim_path,
-            resolution=self._cam_res,
-            )
-        self._cam.set_focal_length(0.1 * self._cam_focal)
-        SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0], orientation=self._cam_pose[1])
-
-
-        MHLMesh_prim_path = '/World/mhl_scaled/Mesh/mesh'
-        SingleGeometryPrim(prim_path=MHLMesh_prim_path, collision=True)
 
 
     def _setup_scenario(self):
@@ -293,7 +240,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._cam)
+        self._scenario.setup_scenario()
 
     def _on_post_reset_btn(self):
         """
@@ -367,8 +314,7 @@ class UIBuilder:
         for i, param_model in zip(range(9), self._param_models):
             self._param[i] = param_model.get_value_as_float()    
         self._update_demo_render()
-        if self._is_scenario_setup:
-            self._scenario.update_camera_render(self._param)
+
 
 
     def _update_demo_render(self):
