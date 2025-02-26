@@ -3,7 +3,7 @@ from isaacsim.core.utils.carb import get_carb_setting
 import omni.replicator.core as rep
 import omni.ui as ui
 import numpy as np
-from omni.replicator.core.scripts.functional import write_np
+from omni.replicator.core.scripts.functional import write_np, write_image
 import warp as wp
 import carb
 # Future TODO
@@ -334,8 +334,8 @@ class ImagingSonarSensor(Camera):
                         ray_noise_param: float = 0.05, # additive noise parameter
                         intensity_offset: float = 0.0, # offset intensity after normalization
                         intensity_gain: float = 1.0, # scale intensity after normalization
-                        central_peak: float = 2, # control the strength of the central strong reflection
-                        central_std: float = 0.001, # control the spread of the centrol strong reflection
+                        central_peak: float = 2, # control the strength of the streak
+                        central_std: float = 0.001, # control the spread of the streak
                         ):
         # A utility function helps to convert idToLabels into indexToProp array
         # This manipulation facilitates warp computation framework
@@ -521,12 +521,13 @@ class ImagingSonarSensor(Camera):
         if self.writing:
             # self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
             # self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
-            self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
+            # self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
             print(f"[{self.id}] Writing sonar data to {self.backend.output_dir}")
         
         if self._viewport:
             self._sonar_provider.set_bytes_data_from_gpu(self.make_sonar_image().ptr, 
-                                                    [self.sonar_map.shape[1], self.sonar_map.shape[0]])        
+                                                    [self.sonar_map.shape[1], self.sonar_map.shape[0]])
+            self.backend.schedule(write_image, f'sonar_{self.id}.png', data = self.make_sonar_image())        
             
         self.id += 1
     

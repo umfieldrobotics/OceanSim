@@ -30,8 +30,8 @@ class MHL_test_Scenario():
         self._rob = rob
 
         self._rob_rigid_prim = SingleRigidPrim(prim_path=get_prim_path(self._rob),
-                                                translation=(-1.7, 0.4, -1.1),
-                                                orientation=euler_angles_to_quat(np.array([5.0, 6.0, -6.0]), 
+                                                translation=(-1.7, 0.5, -1.1),
+                                                orientation=euler_angles_to_quat(np.array([5.0, 6.0, -9.0]), 
                                                                                  degrees=True,
                                                                                  extrinsic=False))
         self._cam = cam
@@ -67,7 +67,7 @@ class MHL_test_Scenario():
             return
         
         self._time += step
-        self._sonar.make_sonar_data()
+        self._sonar.make_sonar_data(central_peak=0.1, ray_noise_param=0.15)
         self._cam.render()
 
 

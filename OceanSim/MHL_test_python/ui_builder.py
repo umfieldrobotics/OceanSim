@@ -204,9 +204,12 @@ class UIBuilder:
         # Attach the forward looking imaging sonar
         sonar_prim_path = robot_prim_path + '/Sonar'
         self._sonar = ImagingSonarSensor(prim_path=sonar_prim_path,
-                                         translation=[0.5, 0.0, 0.1], 
-                                         hori_res=3000)
-        self._sonar.set_local_pose(orientation=euler_angles_to_quat(np.array([0,-69,-90]), degrees=True))
+                                         translation=[0.5, 0.0, 0.3], 
+                                         hori_res=3000,
+                                         max_range=3,
+                                         range_res=0.0046,
+                                         angular_res=0.25)
+        self._sonar.set_local_pose(orientation=euler_angles_to_quat(np.array([0,-55,-90]), degrees=True))
 
     def _setup_scenario(self):
         """
