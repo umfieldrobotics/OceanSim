@@ -194,12 +194,12 @@ class UIBuilder:
                     )
                     save_button = Button(
                         text="Save",
-                        label='Save render parameters',
+                        label='Save render params',
                         on_click_fn=self._on_save_param
                     )
                 save_viewport_button = Button(
                     text='Save viewport',
-                    label='',
+                    label='Save rendered image',
                     on_click_fn=self._on_save_viewport
                 )
                 
