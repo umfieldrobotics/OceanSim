@@ -570,20 +570,20 @@ class ImagingSonarSensor(Camera):
                                         "fill_policy" : ui.FillPolicy.STRETCH,
                                         'alignment': ui.Alignment.CENTER})
                 
-                ui.Line(alignment=ui.Alignment.LEFT,
-                        style={'border_width': 2,
-                                'color':ui.color.white })
-                with ui.VGrid(row_height = 720/(range_tick_num-1)):
-                    for i in range(range_tick_num-1):
-                        with ui.ZStack():
-                            ui.Rectangle(style={'border_color': ui.color.white, 'background_color': ui.color.transparent,'border_width': 0.05, 'margin': 0})
-                            ui.Label(str(range_tick[i]) + ' m',style={'font_size': 15,'alignment': ui.Alignment.LEFT, 'margin':2})
-                with ui.HGrid(column_width = 720/(azi_tick_num-1), direction=ui.Direction.RIGHT_TO_LEFT):
-                    for i in range(azi_tick_num-1):
-                        with ui.ZStack():
-                            ui.Rectangle(style={'border_color': ui.color.white, 'background_color': ui.color.transparent,'border_width': 0.05, 'margin': 0})
-                            ui.Label(str(azi_tick[i]) + "°",style={'font_size': 15,'alignment': ui.Alignment.RIGHT, 'margin':2})                           
-                ui.Label(str(range_tick[-1]) +" m", style={'font_size': 15, "alignment":ui.Alignment.LEFT_BOTTOM, 'margin':2})
+                # ui.Line(alignment=ui.Alignment.LEFT,
+                #         style={'border_width': 2,
+                #                 'color':ui.color.white })
+                # with ui.VGrid(row_height = 720/(range_tick_num-1)):
+                #     for i in range(range_tick_num-1):
+                #         with ui.ZStack():
+                #             ui.Rectangle(style={'border_color': ui.color.white, 'background_color': ui.color.transparent,'border_width': 0.05, 'margin': 0})
+                #             ui.Label(str(range_tick[i]) + ' m',style={'font_size': 15,'alignment': ui.Alignment.LEFT, 'margin':2})
+                # with ui.HGrid(column_width = 720/(azi_tick_num-1), direction=ui.Direction.RIGHT_TO_LEFT):
+                #     for i in range(azi_tick_num-1):
+                #         with ui.ZStack():
+                #             ui.Rectangle(style={'border_color': ui.color.white, 'background_color': ui.color.transparent,'border_width': 0.05, 'margin': 0})
+                #             ui.Label(str(azi_tick[i]) + "°",style={'font_size': 15,'alignment': ui.Alignment.RIGHT, 'margin':2})                           
+                # ui.Label(str(range_tick[-1]) +" m", style={'font_size': 15, "alignment":ui.Alignment.LEFT_BOTTOM, 'margin':2})
         
         self.wrapped_ui_elements.append(sonar_image_provider)
         self.wrapped_ui_elements.append(self._sonar_provider)
