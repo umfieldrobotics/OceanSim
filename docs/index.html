@@ -89,7 +89,7 @@
         <div class="column has-text-centered">
            <!-- use smaller title size -->
           <h1 class="title is-3 publication-title">OceanSim: A High-Performance Underwater Simulation Framework</h1>
-          <h2 class="subtitle is-4">Preprint</h2>
+          <h2 class="subtitle is-4">Available in March 2025</h2>
           <div class="is-size-5 publication-authors">
             <span class="author-block">
               <a href="https://song-jingyu.github.io/">Jingyu Song</a><sup>1*</sup>,</span>
@@ -124,68 +124,6 @@
             <span class="author-block"><sup>1</sup>University of Michigan</span>
           </div>
 
-          <div class="column has-text-centered">
-            <div class="publication-links">
-              <!-- PDF Link. -->
-              <span class="link-block">
-                <a href="https://arxiv.org/pdf/2408.01569"
-                   class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <i class="fas fa-file-pdf"></i>
-                  </span>
-                  <span>Paper</span>
-                </a>
-              </span>
-              <span class="link-block">
-                <a href="https://arxiv.org/abs/2408.01569"
-                   class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <i class="ai ai-arxiv"></i>
-                  </span>
-                  <span>arXiv</span>
-                </a>
-              </span>
-              <!-- Video Link. -->
-              <span class="link-block">
-                <a href="https://youtu.be/ensndBa2L9g?si=sy2iCFCpo7xffcGb"
-                   class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <i class="fab fa-youtube"></i>
-                  </span>
-                  <span>Video</span>
-                </a>
-              </span>
-              <!-- Code Link. -->
-              <span class="link-block">
-                <a href="https://github.com/umfieldrobotics/TURTLMap"
-                   class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <i class="fab fa-github"></i>
-                  </span>
-                  <span>Code</span>
-                  </a>
-              </span>
-              <!-- LinkedIn post, use news icon -->
-              <span class="link-block">
-                <a href="https://www.linkedin.com/posts/jingyu-song-93763a132_i-am-happy-to-share-that-our-paper-activity-7227132379373473792-Ci1H?utm_source=share&utm_medium=member_desktop"
-                   class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <i class="fab fa-linkedin"></i>
-                  </span>
-                  <span>LinkedIn Post</span>
-                  </a>
-              </span>
-              <!-- Dataset Link. -->
-              <!-- <span class="link-block">
-                <a href="https://github.com/google/nerfies/releases/tag/0.1"
-                   class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <i class="far fa-images"></i>
-                  </span>
-                  <span>Data</span>
-                  </a>
-            </div> -->
-          </div>
 
           <!-- create a new column with a button pointing to the subscription form -->
           <!-- create a new column with a button pointing to the subscription form -->
@@ -212,14 +150,14 @@
   <div class="container is-max-desktop">
     <div class="hero-body">
       <video id="teaser" autoplay muted loop playsinline height="100%">
-        <source src="./static/videos/teaser.mp4"
+        <source src="./static/videos/oceansim_demo_website.mov"
                 type="video/mp4">
       </video>
       <!-- add image docs/static/images/pitch.svg-->
       <h2 class="subtitle has-text-centered">
-        We present <strong>TURTLMap</strong>, a novel solution that focuses on <strong>T</strong>extureless <strong>U</strong>nderwater environments through a <strong>R</strong>eal-<strong>T</strong>ime <strong>L</strong>ocalization and <strong>Map</strong>ping method.
+        We present OceanSim, a high-fidelity and GPU-accelerated underwater simulator.
       </h2>
-      <img src="./static/images/pitch.jpg" alt="TURTLMap" style="width: 100%; height: auto;">
+      <img src="./static/images/pitch.jpg" alt="OceanSim" style="width: 100%; height: auto;">
     </div>
   </div>
 </section>
@@ -290,11 +228,22 @@
       <div class="column is-four-fifths">
         <h2 class="title is-3">Abstract</h2>
         <div class="content has-text-justified">
-          Significant work has been done on advancing localization and mapping in underwater environments.
-          Still, state-of-the-art methods are challenged by low-texture environments, which is common for underwater settings. This makes it difficult to use existing methods in diverse, real-world scenes.
-          In this paper, we present TURTLMap, a novel solution that focuses on Textureless Underwater environments through a Real-Time Localization and Mapping method.
-          We show that this method is low-cost, and capable of tracking the robot accurately, while constructing a dense map of a low-textured environment in real-time.
-          We evaluate the proposed method using real-world data collected in an indoor water tank with a motion capture system and ground truth map reference. Qualitative and quantitative results validate the proposed system achieves accurate and robust localization and precise dense mapping, even when subject to wave conditions.
+          Underwater simulators offer support for building robust
+          underwater perception solutions. Significant work has
+          recently been done to develop new simulators and to advance
+          the performance of existing underwater simulators. Still,
+          there remains room for improvement on physics-based
+          underwater sensor modeling and rendering efficiency. In
+          this paper, we propose OceanSim, a high-fidelity
+          GPU-accelerated underwater simulator to address this
+          research gap. We propose advanced physics-based rendering
+          techniques to reduce the sim-to-real gap for underwater
+          image simulation. We develop OceanSim to fully leverage the
+          accelerated computing advantages of GPU and achieve
+          real-time imaging sonar rendering and fast synthetic data
+          generation. We evaluate the capabilities and realism of
+          OceanSim using real-world data to provide qualitative and
+          quantitative results. 
         </div>
       </div>
     </div>
@@ -321,19 +270,27 @@
       <div class="column is-full-width">
         <h2 class="title is-3">Overview</h2>
         <div class="content has-text-justified">
+          <!-- \item OceanSim incorporates advanced physics-based rendering techniques to accurately model underwater visual and acoustic sensors.
+    \item OceanSim achieves significantly faster rendering speeds compared to alternative simulation engines.
+    \item OceanSim maintains a versatile design as an extension to NVIDIA Issac Sim~\cite{issacsim}. By embracing the fast-growing NVIDIA Omniverse ecosystem~\cite{Nvidia_omniverse}, our simulator naturally bridges the gap between robot learning and underwater robotics to facilitate the development and deployment of embodied AI techniques for underwater applications.
+    \item OceanSim will be available open-source to allow the research community to contribute in a collaborative paradigm. -->
           <p>
-            We propose a pose graph-based DVL-inertial-barometer localization package that achieves improved localization accuracy in low-texture regions.
+            OceanSim incorporates advanced physics-based rendering techniques to accurately model underwater visual and acoustic sensors.
           </p>
           <p>
-            With the proposed localization package and a real-time volumetric mapping package, we demonstrate real-time and accurate dense mapping on an onboard embedded computer on a low-cost UUV with a downward-facing stereo camera in a low-texture underwater environment.
+            OceanSim achieves significantly faster rendering speeds compared to alternative simulation engines.
           </p>
           <p>
-            We provide extensive quantitative and qualitative evaluation on localization and mapping performance with ground truth localization provided by an underwater motion capture system and reference mapping provided by a 3D CAD model of the experimental site with and without wave conditions. Our contribution include detailed description of integrated hardware and we provide open-source software supporting future implementation and extension for the research community.
+            OceanSim maintains a versatile design as an extension to NVIDIA Issac Sim. By embracing the fast-growing NVIDIA Omniverse ecosystem, our simulator naturally bridges the gap between robot learning and underwater robotics to facilitate the development and deployment of embodied AI techniques for underwater applications.
+          </p>
+          <p>
+            OceanSim will be available open-source to allow the research community to contribute in a collaborative paradigm.
+          </p>
         </div>
       </div>
     </div>
     <!-- add an image docs/static/images/Overall_Diagram.svg -->
-    <img src="./static/images/Overall_Diagram.svg" alt="TURTLMap Overview" style="width: 100%; height: auto;">
+    <img src="./static/images/oceansim_overall_framework.svg" alt="OceanSim Overview" style="width: 100%; height: auto;">
   </div>
 </section>
 
@@ -341,19 +298,6 @@
 
 
 
-<section class="section" id="BibTeX">
-  <div class="container is-max-desktop content">
-    <h2 class="title">BibTeX</h2>
-    <pre><code>@inproceedings{song2024turtlmap,
-  title={TURTLMap: Real-time Localization and Dense Mapping of Low-texture Underwater Environments with a Low-cost Unmanned Underwater Vehicle},
-  author={Song, Jingyu and Bagoren, Onur and Andigani, Razan and Sethuraman, Advaith and Skinner, Katherine A},
-  booktitle={2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
-  pages={1191--1198},
-  year={2024},
-  organization={IEEE}
-}</code></pre>
-  </div>
-</section>
 
 <!-- cite nerfies project page https://github.com/nerfies/nerfies.github.io -->
 <footer class="footer">
