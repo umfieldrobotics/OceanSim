@@ -140,11 +140,12 @@ class UIBuilder:
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         # Open MHL scene
-        open_stage("/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/MHL_Water.usd")
-
+        # open_stage("/home/haoyu-ma/projects/OceanSim_utils/assets/usd/mhl_scaled/MHL_Water.usd")
+        open_stage('/home/haoyu/isaacsim_assets/USD/mhl_scaled/MHL_Water.usd')
         # Load the robot
         robot_prim_path = "/World/rob"
-        robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
+        # robot_usd_path = '/home/haoyu-ma/projects/OceanSim_utils/assets/usd/BlueRov/BROV2-HEAVY_0.5down.usd'
+        robot_usd_path = '/home/haoyu/isaacsim_assets/USD/BlueRov/BROV2-HEAVY_0.5down.usd'
         add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         # DynamicCuboid(prim_path=robot_prim_path, size=0.25, color=np.array([0.5,0.5,1]))
         # Load the rock

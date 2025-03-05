@@ -521,13 +521,13 @@ class ImagingSonarSensor(Camera):
         if self.writing:
             # self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
             # self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
-            # self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
+            self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
             print(f"[{self.id}] Writing sonar data to {self.backend.output_dir}")
         
         if self._viewport:
             self._sonar_provider.set_bytes_data_from_gpu(self.make_sonar_image().ptr, 
                                                     [self.sonar_map.shape[1], self.sonar_map.shape[0]])
-            self.backend.schedule(write_image, f'sonar_{self.id}.png', data = self.make_sonar_image())        
+            # self.backend.schedule(write_image, f'sonar_{self.id}.png', data = self.make_sonar_image())        
             
         self.id += 1
     

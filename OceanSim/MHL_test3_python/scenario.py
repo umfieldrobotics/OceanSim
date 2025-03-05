@@ -28,25 +28,17 @@ class MHL_test_Scenario():
     def setup_scenario(self, rob, sonar, cam):
         self._rob = rob
         self._cam = cam
+        self._cam.initialize(UW_yaml_path="/home/haoyu/Desktop/mhl.yaml")
 
         self._rob_rigid_prim = SingleRigidPrim(prim_path=get_prim_path(self._rob),
-                                                translation=(-1.7, 0.4, -1.1),
-                                                orientation=euler_angles_to_quat(np.array([5.0, 6.0, -6.0]), 
+                                                translation=(-1.7, 0.5, -1.1),
+                                                orientation=euler_angles_to_quat(np.array([5.0, 6.0, -9.0]), 
                                                                                  degrees=True,
                                                                                  extrinsic=False))
         self._sonar = sonar
         self._sonar.sonar_initialize()
         set_camera_view(eye=np.array([-1,-1,1]), target=self._rob_rigid_prim.get_world_pose()[0])
-        self._backend = rep.BackendDispatch({"paths": {"out_dir": self._output_dir}})
-        self._rgba_annot = rep.AnnotatorRegistry.get_annotator(name='LdrColor', device=str(wp.get_preferred_device()))
-        self._depth_annot = rep.AnnotatorRegistry.get_annotator(name="distance_to_camera", device=str(wp.get_preferred_device()))
-        self._cam_param_annot = rep.AnnotatorRegistry.get_annotator(name="camera_params")
 
-        # cam = rep.create.camera(get_prim_path(self._cam))
-        rp = rep.create.render_product(camera='/World/rob/Camera', resolution=(1920,1080))
-        self._rgba_annot.attach(rp)
-        self._depth_annot.attach(rp)
-        self._cam_param_annot.attach(rp)
         self._running_scenario = True
 
 
@@ -58,6 +50,8 @@ class MHL_test_Scenario():
         self._running_scenario = False
         if self._sonar is not None:
             self._sonar.close()
+        if self._cam is not None:
+            self._cam.close()
         
         self._rob = None
         self._sonar = None
@@ -72,15 +66,8 @@ class MHL_test_Scenario():
             return
         
         self._time += step
-        if self._rgba_annot.get_data().size !=0:
-            self._sonar.make_sonar_data(normalizing_method = "range")
-
-
-            self._backend.schedule(write_json, path='cam_param.json', data=self._process_camera_parameters(self._cam_param_annot.get_data()))
-            self._backend.schedule(write_image, path='rgba.png', data=self._rgba_annot.get_data())
-            self._backend.schedule(write_np, path='depth.npy', data=self._depth_annot.get_data())
-            self._backend.schedule(write_image, path='sonar.png', data=self._sonar.make_sonar_image())
-
+        self._cam.render()
+        self._sonar.make_sonar_data(central_peak=0.1, ray_noise_param=0.15)
 
 
     def _process_camera_parameters(self, camera_params) -> dict:

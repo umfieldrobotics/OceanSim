@@ -101,15 +101,15 @@ class Colorpicker_Scenario():
     def make_window(self):
 
         self.wrapped_ui_elements = []
-        window = ui.Window("Render Result", width=1280, height=720 + 40, visible=True)
+        window = ui.Window("Render Result", width=1920, height=1080 + 40, visible=True)
         self.image_provider = ui.ByteImageProvider()
         with window.frame:
-            with ui.ZStack(height=720):
+            with ui.ZStack(height=1080):
                 ui.Rectangle(style={"background_color": 0xFF000000})
                 ui.Label('Run the scenario for image to be received',
                             style={'font_size': 55,'alignment': ui.Alignment.CENTER},
                             word_wrap=True)
-                render_result = ui.ImageWithProvider(self.image_provider, width=1280, height=720,
+                render_result = ui.ImageWithProvider(self.image_provider, width=1920, height=1080,
                                         style={'fill_policy': ui.FillPolicy.PRESERVE_ASPECT_FIT,
                                     'alignment' :ui.Alignment.CENTER})
    

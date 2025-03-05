@@ -26,7 +26,7 @@ class MHL_straighline_navigation_Scenario():
         self._rob = rob
         self._DVL = DVL
         self._cam = cam
-        self._cam.initialize(writing_dir = self._output_dir + '/cam')
+        # self._cam.initialize(writing_dir = self._output_dir + '/cam')
         self._running_scenario = True
 
         rob_rigid_prim = SingleRigidPrim(prim_path=get_prim_path(self._rob),
@@ -52,21 +52,21 @@ class MHL_straighline_navigation_Scenario():
             return
         self._time += step
 
-        self._cam.render()
+        # self._cam.render()
         SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([0.5,0,0]))
-        self._vel_buffer.append(self._DVL.get_linear_vel())
-        self._depth_buffer.append(self._DVL.get_depth())
-        self._singleBeam_buffer.append(self._DVL.get_single_beam_range())
+        # self._vel_buffer.append(self._DVL.get_linear_vel())
+        # self._depth_buffer.append(self._DVL.get_depth())
+        # self._singleBeam_buffer.append(self._DVL.get_single_beam_range())
 
-        if self._id == 1200:
-            self.save()
+
         
         self._id += 1
 
 
     def save(self):
-        np.save(file=self._output_dir+"/vel.npy", arr=self._vel_buffer)
-        np.save(file=self._output_dir+"/fourBeam.npy", arr=self._depth_buffer)
-        np.save(file=self._output_dir+'/singleBeam.npy', arr=self._singleBeam_buffer)   
-        print(f'data written to {self._output_dir}')
+        # np.save(file=self._output_dir+"/vel.npy", arr=self._vel_buffer)
+        # np.save(file=self._output_dir+"/fourBeam.npy", arr=self._depth_buffer)
+        # np.save(file=self._output_dir+'/singleBeam.npy', arr=self._singleBeam_buffer)   
+        # print(f'data written to {self._output_dir}')
+        pass
 
