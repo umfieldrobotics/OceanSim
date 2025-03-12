@@ -13,7 +13,7 @@ from isaacsim.core.utils.prims import get_prim_at_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.semantics import add_update_semantics
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, setup_ui_headers, CheckBox, xyz_plot_builder, combo_cb_xyz_plot_builder
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, setup_ui_headers, CheckBox, combo_cb_xyz_plot_builder, combo_cb_plot_builder
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.core.utils.extensions import get_extension_path, get_extension_id, get_extension_path_from_name
 # Custom import
@@ -92,6 +92,7 @@ class UIBuilder():
         Buttons imported from omni.isaac.ui.element_wrappers implement a cleanup function that should be called
         """
         self._DVL_event_sub = None
+        self._baro_event_sub = None
         for ui_elem in self.wrapped_ui_elements:
             ui_elem.cleanup()
 
@@ -143,6 +144,14 @@ class UIBuilder():
                 self._use_baro = False
                 self.wrapped_ui_elements.append(baro_check_box)
 
+                manual_ctrl_cb = CheckBox(
+                    'Manual Control',
+                    default_value=False,
+                    tooltip="Click this checkbox to activate manual control",
+                    on_click_fn=self._on_manual_ctrl_cb_click_fn
+                )
+                self._manual_ctrl = False
+                self.wrapped_ui_elements.append(manual_ctrl_cb)
 
                 self._load_btn = LoadButton(
                     "Load Button", "LOAD", setup_scene_fn=self._setup_scene, setup_post_load_fn=self._setup_scenario
@@ -236,6 +245,11 @@ class UIBuilder():
         # Set the mass for the robot to suppress a warning from inertia autocomputation
         SingleRigidPrim(prim_path=robot_prim_path,
                         mass=self._rob_mass)
+        # Apply the physx force schema if manual control
+        if self._manual_ctrl:
+            self._rob_forceAPI = PhysxSchema.PhysxForceAPI.Apply(get_prim_at_path(robot_prim_path))
+        else:
+            self._rob_forceAPI = None
         
         # Load the rock
         rock_prim_path = '/World/rock'
@@ -300,7 +314,7 @@ class UIBuilder():
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._sonar, self._cam, self._DVL, self._baro)
+        self._scenario.setup_scenario(self._rob, self._sonar, self._cam, self._DVL, self._baro, self._rob_forceAPI)
     def _on_post_reset_btn(self):
         """
         This function is attached to the Reset Button as the post_reset_fn callback.
@@ -382,10 +396,17 @@ class UIBuilder():
         self._use_baro = model
         print('Reload the scene for changes to take effect.')
     
+    def _on_manual_ctrl_cb_click_fn(self, model):
+        self._manual_ctrl = model
+        print('Reload the scene for changes to take effect.')
+   
     def _add_extra_ui(self):
-        if self._use_DVL is True:
-            with self.sensor_reading_frame:
-                self._build_DVL_plot_frame()
+        with self.sensor_reading_frame:
+            with ui.VStack(spacing=5, height=0):                
+                if self._use_DVL is True:
+                    self._build_DVL_plot_frame()
+                if self._use_baro is True:
+                    self._build_baro_plot_frame()
 
     def _build_DVL_plot_frame(self):
         self._DVL_event_sub = None
@@ -403,7 +424,7 @@ class UIBuilder():
             self._DVL_plot_value,
         ) = combo_cb_xyz_plot_builder(**kwargs)
     def toggle_DVL_step(self, val=None):
-        print("You've cliked DVL time_series_plot_data:", val)
+        print("DVL DAQ: ", val)
         if val:
             if not self._DVL_event_sub:
                 self._DVL_event_sub = (
@@ -415,6 +436,7 @@ class UIBuilder():
             self._DVL_event_sub = None
 
     def _on_DVL_step(self, e: carb.events.IEvent):
+        # Casting np.float32 to float32 is necessary for the ui.plot expects a consistent data type flow
         x_vel = float(self._scenario._DVL_reading[0])
         y_vel = float(self._scenario._DVL_reading[1])
         z_vel = float(self._scenario._DVL_reading[2])
@@ -434,3 +456,38 @@ class UIBuilder():
         self._DVL_plot[0].set_data(*self._DVL_x_vel)
         self._DVL_plot[1].set_data(*self._DVL_y_vel)
         self._DVL_plot[2].set_data(*self._DVL_z_vel)
+
+    def _build_baro_plot_frame(self):
+        self._baro_event_sub = None
+        self._baro_data = []
+
+        kwargs = {
+                "label": "Barometer reading (Pa)", 
+                "on_clicked_fn": self.toggle_baro_step, 
+                "data": self._baro_data,
+                "min": 110000,
+                'max': 120000,
+                  }
+        self._baro_plot, self._baro_plot_value = combo_cb_plot_builder(**kwargs)
+
+
+    def toggle_baro_step(self, val=None):
+        print('Barometer DAQ: ', val)
+        if val:
+            if not self._baro_event_sub:
+                self._baro_event_sub= (
+                    omni.kit.app.get_app().get_update_event_stream().create_subscription_to_pop(self._on_baro_step)
+                )
+            else:
+                self._baro_event_sub = None
+        else:
+            self._baro_event_sub = None
+
+    def _on_baro_step(self, e: carb.events.IEvent):
+        baro = float(self._scenario._baro_reading)
+        self._baro_plot_value.set_value(baro)
+        self._baro_data.append(baro)
+        if len(self._baro_data) > 50:
+            self._baro_data.pop(0)
+        self._baro_plot.set_data(*self._baro_data)
+        
