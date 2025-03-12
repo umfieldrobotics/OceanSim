@@ -5,20 +5,17 @@ import omni.timeline
 import omni.ui as ui
 from omni.usd import StageEventType
 from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
-
+import carb
 # Isaac sim import
-from isaacsim.examples.interactive.base_sample import BaseSampleUITemplate
 from isaacsim.core.api.objects import DynamicCuboid
 from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, SingleGeometryPrim
 from isaacsim.core.utils.prims import get_prim_at_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.semantics import add_update_semantics
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, CheckBox, setup_ui_headers
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, setup_ui_headers, CheckBox, xyz_plot_builder, combo_cb_xyz_plot_builder
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.core.utils.extensions import get_extension_path, get_extension_id, get_extension_path_from_name
-
-
 # Custom import
 from ...sensors.ImagingSonarSensor import ImagingSonarSensor
 from ...sensors.UW_Camera import UW_Camera
@@ -94,6 +91,7 @@ class UIBuilder():
         Perform any necessary cleanup such as removing active callback functions
         Buttons imported from omni.isaac.ui.element_wrappers implement a cleanup function that should be called
         """
+        self._DVL_event_sub = None
         for ui_elem in self.wrapped_ui_elements:
             ui_elem.cleanup()
 
@@ -102,8 +100,6 @@ class UIBuilder():
         Build a custom UI tool to run your extension.
         This function will be called any time the UI window is closed and reopened.
         """
-
-        
 
         setup_ui_headers(
             self._ext_id, self._file_path, self._title, self._doc_link, self._overview, info_collapsed=False
@@ -118,14 +114,15 @@ class UIBuilder():
                     tooltip=" Click this checkbox to activate imaging sonar",
                     on_click_fn=self._on_sonar_checkbox_click_fn,
                 )
+                self._use_sonar = False
                 self.wrapped_ui_elements.append(sonar_check_box)
-
                 camera_check_box = CheckBox(
                     "Underwater Camera",
                     default_value=False,
                     tooltip=" Click this checkbox to activate underwater camera",
                     on_click_fn=self._on_camera_checkbox_click_fn,
                 )
+                self._use_camera = False
                 self.wrapped_ui_elements.append(camera_check_box)
 
                 DVL_check_box = CheckBox(
@@ -134,6 +131,7 @@ class UIBuilder():
                     tooltip=" Click this checkbox to activate DVL",
                     on_click_fn=self._on_DVL_checkbox_click_fn
                 )
+                self._use_DVL = False
                 self.wrapped_ui_elements.append(DVL_check_box)
 
                 baro_check_box = CheckBox(
@@ -142,12 +140,14 @@ class UIBuilder():
                     tooltip='Click this checkbox to activate barometer',
                     on_click_fn=self._on_baro_checkbox_click_fn
                 ) 
+                self._use_baro = False
                 self.wrapped_ui_elements.append(baro_check_box)
+
 
                 self._load_btn = LoadButton(
                     "Load Button", "LOAD", setup_scene_fn=self._setup_scene, setup_post_load_fn=self._setup_scenario
                 )
-                self._load_btn.set_world_settings(physics_dt=1 / 60.0, rendering_dt=1 / 60.0)
+                # self._load_btn.set_world_settings(physics_dt=1 / 60.0, rendering_dt=1 / 60.0)
                 self.wrapped_ui_elements.append(self._load_btn)
 
                 self._reset_btn = ResetButton(
@@ -171,6 +171,9 @@ class UIBuilder():
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
 
+        self.sensor_reading_frame = CollapsableFrame('Sensor Reading', collapsed=False)
+
+
 
 
 
@@ -187,9 +190,14 @@ class UIBuilder():
 
         # Sensor
         self._sonar = None
+        self._sonar_trans = np.array([0.5,0.0, 0.0])
         self._cam = None
+        self._cam_trans = self._sonar_trans
+        self._cam_focal_length = 21
         self._DVL = None
+        self._DVL_trans = np.array([0,0,-0.1])
         self._baro = None
+        self._water_surface = 1.43389 # Read from USD scene
         
         # Scenario
         self._scenario = MHL_Sensor_Example_Scenario()
@@ -201,7 +209,7 @@ class UIBuilder():
         On pressing the Load Button, a new instance of World() is created and then this function is called.
         The user should now load their assets onto the stage and add them to the World Scene.
         """
-        # create_new_stage()
+        create_new_stage()
         
         # add MHL scene as reference
         MHL_prim_path = '/World/mhl'
@@ -218,7 +226,7 @@ class UIBuilder():
         # add bluerov robot as reference
         robot_prim_path = "/World/rob"
         robot_usd_path = get_OceanSim_assets_path() + "/Bluerov/BROV_low.usd"
-        add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
+        self._rob = add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         # Toggle rigid body and collider preset for robot, and set zero gravity to mimic underwater environment
         rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(robot_prim_path))
         rob_rigidBody_API.CreateDisableGravityAttr(True)
@@ -226,8 +234,8 @@ class UIBuilder():
         rob_rigidBody_API.GetLinearDampingAttr().Set(self._rob_linear_damping)
         rob_rigidBody_API.GetAngularDampingAttr().Set(self._rob_angular_damping)
         # Set the mass for the robot to suppress a warning from inertia autocomputation
-        self._rob_rigid_prim = SingleRigidPrim(prim_path=robot_prim_path,
-                                         mass=self._rob_mass)
+        SingleRigidPrim(prim_path=robot_prim_path,
+                        mass=self._rob_mass)
         
         # Load the rock
         rock_prim_path = '/World/rock'
@@ -249,24 +257,31 @@ class UIBuilder():
         rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path )
         
 
-        ############################## |
-        # TODO ####################### |
-        ############################## V
+
         if self._use_sonar:
-            self._sonar = ImagingSonarSensor(prim_path=robot_prim_path,
-                                            trans=self._cam_pose[0],
-                                            orients=euler_angles_to_quat(np.array([0, 30, 0]), degrees=True),
-                                            hori_res=6000)
+            self._sonar = ImagingSonarSensor(prim_path=robot_prim_path + '/sonar',
+                                            translation=self._sonar_trans,
+                                            range_res=0.005,
+                                            angular_res=0.25,
+                                            )
             
-        # # Attach the front camera
-        # cam_prim_path = robot_prim_path + '/Camera'
-        # self._cam = Camera(
-        #     prim_path=cam_prim_path,
-        #     resolution=self._cam_res,
-        #     )
-        # self._cam.set_focal_length(0.1 * self._cam_focal)
-        # SingleXFormPrim(cam_prim_path).set_local_pose(translation=self._cam_pose[0],orientation=self._cam_pose[1])
-        
+        if self._use_camera:
+            self._cam = UW_Camera(prim_path=robot_prim_path + '/UW_camera',
+                                    resolution=[1920,1080],
+                                    translation=self._cam_trans)
+            self._cam.set_focal_length(0.1 * self._cam_focal_length)
+            self._cam.set_clipping_range(0.1, 100)
+            
+        if self._use_DVL:
+            self._DVL = DVLsensor(max_range=0.3)
+            self._DVL.attachDVL(rigid_body_path=robot_prim_path,
+                                location=self._DVL_trans)
+            self._DVL.add_debug_lines()
+            
+        if self._use_baro:
+            self._baro = BarometerSensor(prim_path=robot_prim_path + '/Baro',
+                                        water_surface_z=self._water_surface)
+            
 
 
     def _setup_scenario(self):
@@ -276,6 +291,7 @@ class UIBuilder():
         their objects are properly initialized, and that the timeline is paused on timestep 0.
         """
         self._reset_scenario()
+        self._add_extra_ui()
 
         # UI management
         self._scenario_state_btn.reset()
@@ -284,7 +300,7 @@ class UIBuilder():
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob_rigid_prim, self._sonar, self._cam, self._DVL, self._baro)
+        self._scenario.setup_scenario(self._rob, self._sonar, self._cam, self._DVL, self._baro)
     def _on_post_reset_btn(self):
         """
         This function is attached to the Reset Button as the post_reset_fn callback.
@@ -365,4 +381,56 @@ class UIBuilder():
     def _on_baro_checkbox_click_fn(self, model):
         self._use_baro = model
         print('Reload the scene for changes to take effect.')
+    
+    def _add_extra_ui(self):
+        if self._use_DVL is True:
+            with self.sensor_reading_frame:
+                self._build_DVL_plot_frame()
 
+    def _build_DVL_plot_frame(self):
+        self._DVL_event_sub = None
+        self._DVL_x_vel = []
+        self._DVL_y_vel = []
+        self._DVL_z_vel = []
+
+        kwargs = {
+            "label": "DVL reading xyz vel (m/s)",
+            "on_clicked_fn": self.toggle_DVL_step,
+            "data": [self._DVL_x_vel, self._DVL_y_vel, self._DVL_z_vel],
+        }
+        (
+            self._DVL_plot,
+            self._DVL_plot_value,
+        ) = combo_cb_xyz_plot_builder(**kwargs)
+    def toggle_DVL_step(self, val=None):
+        print("You've cliked DVL time_series_plot_data:", val)
+        if val:
+            if not self._DVL_event_sub:
+                self._DVL_event_sub = (
+                    omni.kit.app.get_app().get_update_event_stream().create_subscription_to_pop(self._on_DVL_step)
+                )
+            else:
+                self._DVL_event_sub = None
+        else:
+            self._DVL_event_sub = None
+
+    def _on_DVL_step(self, e: carb.events.IEvent):
+        x_vel = float(self._scenario._DVL_reading[0])
+        y_vel = float(self._scenario._DVL_reading[1])
+        z_vel = float(self._scenario._DVL_reading[2])
+
+        self._DVL_plot_value[0].set_value(x_vel)
+        self._DVL_plot_value[1].set_value(y_vel)
+        self._DVL_plot_value[2].set_value(z_vel)
+
+        self._DVL_x_vel.append(x_vel)
+        self._DVL_y_vel.append(y_vel)
+        self._DVL_z_vel.append(z_vel)
+        if len(self._DVL_x_vel) > 50:
+            self._DVL_x_vel.pop(0)
+            self._DVL_y_vel.pop(0)
+            self._DVL_z_vel.pop(0)
+
+        self._DVL_plot[0].set_data(*self._DVL_x_vel)
+        self._DVL_plot[1].set_data(*self._DVL_y_vel)
+        self._DVL_plot[2].set_data(*self._DVL_z_vel)

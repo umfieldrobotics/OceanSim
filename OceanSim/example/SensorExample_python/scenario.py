@@ -32,15 +32,19 @@ class MHL_Sensor_Example_Scenario():
         self._baro = baro
 
         # rob initial pose
-        self._rob.set_local_pose(translation=(-0.5, 0.0, -0.95),
-                                orientation=euler_angles_to_quat(np.array([0, 0, 0]), 
-                                                                    degrees=True,
-                                                                    extrinsic=False))
+        # self._rob.set_local_pose(translation=(-0.5, 0.0, -0.95),
+        #                         orientation=euler_angles_to_quat(np.array([0, 0, 0]), 
+        #                                                             degrees=True,
+        #                                                             extrinsic=False))
         
         if self._sonar is not None:
             self._sonar.sonar_initialize()
         if self._cam is not None:
             self._cam.initialize()
+        if self._DVL is not None:
+            self._DVL_reading = [0.0, 0.0, 0.0]
+        
+            
         
 
         self._running_scenario = True
@@ -71,8 +75,11 @@ class MHL_Sensor_Example_Scenario():
             return
         
         self._time += step
-        # self._rob_rigid_prim.set_linear_velocity(np.array([1, 0, 0]))
-        # self._sonar.scan()
-        # self._sonar.make_sonar_data(normalizing_method = "range")
-        # self._sonar_provider.set_bytes_data_from_gpu(self._sonar.make_sonar_image().ptr, 
-        #                                             [self._sonar.make_sonar_image().shape[1], self._sonar.make_sonar_image().shape[0]])
+        
+        SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([0.5,0,0]))  
+              
+        self._DVL_reading = self._DVL.get_linear_vel()
+
+
+
+
