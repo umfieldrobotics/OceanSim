@@ -20,11 +20,6 @@ class MHL_Sensor_Example_Scenario():
         self._running_scenario = False
         self._time = 0.0
 
-        # self._output_dir = '/home/haoyu/Desktop/MHL_replica'
-
-
-
-
     def setup_scenario(self, rob, sonar, cam, DVL, baro, ctrl_mode):
         self._rob = rob
         self._sonar = sonar
@@ -79,9 +74,35 @@ class MHL_Sensor_Example_Scenario():
                                       })
             
         self._running_scenario = True
-        self._pose = []
+    # This function will only be called if ctrl_mode==waypoints and waypoints files are changed
+    def setup_waypoints(self, waypoint_path, default_waypoint_path):
+        def read_data_from_file(file_path):
+            # Initialize an empty list to store the floats
+            data = []
+            
+            # Open the file in read mode
+            with open(file_path, 'r') as file:
+                # Read each line in the file
+                for line in file:
+                    # Strip any leading/trailing whitespace and split the line by spaces
+                    float_strings = line.strip().split()
+                    
+                    # Convert the list of strings to a list of floats
+                    floats = [float(x) for x in float_strings]
+                    
+                    # Append the list of floats to the data list
+                    data.append(floats)
+            
+            return data
+        try:
+            self.waypoints = read_data_from_file(waypoint_path)
+            print('Waypoints loaded successfully.')
+            print(f'Waypoint[0]: {self.waypoints[0]}')
+        except:
+            self.waypoints = read_data_from_file(default_waypoint_path)
+            print('Fail to load this waypoints. Back to default waypoints.')
+
         
-   
     def teardown_scenario(self):
 
         # Because these two sensors create annotator cache in GPU,
@@ -127,22 +148,20 @@ class MHL_Sensor_Example_Scenario():
             torque_cmd = Gf.Vec3f(*self._torque_cmd._base_command)
             self._rob_forceAPI.CreateForceAttr().Set(force_cmd)
             self._rob_forceAPI.CreateTorqueAttr().Set(torque_cmd)
+        elif self._ctrl_mode=="Waypoints":
+            if len(self.waypoints) > 0:
+                waypoints = self.waypoints[0]
+                self._rob.GetAttribute('xformOp:translate').Set(Gf.Vec3f(waypoints[0], waypoints[1], waypoints[2]))
+                # print()
+                self._rob.GetAttribute('xformOp:orient').Set(Gf.Quatd(waypoints[3], waypoints[4], waypoints[5], waypoints[6]))
+                self.waypoints.pop(0)
+            else:
+                print('Waypoints finished')                
         elif self._ctrl_mode=="Straight line":
             SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([0.5,0,0])) 
-        # Gf.Quatd(1, Gf.Vec3f(1,2,3)).GetImaginary
-        pos= self._rob.GetAttribute('xformOp:translate').Get()
-        orient = self._rob.GetAttribute('xformOp:orient').Get()
-        self._pose.append([pos[0], pos[1], pos[2], orient.GetImaginary()[0], orient.GetImaginary()[1], orient.GetImaginary()[2], orient.GetReal()])
-        print(self._pose)
-    
-    def save(self):
-    #     with open('/home/haoyu/Desktop/waypoints.txt', 'w') as file:
-    #         for pose in self._pose:
-    #             # Convert the pose to a string and write to the file
-    #             pose_str = ' '.join(map(str, pose)) + '\n'
-    #             file.write(pose_str)
-    #     print('waypoints saved')
-        pass
+
+
+
 
         
 

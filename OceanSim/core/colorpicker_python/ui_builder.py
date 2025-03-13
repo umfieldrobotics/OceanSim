@@ -10,10 +10,10 @@ import carb
 import os
 # Isaac sim import
 
-from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, open_stage
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, combo_floatfield_slider_builder, Button, StringField, setup_ui_headers
+from isaacsim.core.utils.stage import open_stage
+from isaacsim.gui.components import CollapsableFrame, StateButton, get_style, combo_floatfield_slider_builder, Button, StringField, setup_ui_headers, str_builder
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
-from isaacsim.core.utils.extensions import get_extension_path, get_extension_id, get_extension_path_from_name
+from isaacsim.core.utils.extensions import get_extension_path
 
 
 # Custom import
@@ -30,6 +30,9 @@ class UIBuilder:
         self._doc_link =  EXTENSION_LINK
         self._overview = EXTENSION_DESCRIPTION
         self._extension_path = get_extension_path(self._ext_id)
+
+        # UI frames created
+        self.frames = []
         # UI elements created using a UIElementWrapper instance
         self.wrapped_ui_elements = []
 
@@ -91,6 +94,8 @@ class UIBuilder:
         """
         for ui_elem in self.wrapped_ui_elements:
             ui_elem.cleanup()
+        for frame in self.frames:
+            frame.cleanup()
 
     def build_ui(self):
         """
@@ -120,14 +125,18 @@ class UIBuilder:
         self._param = np.zeros(9)
 
         world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
-
+        self.frames.append(world_controls_frame)
         with world_controls_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
-                self.scene_path_field = StringField(
+                self.scene_path_field = str_builder(
                     label='Path to USD',
                     tooltip='Input the path to your USD scene file',
-                )            
-                self.wrapped_ui_elements.append(self.scene_path_field)    
+                    default_val="",
+                    use_folder_picker=True,
+                    folder_button_title='Select USD',
+                    folder_dialog_title='Select USD scene to import'
+                )
+
                 self._load_btn = LoadButton(
                     "Load Button", "LOAD", setup_scene_fn=self._setup_scene, setup_post_load_fn=self._setup_scenario
                 )
@@ -141,7 +150,7 @@ class UIBuilder:
                 self.wrapped_ui_elements.append(self._reset_btn)
 
         run_scenario_frame = CollapsableFrame("Run Scenario", collapsed=False)
-
+        self.frames.append(run_scenario_frame)
         with run_scenario_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
                 self._scenario_state_btn = StateButton(
@@ -157,6 +166,7 @@ class UIBuilder:
 
 
         color_picker_frame = CollapsableFrame('Color Picker', collapsed=False)
+        self.frames.append(color_picker_frame)
         self._param_models = []
         params_labels = [                        
             "Backscatter_R", "Backscatter_G","Backscatter_B",
@@ -237,7 +247,7 @@ class UIBuilder:
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         try: 
-            open_stage(self.scene_path_field.get_value())
+            open_stage(self.scene_path_field.get_value_as_string())
             print('USD scene is loaded.')
         except:
             print('Path is not valid or scene can not be opened. Default to current stage')

@@ -6,16 +6,18 @@ import omni.ui as ui
 from omni.usd import StageEventType
 from pxr import PhysxSchema
 import carb
+
 # Isaac sim import
 from isaacsim.core.prims import SingleRigidPrim, SingleGeometryPrim
 from isaacsim.core.utils.prims import get_prim_at_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage, open_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.semantics import add_update_semantics
-from isaacsim.gui.components import CollapsableFrame, StateButton, get_style, setup_ui_headers, CheckBox, combo_cb_xyz_plot_builder, combo_cb_plot_builder, dropdown_builder, StringField
+from isaacsim.gui.components import CollapsableFrame, StateButton, get_style, setup_ui_headers, CheckBox, combo_cb_xyz_plot_builder, combo_cb_plot_builder, dropdown_builder, str_builder
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
-from isaacsim.core.utils.extensions import get_extension_path, get_extension_id, get_extension_path_from_name
+from isaacsim.core.utils.extensions import get_extension_path
+
 # Custom import
 from .scenario import MHL_Sensor_Example_Scenario
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
@@ -26,14 +28,19 @@ class UIBuilder():
     def __init__(self):
 
         self._ext_id = omni.kit.app.get_app().get_extension_manager().get_extension_id_by_module(__name__)
-
         self._file_path = os.path.abspath(__file__)
         self._title = EXTENSION_TITLE
         self._doc_link =  EXTENSION_LINK
         self._overview = EXTENSION_DESCRIPTION
+        self._extension_path = get_extension_path(self._ext_id)
+        
+        self._ctrl_mode = 'Manual control'
+        self._waypoints_path = self._extension_path + '/demo/demo_waypoints.txt'
         # Get access to the timeline to control stop/pause/play programmatically
         self._timeline = omni.timeline.get_timeline_interface()
 
+        # UI frames created
+        self.frames = []
         # UI elements created using a UIElementWrapper instance
         self.wrapped_ui_elements = []
 
@@ -93,6 +100,8 @@ class UIBuilder():
         self._baro_event_sub = None
         for ui_elem in self.wrapped_ui_elements:
             ui_elem.cleanup()
+        for frame in self.frames:
+            frame.cleanup()
 
     def build_ui(self):
         """
@@ -108,7 +117,9 @@ class UIBuilder():
             overview=self._overview, 
             info_collapsed=False
         )
+
         sensor_choosing_frame = CollapsableFrame('Sensors', collapsed=False)
+        self.frames.append(sensor_choosing_frame)
         with sensor_choosing_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
                 sonar_check_box = CheckBox(
@@ -148,27 +159,26 @@ class UIBuilder():
 
                 
         world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
+        self.frames.append(world_controls_frame)
         with world_controls_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
                 
-                self._scene_path_field = StringField(
+                # self._build_USD_filepicker()
+                self._USD_path_field = str_builder(
                     label='Path to USD',
-                    tooltip='Input the path to your USD scene file',
-                )            
-                self.wrapped_ui_elements.append(self._scene_path_field)
-
-               
-
-
+                    default_val="",
+                    tooltip='Select the USD file for the scene',
+                    use_folder_picker=True,
+                    folder_button_title="Select USD",
+                    folder_dialog_title='Select the USD scene to test')
+                
                 self._ctrl_mode_model = dropdown_builder(
                     label='Control Mode',
-                    default_val=2,
-                    items=['No control', 'Straight line', 'Manual control'],
+                    default_val=3,
+                    items=['No control', 'Straight line', 'Waypoints', 'Manual control'],
                     tooltip='Select preferred control mode',
                     on_clicked_fn=self._on_ctrl_mode_dropdown_clicked
                 )
-                self._ctrl_mode = 'Manual control'
-
 
                 self._load_btn = LoadButton(
                     "Load Button", "LOAD", setup_scene_fn=self._setup_scene, setup_post_load_fn=self._setup_scenario
@@ -183,7 +193,7 @@ class UIBuilder():
                 self.wrapped_ui_elements.append(self._reset_btn)
 
         run_scenario_frame = CollapsableFrame("Run Scenario", collapsed=False)
-
+        self.frames.append(run_scenario_frame)
         with run_scenario_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
                 self._scenario_state_btn = StateButton(
@@ -197,8 +207,10 @@ class UIBuilder():
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
 
-        self.sensor_reading_frame = CollapsableFrame('Sensor Reading', collapsed=False)
-
+        self.sensor_reading_frame = CollapsableFrame('Sensor Reading', collapsed=False, visible=False)
+        self.frames.append(self.sensor_reading_frame)
+        self.waypoints_frame = CollapsableFrame('Waypoints',collapsed=False, visible=False)
+        self.frames.append(self.waypoints_frame)
 
 
 
@@ -223,7 +235,7 @@ class UIBuilder():
         self._DVL = None
         self._DVL_trans = np.array([0,0,-0.1])
         self._baro = None
-        self._water_surface = 1.43389 # Read from USD scene
+        self._water_surface = 1.43389 # Arbitrary
         
         # Scenario
         self._scenario = MHL_Sensor_Example_Scenario()
@@ -236,12 +248,12 @@ class UIBuilder():
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         create_new_stage()
-        if self._scene_path_field.get_value() != "":
+        if self._USD_path_field.get_value_as_string() != "":
             scene_prim_path = '/World/scene'
-            add_reference_to_stage(usd_path=self._scene_path_field.get_value(), prim_path=scene_prim_path)
+            add_reference_to_stage(usd_path=self._USD_path_field.get_value_as_string(), prim_path=scene_prim_path)
             print('User USD scene is loaded.')
         else:
-            print('Path is not valid or scene can not be opened. Default to example scene')
+            print('USD path is empty. Default to example scene')
 
             # add MHL scene as reference
             MHL_prim_path = '/World/mhl'
@@ -396,7 +408,6 @@ class UIBuilder():
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
-        self._scenario.save()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().
@@ -440,11 +451,44 @@ class UIBuilder():
         with self.sensor_reading_frame:
             with ui.VStack(spacing=5, height=0):                
                 if self._use_DVL is True:
-                    self._build_DVL_plot_frame()
+                    self._build_DVL_plot()
+                    self.sensor_reading_frame.visible = True
                 if self._use_baro is True:
-                    self._build_baro_plot_frame()
+                    self._build_baro_plot()
+                    self.sensor_reading_frame.visible = True
+                if not self._use_baro and not self._use_DVL:
+                    self.sensor_reading_frame.visible = False 
+        with self.waypoints_frame:
+            if self._ctrl_mode == 'Waypoints':
+                self._build_waypoints_filepicker()
+                self.waypoints_frame.visible = True
+            else:
+                self.waypoints_frame.visible = False
 
-    def _build_DVL_plot_frame(self):
+
+    def _build_waypoints_filepicker(self):
+        self._waypoints_path_field = str_builder(
+            label='Path to waypoints',
+            default_val=self._waypoints_path,
+            tooltip='Select the txt files containing the waypoint data',
+            use_folder_picker=True,
+            folder_button_title='Select txt',
+            folder_dialog_title='Select the txt file containing the waypoint'
+        )
+        self._scenario.setup_waypoints(
+            waypoint_path=self._waypoints_path, 
+            default_waypoint_path=self._extension_path + '/demo/demo_waypoints.txt'
+            )
+        self._waypoints_path_field.add_value_changed_fn(self._on_waypoints_path_changed_fn)
+
+    def _on_waypoints_path_changed_fn(self, model):
+        self._waypoints_path = model.get_value_as_string()
+        self._scenario.setup_waypoints(
+            waypoint_path=model.get_value_as_string(), 
+            default_waypoint_path=self._extension_path + '/demo/demo_waypoints.txt'
+            )
+
+    def _build_DVL_plot(self):
         self._DVL_event_sub = None
         self._DVL_x_vel = []
         self._DVL_y_vel = []
@@ -493,7 +537,7 @@ class UIBuilder():
         self._DVL_plot[1].set_data(*self._DVL_y_vel)
         self._DVL_plot[2].set_data(*self._DVL_z_vel)
 
-    def _build_baro_plot_frame(self):
+    def _build_baro_plot(self):
         self._baro_event_sub = None
         self._baro_data = []
 
@@ -526,4 +570,5 @@ class UIBuilder():
         if len(self._baro_data) > 50:
             self._baro_data.pop(0)
         self._baro_plot.set_data(*self._baro_data)
+
         

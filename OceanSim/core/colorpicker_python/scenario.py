@@ -117,7 +117,6 @@ class Colorpicker_Scenario():
         self.wrapped_ui_elements.append(window)
         self.wrapped_ui_elements.append(self.image_provider)
     
-    
     def ui_destroy(self):
         for elem in self.wrapped_ui_elements:
             elem.destroy()
