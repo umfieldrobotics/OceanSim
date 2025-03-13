@@ -7,11 +7,11 @@ import warp as wp
 import yaml
 from PIL import Image
 import carb
-
+import os
 # Isaac sim import
 
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, open_stage
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, combo_floatfield_slider_builder, Button, StringField
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, combo_floatfield_slider_builder, Button, StringField, setup_ui_headers
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.core.utils.extensions import get_extension_path, get_extension_id, get_extension_path_from_name
 
@@ -19,13 +19,17 @@ from isaacsim.core.utils.extensions import get_extension_path, get_extension_id,
 # Custom import
 from .scenario import Colorpicker_Scenario
 from ...utils.UWrenderer_utils import UW_render
+from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
 
 
 class UIBuilder:
     def __init__(self):
-
-        # Frames are sub-windows that can contain multiple UI elements
-        self.frames = []
+        self._ext_id = omni.kit.app.get_app().get_extension_manager().get_extension_id_by_module(__name__)
+        self._file_path = os.path.abspath(__file__)
+        self._title = EXTENSION_TITLE
+        self._doc_link =  EXTENSION_LINK
+        self._overview = EXTENSION_DESCRIPTION
+        self._extension_path = get_extension_path(self._ext_id)
         # UI elements created using a UIElementWrapper instance
         self.wrapped_ui_elements = []
 
@@ -93,7 +97,15 @@ class UIBuilder:
         Build a custom UI tool to run your extension.
         This function will be called any time the UI window is closed and reopened.
         """
-        self._extension_path = get_extension_path_from_name("OceanSim")
+        setup_ui_headers(
+            ext_id=self._ext_id,
+            file_path=self._file_path,
+            title=self._title,
+            doc_link=self._doc_link,
+            overview=self._overview,
+            info_collapsed=False
+        )
+
         demo_image_path = self._extension_path + "/demo/demo_rgb.png"
         demo_depth_path = self._extension_path + '/demo/demo_depth.npy'
         demo_image = Image.open(demo_image_path).convert('RGBA')
@@ -185,20 +197,21 @@ class UIBuilder:
                 )
                 
                 self.wrapped_ui_elements.append(self.save_dir_field)
-                with ui.HStack(width=600):
-                    self.file_name_field = StringField(
-                        label='File name',
-                        tooltip='label your yaml file',
-                        default_value='render_param_0'
-                    )
-                    save_button = Button(
-                        text="Save",
-                        label='Save render params',
-                        on_click_fn=self._on_save_param
+                self.file_name_field = StringField(
+                    label='File name',
+                    tooltip='Label your yaml file',
+                    default_value='render_param_0'
+                )
+                save_button = Button(
+                    text="Save param",
+                    label='Save render params',
+                    tooltip='Click this button to save the current render parameters',
+                    on_click_fn=self._on_save_param
                     )
                 save_viewport_button = Button(
                     text='Save viewport',
                     label='Save rendered image',
+                    tooltip="Click this button to capture the current raw/rendered/depth image from viewport",
                     on_click_fn=self._on_save_viewport
                 )
                 

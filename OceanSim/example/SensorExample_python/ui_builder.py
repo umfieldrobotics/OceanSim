@@ -4,35 +4,33 @@ import os
 import omni.timeline
 import omni.ui as ui
 from omni.usd import StageEventType
-from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
+from pxr import PhysxSchema
 import carb
 # Isaac sim import
-from isaacsim.core.api.objects import DynamicCuboid
-from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, SingleGeometryPrim
+from isaacsim.core.prims import SingleRigidPrim, SingleGeometryPrim
 from isaacsim.core.utils.prims import get_prim_at_path
-from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage
+from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage, open_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.semantics import add_update_semantics
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, setup_ui_headers, CheckBox, combo_cb_xyz_plot_builder, combo_cb_plot_builder
+from isaacsim.gui.components import CollapsableFrame, StateButton, get_style, setup_ui_headers, CheckBox, combo_cb_xyz_plot_builder, combo_cb_plot_builder, dropdown_builder, StringField
+from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.core.utils.extensions import get_extension_path, get_extension_id, get_extension_path_from_name
 # Custom import
-from ...sensors.ImagingSonarSensor import ImagingSonarSensor
-from ...sensors.UW_Camera import UW_Camera
-from ...sensors.DVLsensor import DVLsensor
-from ...sensors.BarometerSensor import BarometerSensor
 from .scenario import MHL_Sensor_Example_Scenario
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
 from ...utils.assets_utils import get_OceanSim_assets_path
+
+
 class UIBuilder():
     def __init__(self):
 
-        self._ext_id = get_extension_id('OceanSim')
+        self._ext_id = omni.kit.app.get_app().get_extension_manager().get_extension_id_by_module(__name__)
+
         self._file_path = os.path.abspath(__file__)
         self._title = EXTENSION_TITLE
         self._doc_link =  EXTENSION_LINK
         self._overview = EXTENSION_DESCRIPTION
-        
         # Get access to the timeline to control stop/pause/play programmatically
         self._timeline = omni.timeline.get_timeline_interface()
 
@@ -103,11 +101,15 @@ class UIBuilder():
         """
 
         setup_ui_headers(
-            self._ext_id, self._file_path, self._title, self._doc_link, self._overview, info_collapsed=False
+            ext_id=self._ext_id, 
+            file_path=self._file_path, 
+            title=self._title, 
+            doc_link=self._doc_link, 
+            overview=self._overview, 
+            info_collapsed=False
         )
-        
-        world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
-        with world_controls_frame:
+        sensor_choosing_frame = CollapsableFrame('Sensors', collapsed=False)
+        with sensor_choosing_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
                 sonar_check_box = CheckBox(
                     "Imaging Sonar",
@@ -144,14 +146,29 @@ class UIBuilder():
                 self._use_baro = False
                 self.wrapped_ui_elements.append(baro_check_box)
 
-                manual_ctrl_cb = CheckBox(
-                    'Manual Control',
-                    default_value=False,
-                    tooltip="Click this checkbox to activate manual control",
-                    on_click_fn=self._on_manual_ctrl_cb_click_fn
+                
+        world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
+        with world_controls_frame:
+            with ui.VStack(style=get_style(), spacing=5, height=0):
+                
+                self._scene_path_field = StringField(
+                    label='Path to USD',
+                    tooltip='Input the path to your USD scene file',
+                )            
+                self.wrapped_ui_elements.append(self._scene_path_field)
+
+               
+
+
+                self._ctrl_mode_model = dropdown_builder(
+                    label='Control Mode',
+                    default_val=2,
+                    items=['No control', 'Straight line', 'Manual control'],
+                    tooltip='Select preferred control mode',
+                    on_clicked_fn=self._on_ctrl_mode_dropdown_clicked
                 )
-                self._manual_ctrl = False
-                self.wrapped_ui_elements.append(manual_ctrl_cb)
+                self._ctrl_mode = 'Manual control'
+
 
                 self._load_btn = LoadButton(
                     "Load Button", "LOAD", setup_scene_fn=self._setup_scene, setup_post_load_fn=self._setup_scenario
@@ -199,9 +216,9 @@ class UIBuilder():
 
         # Sensor
         self._sonar = None
-        self._sonar_trans = np.array([0.5,0.0, 0.0])
+        self._sonar_trans = np.array([0.3,0.0, 0.3])
         self._cam = None
-        self._cam_trans = self._sonar_trans
+        self._cam_trans = np.array([0.3,0.0, 0.1])
         self._cam_focal_length = 21
         self._DVL = None
         self._DVL_trans = np.array([0,0,-0.1])
@@ -219,19 +236,42 @@ class UIBuilder():
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         create_new_stage()
-        
-        # add MHL scene as reference
-        MHL_prim_path = '/World/mhl'
-        MHL_usd_path = get_OceanSim_assets_path() + "/collected_MHL/mhl_water.usd"
-        add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
-        # Toggle MHL mesh's collider
-        SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
-        # apply a reflectivity of 1.0 for sonar simulation
-        add_update_semantics(prim=get_prim_at_path(MHL_prim_path),
-                             type_label='reflectivity',
-                             semantic_label='1.0')
-        
-        
+        if self._scene_path_field.get_value() != "":
+            scene_prim_path = '/World/scene'
+            add_reference_to_stage(usd_path=self._scene_path_field.get_value(), prim_path=scene_prim_path)
+            print('User USD scene is loaded.')
+        else:
+            print('Path is not valid or scene can not be opened. Default to example scene')
+
+            # add MHL scene as reference
+            MHL_prim_path = '/World/mhl'
+            MHL_usd_path = get_OceanSim_assets_path() + "/collected_MHL/mhl_scaled.usd"
+            add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
+            # Toggle MHL mesh's collider
+            SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
+            # apply a reflectivity of 1.0 to mesh of the scene for sonar simulation
+            add_update_semantics(prim=get_prim_at_path(MHL_prim_path + "/Mesh/mesh"),
+                                type_label='reflectivity',
+                                semantic_label='1.0')
+            # Load the rock
+            rock_prim_path = '/World/rock'
+            rock_usd_path = get_OceanSim_assets_path() + "/collected_rock/rock.usd"
+            rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
+            # apply a reflectivity of 2.0 for sonar simulation
+            add_update_semantics(prim=get_prim_at_path(rock_prim_path+ '/Mesh/mesh'),
+                                type_label='reflectivity',
+                                semantic_label='2.0')
+            # Toggle collider for the rock
+            rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
+                            collision=True)
+            # Set collision approximation using convexDecomposition to automatically compute inertia matrix
+            rock_collider_prim.set_collision_approximation('convexDecomposition')
+            # Toggle rigid body for the rock
+            rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path,                          
+                                            translation=np.array([1.0, 0.1, -1.5]),
+                                            orientation=euler_angles_to_quat(np.array([0.0,0.0,90]), degrees=True), 
+                                            )
+            
         # add bluerov robot as reference
         robot_prim_path = "/World/rob"
         robot_usd_path = get_OceanSim_assets_path() + "/Bluerov/BROV_low.usd"
@@ -243,43 +283,29 @@ class UIBuilder():
         rob_rigidBody_API.GetLinearDampingAttr().Set(self._rob_linear_damping)
         rob_rigidBody_API.GetAngularDampingAttr().Set(self._rob_angular_damping)
         # Set the mass for the robot to suppress a warning from inertia autocomputation
+        rob_collider_prim = SingleGeometryPrim(prim_path=robot_prim_path,
+                                               collision=True)
+        rob_collider_prim.set_collision_approximation('boundingCube')
         SingleRigidPrim(prim_path=robot_prim_path,
-                        mass=self._rob_mass)
-        # Apply the physx force schema if manual control
-        if self._manual_ctrl:
-            self._rob_forceAPI = PhysxSchema.PhysxForceAPI.Apply(get_prim_at_path(robot_prim_path))
-        else:
-            self._rob_forceAPI = None
-        
-        # Load the rock
-        rock_prim_path = '/World/rock'
-        rock_usd_path = get_OceanSim_assets_path() + "/collected_rock/rock.usd"
-        rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
-        # apply a reflectivity of 2.0 for sonar simulation
-        add_update_semantics(prim=rock_prim,
-                             type_label='reflectivity',
-                             semantic_label='2.0')
-        # Toggle collider for the rock
-        rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-                           translation=np.array([1.0, 0.1, -1.5]),
-                           orientation=euler_angles_to_quat(np.array([0.0,0.0,90]), degrees=True),
-                           collision=True,
-                           )
-        # Set collision approximation using convexDecomposition to automatically compute inertia matrix
-        rock_collider_prim.set_collision_approximation('convexDecomposition')
-        # Toggle rigid body for the rock
-        rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path )
-        
+                        mass=self._rob_mass,
+                        translation=np.array([-2.0, 0.0, -0.8]))
 
+        set_camera_view(eye=np.array([5,0.6,0.4]), target=rob_collider_prim.get_world_pose()[0])
+        
 
         if self._use_sonar:
+            from ...sensors.ImagingSonarSensor import ImagingSonarSensor
             self._sonar = ImagingSonarSensor(prim_path=robot_prim_path + '/sonar',
                                             translation=self._sonar_trans,
+                                            orientation=euler_angles_to_quat(np.array([0.0, 45, 0.0]),  degrees=True),
                                             range_res=0.005,
                                             angular_res=0.25,
+                                            hori_res=4000
                                             )
             
         if self._use_camera:
+            from ...sensors.UW_Camera import UW_Camera
+
             self._cam = UW_Camera(prim_path=robot_prim_path + '/UW_camera',
                                     resolution=[1920,1080],
                                     translation=self._cam_trans)
@@ -287,12 +313,16 @@ class UIBuilder():
             self._cam.set_clipping_range(0.1, 100)
             
         if self._use_DVL:
-            self._DVL = DVLsensor(max_range=0.3)
+            from ...sensors.DVLsensor import DVLsensor
+
+            self._DVL = DVLsensor(max_range=10)
             self._DVL.attachDVL(rigid_body_path=robot_prim_path,
                                 location=self._DVL_trans)
             self._DVL.add_debug_lines()
             
         if self._use_baro:
+            from ...sensors.BarometerSensor import BarometerSensor
+
             self._baro = BarometerSensor(prim_path=robot_prim_path + '/Baro',
                                         water_surface_z=self._water_surface)
             
@@ -314,7 +344,7 @@ class UIBuilder():
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._sonar, self._cam, self._DVL, self._baro, self._rob_forceAPI)
+        self._scenario.setup_scenario(self._rob, self._sonar, self._cam, self._DVL, self._baro, self._ctrl_mode)
     def _on_post_reset_btn(self):
         """
         This function is attached to the Reset Button as the post_reset_fn callback.
@@ -366,6 +396,7 @@ class UIBuilder():
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
+        self._scenario.save()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().
@@ -399,6 +430,11 @@ class UIBuilder():
     def _on_manual_ctrl_cb_click_fn(self, model):
         self._manual_ctrl = model
         print('Reload the scene for changes to take effect.')
+
+    def _on_ctrl_mode_dropdown_clicked(self, model):
+        self._ctrl_mode = model
+        print(f'Ctrl mode: {model}. Reload the scene for changes to take effect.')
+
    
     def _add_extra_ui(self):
         with self.sensor_reading_frame:
@@ -436,7 +472,7 @@ class UIBuilder():
             self._DVL_event_sub = None
 
     def _on_DVL_step(self, e: carb.events.IEvent):
-        # Casting np.float32 to float32 is necessary for the ui.plot expects a consistent data type flow
+        # Casting np.float32 to float32 is necessary for the ui.Plot expects a consistent data type flow
         x_vel = float(self._scenario._DVL_reading[0])
         y_vel = float(self._scenario._DVL_reading[1])
         z_vel = float(self._scenario._DVL_reading[2])
@@ -465,8 +501,8 @@ class UIBuilder():
                 "label": "Barometer reading (Pa)", 
                 "on_clicked_fn": self.toggle_baro_step, 
                 "data": self._baro_data,
-                "min": 110000,
-                'max': 120000,
+                "min": 101325.0,
+                'max': 101325.0 + 50000,
                   }
         self._baro_plot, self._baro_plot_value = combo_cb_plot_builder(**kwargs)
 
