@@ -10,6 +10,7 @@ from isaacsim.core.api.sensors import BaseSensor
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim
 from isaacsim.sensors.physx import _range_sensor
+from isaacsim.core.utils.rotations import quat_to_rot_matrix
 
 # Custom import
 from isaacsim.OceanSim.utils.MultivariateNormal import MultivariateNormal
@@ -169,8 +170,10 @@ class DVLsensor:
         return beam_hit
     
     def get_linear_vel(self):
-        vel = self._rigid_body_prim.get_linear_velocity()
-
+        world_vel = self._rigid_body_prim.get_linear_velocity()
+        _, world_orient = self._rigid_body_prim.get_world_pose()
+        rot_m = quat_to_rot_matrix(world_orient)
+        vel = rot_m.T @ world_vel
         if (self._mvn_vel.is_uncertain()):
             sample = self._mvn_vel.sample_array()
             for i in range(4):

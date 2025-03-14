@@ -31,10 +31,14 @@ class OnurLog_Scenario():
         self._ctrl_mode = ctrl_mode
         self._sonar.sonar_initialize(include_unlabelled=True)
         self._cam.initialize()
-        self._DVL_reading = [0.0, 0.0, 0.0]
+        self._DVL_reading = np.array([0.0, 0.0, 0.0], dtype=float)
+        self._IMU_reading = {'time': 0.0, 
+                             'physics_step': 0.0, 
+                             'lin_acc': np.array([ 0.0, 0.0, -9.81], dtype=float), 
+                             'ang_vel': np.array([0., 0., 0.], dtype=float), 
+                             'orientation': np.array([1.0, 0.0, 0.0, 0.0],dtype=float)}
+
         self._baro_reading = 101325.0 # atmospheric pressure (Pa)
-        
-        # self._rob_rigid_body = SingleRigidPrim(get_prim_path(self._rob))
         
         # Apply the physx force schema if manual control
         if ctrl_mode == "Manual control":
@@ -137,9 +141,9 @@ class OnurLog_Scenario():
         self._cam.render()
         self._DVL_reading = self._DVL.get_linear_vel()
         self._baro_reading = self._baro.get_pressure()
-        value = self._IMU.get_current_frame()
-
-        print(value)
+        self._IMU_reading = self._IMU.get_current_frame()
+        print(self._IMU_reading["orientation"])
+        
         if self._ctrl_mode=="Manual control":
             force_cmd = Gf.Vec3f(*self._force_cmd._base_command)
             torque_cmd = Gf.Vec3f(*self._torque_cmd._base_command)

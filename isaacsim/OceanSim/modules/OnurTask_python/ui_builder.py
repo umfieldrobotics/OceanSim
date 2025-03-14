@@ -517,4 +517,3 @@ class UIBuilder():
             self._baro_data.pop(0)
         self._baro_plot.set_data(*self._baro_data)
 
-        
