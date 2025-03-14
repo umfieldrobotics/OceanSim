@@ -21,8 +21,7 @@ from isaacsim.core.utils.extensions import get_extension_path
 # Custom import
 from .scenario import MHL_Sensor_Example_Scenario
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
-from ...utils.assets_utils import get_OceanSim_assets_path
-
+from isaacsim.OceanSim.utils.assets_utils import get_OceanSim_assets_path
 
 class UIBuilder():
     def __init__(self):

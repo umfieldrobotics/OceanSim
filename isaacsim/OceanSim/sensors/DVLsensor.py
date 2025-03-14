@@ -12,11 +12,12 @@ from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim
 from isaacsim.sensors.physx import _range_sensor
 
 # Custom import
-from ..utils.MultivariateNormal import MultivariateNormal
+from isaacsim.OceanSim.utils.MultivariateNormal import MultivariateNormal
 
 
 class DVLsensor:
     def __init__(self,
+                 name: str = "DVL",
                  elevation:float = 22.5, # deg
                  rotation: float = 45, # deg
                  vel_cov = 0,
@@ -29,6 +30,8 @@ class DVLsensor:
                  freq_dependenet_range_bound: tuple[float] = [7.5, 50.0], # m
                  sound_speed: float = 1500, # m/s
                  ):
+        self._name = name
+
         # DVL configuration params
         self._elevation = elevation
         self._rotation = rotation
@@ -74,7 +77,7 @@ class DVLsensor:
     def attachDVL(self, rigid_body_path:str, location:np.ndarray = np.array([0.0, 0.0, 0.0])):
         self._rigid_body_path = rigid_body_path
         self._rigid_body_prim = SingleRigidPrim(prim_path=self._rigid_body_path)
-        sensor_prim_path = rigid_body_path + "/DVL"
+        sensor_prim_path = rigid_body_path + "/" + self._name
         self._DVL = BaseSensor(prim_path=sensor_prim_path,translation=location)
         
         elevation = self._elevation
@@ -100,10 +103,10 @@ class DVLsensor:
         if result:
             self._DVL_interface = _range_sensor.acquire_lightbeam_sensor_interface()
         else:
-            carb.log_error("Beam Sensor fails to be loaded")
+            carb.log_error(f"[{self._name}] Beam Sensor fails to be loaded")
 
     def add_single_beam(self):
-        self._single_beam_path = self._rigid_body_path + "/DVL/SingleBeam"
+        self._single_beam_path = self._rigid_body_path + "/" + self._name +  "/SingleBeam"
         result, sensor = omni.kit.commands.execute(
                 "IsaacSensorCreateLightBeamSensor",
                 path=self._single_beam_path,
@@ -138,7 +141,7 @@ class DVLsensor:
         # check if the sensor is in dropout state
         if if_hit.count(False) >= self._num_beams_out_range_threshold:
             self._dropout = True
-            carb.log_warn('DVL measurement is dropped out')
+            carb.log_warn(f'[{self._name}] Measurement is dropped out')
 
         # set the no hit depth to nan
         depth = [value if hit else float('nan') for value, hit in zip(depth, if_hit)]
@@ -183,7 +186,7 @@ class DVLsensor:
 
     def get_linear_vel_fd(self, physics_dt: float):
         if self.get_dt() < physics_dt:
-            carb.log_warn('Simulation physics_dt is larger than sensor_dt. Reduced to get_linear_vel().')
+            carb.log_warn(f'[{self._name}] Simulation physics_dt is larger than sensor_dt. Reduced to get_linear_vel().')
         self._elapsed_time_vel += physics_dt
         if self._elapsed_time_vel >= self.get_dt():
             self._elapsed_time_vel = 0.0
@@ -193,7 +196,7 @@ class DVLsensor:
 
     def get_depth_fd(self, physics_dt: float):
         if self.get_dt() < physics_dt:
-            carb.log_warn('Simulation physics_dt is larger than sensor_dt. Reduced to get_depth().')
+            carb.log_warn(f'[{self._name}] Simulation physics_dt is larger than sensor_dt. Reduced to get_depth().')
         self._elapsed_time_depth += physics_dt
         if self._elapsed_time_depth >= self.get_dt():
             self._elapsed_time_depth = 0.0

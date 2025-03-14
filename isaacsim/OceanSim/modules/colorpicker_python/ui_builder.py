@@ -18,7 +18,7 @@ from isaacsim.core.utils.extensions import get_extension_path
 
 # Custom import
 from .scenario import Colorpicker_Scenario
-from ...utils.UWrenderer_utils import UW_render
+from isaacsim.OceanSim.utils.UWrenderer_utils import UW_render
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
 
 

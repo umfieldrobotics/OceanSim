@@ -11,7 +11,7 @@ import yaml
 import carb
 
 # Custom import
-from ..utils.UWrenderer_utils import UW_render
+from isaacsim.OceanSim.utils.UWrenderer_utils import UW_render
 
 
 class UW_Camera(Camera):
@@ -26,6 +26,7 @@ class UW_Camera(Camera):
                  orientation = None, 
                  translation = None, 
                  render_product_path = None):
+        self._name = name
         self._prim_path = prim_path
         self._res = resolution
         self._writing = False
@@ -51,15 +52,15 @@ class UW_Camera(Camera):
                     self._backscatter_value = wp.vec3f(*yaml_content['backscatter_value'])
                     self._atten_coeff = wp.vec3f(*yaml_content['atten_coeff'])
                     self._backscatter_coeff = wp.vec3f(*yaml_content['backscatter_coeff'])
-                    print(f"UW_Camera on {str(self._device)}. Using loaded render parameters:")
-                    print(yaml_content)
+                    print(f"[{self._name}] On {str(self._device)}. Using loaded render parameters:")
+                    print(f"[{self._name}] Render parameters: {yaml_content}")
                 except yaml.YAMLError as exc:
-                    carb.log_error(f"Error reading YAML file: {exc}")
+                    carb.log_error(f"[{self._name}] Error reading YAML file: {exc}")
         else:
             self._backscatter_value = wp.vec3f(*UW_param[0:3])
             self._atten_coeff = wp.vec3f(*UW_param[6:9])
             self._backscatter_coeff = wp.vec3f(*UW_param[3:6])
-            print(f'UW_Camera on {str(self._device)}. Using default render parameters.')
+            print(f'[{self._name}] On {str(self._device)}. Using default render parameters.')
 
         
         self._rgba_annot = rep.AnnotatorRegistry.get_annotator('LdrColor', device=str(self._device))
@@ -75,7 +76,7 @@ class UW_Camera(Camera):
             self._writing = True
             self._writing_backend = rep.BackendDispatch({"paths": {"out_dir": writing_dir}})
         
-        print(f'UW_Camera initialized successfully. Data writing: {self._writing}')
+        print(f'[{self._name}] Initialized successfully. Data writing: {self._writing}')
     
     def render(self):
         raw_rgba = self._rgba_annot.get_data()
@@ -101,13 +102,13 @@ class UW_Camera(Camera):
                 self._provider.set_bytes_data_from_gpu(uw_image.ptr, self.get_resolution())
             if self._writing:
                 self._writing_backend.schedule(write_image, path=f'UW_image_{self._id}.png', data=uw_image)
-                print(f'[{self._id}] Underwater rendered image saved to {self._writing_backend.output_dir}')
+                print(f'[{self._name}] [{self._id}] Rendered image saved to {self._writing_backend.output_dir}')
 
             self._id += 1
 
     def make_viewport(self):
         self.wrapped_ui_elements = []
-        self.window = ui.Window("UW_Camera", width=1280, height=720 + 40, visible=True)
+        self.window = ui.Window(self._name, width=1280, height=720 + 40, visible=True)
         self._provider = ui.ByteImageProvider()
         with self.window.frame:
             with ui.ZStack(height=720):
@@ -134,7 +135,7 @@ class UW_Camera(Camera):
         if self._viewport:
             self.ui_destroy()
             
-        print('[UW_Camera] Annotator detached. AnnotatorCache cleaned.')
+        print(f'[{self._name}] Annotator detached. AnnotatorCache cleaned.')
     
     
     def ui_destroy(self):

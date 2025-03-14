@@ -1,11 +1,9 @@
 from isaacsim.sensors.camera import Camera
-from isaacsim.core.utils.carb import get_carb_setting
 import omni.replicator.core as rep
 import omni.ui as ui
 import numpy as np
-from omni.replicator.core.scripts.functional import write_np, write_image
+from omni.replicator.core.scripts.functional import write_np
 import warp as wp
-import carb
 # Future TODO
 # In future release, wrap this class around RTX lidar
 
@@ -183,6 +181,7 @@ class ImagingSonarSensor(Camera):
                  hori_res: int = 3000 # isaac camera render product only accepts square pixel, 
                                       # for now vertical res is automatically set with ratio of hori_fov vs.vert_fov 
                  ):
+        self._name = name
         # Raw parameters from Oculus M370s\MT370s\MD370s
         self.max_range = max_range # m (max is 200 m in datasheet )
         self.min_range = min_range # m (min is 0.2 m in datasheet)
@@ -287,8 +286,8 @@ class ImagingSonarSensor(Camera):
             device=self._device
         )
 
-        print(f'Sonar using {self._device}' )
-        print(f'Sonar render query res: {self.hori_res} x {self.vert_res}. Binning res: {self.r.shape[0]} x {self.r.shape[1]}')
+        print(f'[{self._name}] Using {self._device}' )
+        print(f'[{self._name}] Render query res: {self.hori_res} x {self.vert_res}. Binning res: {self.r.shape[0]} x {self.r.shape[1]}')
 
         self.pointcloud_annot.attach(self._render_product_path)
         self.cameraParams_annot.attach(self._render_product_path)
@@ -300,7 +299,7 @@ class ImagingSonarSensor(Camera):
         if self._viewport:
             self.make_sonar_viewport()
         
-        print(f'Sonar is initialized. (Writing data sets to {self.writing})')
+        print(f'[{self._name}] Initialized successfully. Data writing: {self.writing}')
 
         self.bin_sum.zero_()
         self.bin_count.zero_()
@@ -522,7 +521,7 @@ class ImagingSonarSensor(Camera):
             # self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
             # self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
             self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
-            print(f"[{self.id}] Writing sonar data to {self.backend.output_dir}")
+            print(f"[{self._name}] [{self.id}] Writing sonar data to {self.backend.output_dir}")
         
         if self._viewport:
             self._sonar_provider.set_bytes_data_from_gpu(self.make_sonar_image().ptr, 
@@ -557,7 +556,7 @@ class ImagingSonarSensor(Camera):
         azi_tick_num = 10
         azi_tick = np.round(np.linspace(90-self.hori_fov/2, 90+self.hori_fov/2, azi_tick_num))
         self._sonar_provider = ui.ByteImageProvider()
-        self._window = ui.Window("Sonar", width=800, height=800, visible=True)
+        self._window = ui.Window(self._name, width=800, height=800, visible=True)
         
         with self._window.frame:
             with ui.ZStack(height=720, width = 720):
@@ -609,7 +608,7 @@ class ImagingSonarSensor(Camera):
         rep.AnnotatorCache.clear(self.semanticSeg_annot)
 
 
-        print('[Sonar] Annotator detached. AnnotatorCache cleaned.')
+        print(f'[{self._name}] Annotator detached. AnnotatorCache cleaned.')
 
         if self._viewport:
             self.ui_destroy()

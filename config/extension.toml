@@ -23,8 +23,8 @@ icon = "data/icon.png"
 
 
 [[python.module]]
-name = "isaacsim.OceanSim.example.SensorExample_python"
+name = "isaacsim.OceanSim.modules.SensorExample_python"
 
 [[python.module]]
-name = "isaacsim.OceanSim.core.colorpicker_python"
+name = "isaacsim.OceanSim.modules.colorpicker_python"
 

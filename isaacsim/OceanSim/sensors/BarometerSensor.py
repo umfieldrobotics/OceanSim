@@ -1,8 +1,5 @@
 # Omniverse import
 import numpy as np
-from pxr import Gf
-import omni.kit.commands
-import omni.graph.core as og
 import carb
 
 # Isaac sim import
@@ -10,14 +7,14 @@ from isaacsim.core.api.sensors import BaseSensor
 from isaacsim.core.api.physics_context import PhysicsContext
 
 # Custom import
-from ..utils.MultivariateNormal import MultivariateNormal
+from isaacsim.OceanSim.utils.MultivariateNormal import MultivariateNormal
 
 # TODO: Can not automatically resolve water surface height, need to write a separate class for water surface 
 # (essentially a warp kernel connecting to a plane mesh)
 class BarometerSensor(BaseSensor):
     def __init__(self, 
                  prim_path, 
-                 name = "barometer", 
+                 name = "baro", 
                  position = None, 
                  translation = None, 
                  orientation = None, 
@@ -31,6 +28,7 @@ class BarometerSensor(BaseSensor):
                  ) -> None:
         
         super().__init__(prim_path, name, position, translation, orientation, scale, visible)
+        self._name = name
         self._prim_path = prim_path
         self._water_density = water_density
         self._g = g
@@ -44,7 +42,7 @@ class BarometerSensor(BaseSensor):
         physics_context = PhysicsContext()
         g_dir, scene_g = physics_context.get_gravity()
         if np.abs(self._g - np.abs(scene_g)) > 0.1:
-            carb.log_warn('Detected USD scene gravity is different from user definition. Reduced to user definition.')
+            carb.log_warn(f'[{self._name}] Detected USD scene gravity is different from user definition. Reduced to user definition.')
         
 
     
