@@ -190,12 +190,15 @@ class UIBuilder():
 
         # Sensor
         self._sonar = None
-        self._sonar_trans = np.array([0.3,0.0, 0.3])
+        self._sonar_trans = np.array([0.3,0.0, -0.3])
+        self._sonar_orient = euler_angles_to_quat(np.array([180,15,0]), degrees=True,extrinsic=False)
         self._cam = None
-        self._cam_trans = np.array([0.3,0.0, 0.1])
+        self._cam_trans = np.array([0.3,0.0, -0.1])
+        self._cam_orient = euler_angles_to_quat(np.array([180,0,0]), degrees=True,extrinsic=False)
         self._cam_focal_length = 21
         self._DVL = None
-        self._DVL_trans = np.array([0,0,-0.1])
+        self._DVL_trans = np.array([0,0,0.05])
+        self._DVL_orient = euler_angles_to_quat(np.array([180,0,0]),degrees=True,extrinsic=False)
         self._baro = None
         self._water_surface = 1.43389 # Arbitrary
         
@@ -248,7 +251,8 @@ class UIBuilder():
             
         # add bluerov robot as reference
         robot_prim_path = "/World/rob"
-        robot_usd_path = get_OceanSim_assets_path() + "/Bluerov/BROV_low.usd"
+        # robot_usd_path = get_OceanSim_assets_path() + "/Bluerov/BROV_low.usd"
+        robot_usd_path = "/home/haoyu/Desktop/BROV_onur.usd"
         self._rob = add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         # Toggle rigid body and collider preset for robot, and set zero gravity to mimic underwater environment
         rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(robot_prim_path))
@@ -271,7 +275,7 @@ class UIBuilder():
 
         self._sonar = ImagingSonarSensor(prim_path=robot_prim_path + '/sonar',
                                         translation=self._sonar_trans,
-                                        orientation=euler_angles_to_quat(np.array([0.0, 45, 0.0]),  degrees=True),
+                                        orientation=self._sonar_orient,
                                         range_res=0.005,
                                         angular_res=0.25,
                                         hori_res=4000
@@ -281,14 +285,17 @@ class UIBuilder():
 
         self._cam = UW_Camera(prim_path=robot_prim_path + '/UW_camera',
                                 resolution=[1920,1080],
-                                translation=self._cam_trans)
+                                translation=self._cam_trans,
+                                orientation=self._cam_orient)
         self._cam.set_focal_length(0.1 * self._cam_focal_length)
         self._cam.set_clipping_range(0.1, 100)
             
 
         self._DVL = DVLsensor(max_range=10)
         self._DVL.attachDVL(rigid_body_path=robot_prim_path,
-                            location=self._DVL_trans)
+                            translation=self._DVL_trans,
+                            orientation=self._DVL_orient,
+                            )
         self._DVL.add_debug_lines()
         
 

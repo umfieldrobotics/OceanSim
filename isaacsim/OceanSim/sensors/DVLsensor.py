@@ -75,11 +75,19 @@ class DVLsensor:
         
         
 
-    def attachDVL(self, rigid_body_path:str, location:np.ndarray = np.array([0.0, 0.0, 0.0])):
+    def attachDVL(self, 
+                  rigid_body_path:str, 
+                  position: np.ndarray = None,
+                  translation: np.ndarray = None,
+                  orientation: np.ndarray = None
+                  ):
         self._rigid_body_path = rigid_body_path
         self._rigid_body_prim = SingleRigidPrim(prim_path=self._rigid_body_path)
         sensor_prim_path = rigid_body_path + "/" + self._name
-        self._DVL = BaseSensor(prim_path=sensor_prim_path,translation=location)
+        self._DVL = BaseSensor(prim_path=sensor_prim_path,
+                               position=position,
+                               translation=translation,
+                               orientation=orientation)
         
         elevation = self._elevation
         rotation = self._rotation
