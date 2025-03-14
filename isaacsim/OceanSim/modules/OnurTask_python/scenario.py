@@ -28,8 +28,17 @@ class OnurLog_Scenario():
         self._DVL = DVL
         self._baro = baro
         self._IMU = IMU
+
+        self._sonar_dt = 1/30
+        self._cam_dt = 1/30
+        self._DVL_dt = 1/10
+        self._sonar_time = 0.0
+        self._DVL_time = 0.0
+        self._cam_time = 0.0
+
+
         self._ctrl_mode = ctrl_mode
-        self._sonar.sonar_initialize(include_unlabelled=True)
+        self._sonar.sonar_initialize()
         self._cam.initialize()
         self._DVL_reading = np.array([0.0, 0.0, 0.0], dtype=float)
         self._IMU_reading = {'time': 0.0, 
@@ -39,7 +48,7 @@ class OnurLog_Scenario():
                              'orientation': np.array([1.0, 0.0, 0.0, 0.0],dtype=float)}
 
         self._baro_reading = 101325.0 # atmospheric pressure (Pa)
-        
+
         # Apply the physx force schema if manual control
         if ctrl_mode == "Manual control":
             from isaacsim.OceanSim.utils.keyboard_cmd import keyboard_cmd
@@ -51,24 +60,24 @@ class OnurLog_Scenario():
                                         # backward command
                                         "S": [-10.0, 0.0, 0.0],
                                         # leftward command
-                                        "A": [0.0, 10.0, 0.0],
+                                        "A": [0.0, -10.0, 0.0],
                                         # rightward command
-                                        "D": [0.0, -10.0, 0.0],
+                                        "D": [0.0, 10.0, 0.0],
                                          # rise command
-                                        "UP": [0.0, 0.0, 10.0],
+                                        "UP": [0.0, 0.0, -10.0],
                                         # sink command
-                                        "DOWN": [0.0, 0.0, -10.0],
+                                        "DOWN": [0.0, 0.0, 10.0],
                                       })
             self._torque_cmd = keyboard_cmd(base_command=np.array([0.0, 0.0, 0.0]),
                                       input_keyboard_mapping={
                                         # yaw command (left)
-                                        "J": [0.0, 0.0, 10.0],
+                                        "J": [0.0, 0.0, -10.0],
                                         # yaw command (right)
-                                        "L": [0.0, 0.0, -10.0],
+                                        "L": [0.0, 0.0, 10.0],
                                         # pitch command (up)
-                                        "I": [0.0, -10.0, 0.0],
+                                        "I": [0.0, 10.0, 0.0],
                                         # pitch command (down)
-                                        "K": [0.0, 10.0, 0.0],
+                                        "K": [0.0, -10.0, 0.0],
                                         # row command (left)
                                         "LEFT": [-10.0, 0.0, 0.0],
                                         # row command (negative)
@@ -136,13 +145,21 @@ class OnurLog_Scenario():
             return
         
         self._time += step
+        self._sonar_time += step
+        self._cam_time += step
+        self._DVL_time += step
+        if self._sonar_time >= self._sonar_dt:
+            self._sonar.make_sonar_data()
+            self._sonar_time = 0.0
+        if self._cam_time >= self._cam_dt:
+            self._cam.render()
+            self._cam_time = 0.0
+        if self._DVL_time >= self._DVL_dt:
+            self._DVL_reading = self._DVL.get_linear_vel()
+            self._DVL_time = 0.0
         
-        self._sonar.make_sonar_data()
-        self._cam.render()
-        self._DVL_reading = self._DVL.get_linear_vel()
         self._baro_reading = self._baro.get_pressure()
         self._IMU_reading = self._IMU.get_current_frame()
-        print(self._IMU_reading["orientation"])
         
         if self._ctrl_mode=="Manual control":
             force_cmd = Gf.Vec3f(*self._force_cmd._base_command)

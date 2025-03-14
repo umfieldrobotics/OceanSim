@@ -18,6 +18,7 @@ from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.core.utils.extensions import get_extension_path
 from isaacsim.sensors.physics import IMUSensor
+
 # Custom import
 from .scenario import OnurLog_Scenario
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
@@ -28,7 +29,8 @@ from isaacsim.OceanSim.sensors.BarometerSensor import BarometerSensor
 from isaacsim.OceanSim.sensors.DVLsensor import DVLsensor
 class UIBuilder():
     def __init__(self):
-
+        self._physics_step_freq = 250
+        self._render_step_freq = 60
         self._ext_id = omni.kit.app.get_app().get_extension_manager().get_extension_id_by_module(__name__)
         self._file_path = os.path.abspath(__file__)
         self._title = EXTENSION_TITLE
@@ -145,7 +147,7 @@ class UIBuilder():
                 self._load_btn = LoadButton(
                     "Load Button", "LOAD", setup_scene_fn=self._setup_scene, setup_post_load_fn=self._setup_scenario
                 )
-                # self._load_btn.set_world_settings(physics_dt=1 / 60.0, rendering_dt=1 / 60.0)
+                self._load_btn.set_world_settings(physics_dt=1 / self._physics_step_freq, rendering_dt=1 / self._render_step_freq)
                 self.wrapped_ui_elements.append(self._load_btn)
 
                 self._reset_btn = ResetButton(
@@ -214,8 +216,9 @@ class UIBuilder():
         """
         create_new_stage()
         if self._USD_path_field.get_value_as_string() != "":
-            scene_prim_path = '/World/scene'
-            add_reference_to_stage(usd_path=self._USD_path_field.get_value_as_string(), prim_path=scene_prim_path)
+            # scene_prim_path = '/World/scene'
+            # add_reference_to_stage(usd_path=self._USD_path_field.get_value_as_string(), prim_path=scene_prim_path)
+            open_stage(self._USD_path_field.get_value_as_string())
             print('User USD scene is loaded.')
         else:
             print('USD path is empty. Default to example scene')
@@ -252,7 +255,7 @@ class UIBuilder():
         # add bluerov robot as reference
         robot_prim_path = "/World/rob"
         # robot_usd_path = get_OceanSim_assets_path() + "/Bluerov/BROV_low.usd"
-        robot_usd_path = "/home/haoyu/Desktop/BROV_onur.usd"
+        robot_usd_path = "/home/haoyu/Desktop/OnurTask/BROV_onur.usd"
         self._rob = add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         # Toggle rigid body and collider preset for robot, and set zero gravity to mimic underwater environment
         rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(robot_prim_path))
@@ -271,14 +274,14 @@ class UIBuilder():
             rob_forceAPI = PhysxSchema.PhysxForceAPI.Apply(self._rob)
 
         set_camera_view(eye=np.array([5,0.6,0.4]), target=rob_collider_prim.get_world_pose()[0])
-        
+
 
         self._sonar = ImagingSonarSensor(prim_path=robot_prim_path + '/sonar',
                                         translation=self._sonar_trans,
                                         orientation=self._sonar_orient,
                                         range_res=0.005,
                                         angular_res=0.25,
-                                        hori_res=4000
+                                        hori_res=4000,
                                         )
             
 
@@ -305,7 +308,6 @@ class UIBuilder():
         self._IMU = IMUSensor(
             prim_path=robot_prim_path+'/IMU',
             name="IMU",
-            # frequency=60,
             translation=np.array([0, 0, 0]),
             orientation=np.array([1, 0, 0, 0]),
             linear_acceleration_filter_size = 10,

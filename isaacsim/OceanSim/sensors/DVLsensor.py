@@ -7,10 +7,9 @@ import carb
 
 # Isaac sim import
 from isaacsim.core.api.sensors import BaseSensor
-from isaacsim.core.utils.rotations import euler_angles_to_quat
+from isaacsim.core.utils.rotations import euler_angles_to_quat, quat_to_rot_matrix
 from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim
 from isaacsim.sensors.physx import _range_sensor
-from isaacsim.core.utils.rotations import quat_to_rot_matrix
 
 # Custom import
 from isaacsim.OceanSim.utils.MultivariateNormal import MultivariateNormal
