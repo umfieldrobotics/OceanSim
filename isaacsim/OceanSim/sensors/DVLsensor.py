@@ -52,7 +52,6 @@ class DVLsensor:
                                     ])
 
         # sensor dropout related params
-        self._dropout = False
         self._num_beams_out_range_threshold = num_beams_out_range_threshold
         
         # Realistic DVL frequency dependent params
@@ -148,7 +147,6 @@ class DVLsensor:
                 depth[i] += sample[i]
         # check if the sensor is in dropout state
         if if_hit.count(False) >= self._num_beams_out_range_threshold:
-            self._dropout = True
             carb.log_warn(f'[{self._name}] Measurement is dropped out')
 
         # set the no hit depth to nan
@@ -177,6 +175,13 @@ class DVLsensor:
         return beam_hit
     
     def get_linear_vel(self):
+        if_hit = []
+        for beam_path in self._beam_paths:
+            if_hit.append(self._DVL_interface.get_beam_hit_data(beam_path)[0])
+        if if_hit.count(False) >= self._num_beams_out_range_threshold:
+            carb.log_warn(f'[{self._name}] Measurement is dropped out')
+            return np.zeros(3)
+
         world_vel = self._rigid_body_prim.get_linear_velocity()
         _, world_orient = self._rigid_body_prim.get_world_pose()
         rot_m = quat_to_rot_matrix(world_orient)
@@ -186,10 +191,6 @@ class DVLsensor:
             for i in range(4):
                 for j in range(3):
                     vel[j] += self._transform[j][i] * sample[i] 
-        
-        # If drop out return zero velocity
-        if self._dropout:
-            return np.zeros(3)
         
         return vel
     

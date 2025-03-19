@@ -15,6 +15,7 @@ EXTENSION_DESCRIPTION = "We do not recommend user to perform digital twin experi
 'eg: water surface height, sonar fov, camera rendering parameters..., and get consulted to develop own digital twins. \n' \
 "User may test this demo on their own scene by copying the USD file path to 'Path to USD',\n" \
 "otherwise it is default to MHL towing tank, University of Michigan.\n" \
+"For DVL sensor, scene has to be toggled with static collider.\n" \
 'Manual control: w:x+, s:x-, a:y+, d:y-, up:z+, down:z-, \n' \
 'i:pitch-, k:pitch+, j:yaw+, l:yaw-, left:row-, right:row+. \n' \
 'Straight line: Robot will travel to local x direction with v=0.5m/s. \n' \

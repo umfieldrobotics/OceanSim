@@ -48,7 +48,6 @@ class OnurLog_Scenario():
                              'orientation': np.array([1.0, 0.0, 0.0, 0.0],dtype=float)}
 
         self._baro_reading = 101325.0 # atmospheric pressure (Pa)
-
         # Apply the physx force schema if manual control
         if ctrl_mode == "Manual control":
             from isaacsim.OceanSim.utils.keyboard_cmd import keyboard_cmd
@@ -137,20 +136,22 @@ class OnurLog_Scenario():
         self._running_scenario = False
         self._time = 0.0
 
-
     def update_scenario(self, step: float):
 
         
         if not self._running_scenario:
             return
-        
+        data = []
+
+
         self._time += step
         self._sonar_time += step
         self._cam_time += step
         self._DVL_time += step
         if self._sonar_time >= self._sonar_dt:
             self._sonar.make_sonar_data()
-            self._sonar_time = 0.0
+            self._sonar.make_sonar_image().numpy()
+            # TODO: Call backend to write sonar image with file name being time stamp
         if self._cam_time >= self._cam_dt:
             self._cam.render()
             self._cam_time = 0.0
