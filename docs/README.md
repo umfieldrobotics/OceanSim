@@ -7,8 +7,12 @@
 [![Subscription Form](https://img.shields.io/badge/Subscribe-Form-blue.svg)](https://docs.google.com/forms/d/e/1FAIpQLSfKWMhE4L6R4jjvEw_bfMtLigXbv5WZeijDah5vk2SpQZW1hA/viewform)
 [![arXiv](https://img.shields.io/badge/arXiv-2503.01074-b31b1b.svg)](https://arxiv.org/abs/2503.01074)
 [![IsaacSim 4.5.0](https://img.shields.io/badge/IsaacSim-4.5.0-brightgreen.svg)](https://docs.isaacsim.omniverse.nvidia.com/latest/index.html)
-<!-- add gif media/oceansim_demo.gif-->
-![OceanSim Demo](../media/oceansim_demo.gif) \
+<!-- add and scale media/oceansim_demo.gif to full width-->
+<!-- ![OceanSim Demo](../media/oceansim_demo.gif) \ -->
+<a href="https://umfieldrobotics.github.io/OceanSim/">
+  <img src="../media/oceansim_demo.gif" alt="OceanSim Demo" style="width:100%;">
+</a>
+
 OceanSim is a high-fidelity underwater simulation framework designed to accelerate the development of robust underwater perception solutions. Leveraging GPU-accelerated rendering and advanced physics-based techniques, OceanSim accurately models both visual and acoustic sensors, significantly reducing the simulation-to-real gap.
 
 ## Highlights
