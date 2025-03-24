@@ -34,6 +34,12 @@ OceanSim is a high-fidelity underwater simulation framework designed to accelera
 - `[2025/3]` 🎉 OceanSim will be presented at [AQ²UASIM](https://sites.google.com/view/aq2uasim/home?authuser=0) at [ICRA 2025](https://2025.ieee-icra.org/)!
 - `[2025/3]` OceanSim paper is available on arXiv. Check it out [here](https://arxiv.org/abs/2503.01074).
 
+## TODO
+- [x] Documentation for OceanSim provided example
+- [x] Built your own digital twin documentation
+- [x] Code release
+- [ ] ROS integration
+
 ## Documentation
 <!-- installation, running examples, building your own digital twins-->
 We divide the documentation into three parts:
