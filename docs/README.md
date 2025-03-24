@@ -8,7 +8,7 @@
 [![arXiv](https://img.shields.io/badge/arXiv-2503.01074-b31b1b.svg)](https://arxiv.org/abs/2503.01074)
 [![IsaacSim 4.5.0](https://img.shields.io/badge/IsaacSim-4.5.0-brightgreen.svg)](https://docs.isaacsim.omniverse.nvidia.com/latest/index.html)
 <!-- add gif media/oceansim_demo.gif-->
-![OceanSim Demo](../media/oceansim_demo.gif)
+![OceanSim Demo](../media/oceansim_demo.gif) \
 OceanSim is a high-fidelity underwater simulation framework designed to accelerate the development of robust underwater perception solutions. Leveraging GPU-accelerated rendering and advanced physics-based techniques, OceanSim accurately models both visual and acoustic sensors, significantly reducing the simulation-to-real gap.
 
 ## Highlights
@@ -35,7 +35,7 @@ OceanSim is a high-fidelity underwater simulation framework designed to accelera
 We divide the documentation into three parts:
 - [Installation](subsections/installation.md)
 - [Running Examples](subsections/running_examples.md)
-- [Building Your Own Digital Twins](subsections/building_own_digital_twin.md)
+- [Building Your Own Digital Twins with OceanSim](subsections/building_own_digital_twin.md)
 
 ## Support and Contributing
 We welcome contributions and discussions from the community!
