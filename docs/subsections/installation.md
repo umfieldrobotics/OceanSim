@@ -1,1 +1,23 @@
 # OceanSim Installation Documentation
+We design OceanSim as an extension package for NVIDIA Isaac Sim. This design allows better integration with Isaac Sim and users can pair OceanSim with other Isaac Sim extensions. This document provides a step-by-step guide to install OceanSim.
+
+## Prerequisites
+OceanSim does not enforce any additional prerequisites beyond those required by Isaac Sim. Please refer to the [official Isaac Sim documentation](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/requirements.html#system-requirements) for the prerequisites.
+
+OceanSim is developed with Isaac Sim 4.5. Due to the changes in Isaac Sim 4.5 compared to previous versions, OceanSim may not work with older versions of Isaac Sim.
+
+We have tested OceanSim on Ubuntu 20.04, 22.04, and 24.04. We have also tested OceanSim using various GPUs, including NVIDIA RTX 3090, RTX A6000, and RTX 4080 Super.
+
+## Installation
+Install NVIDIA Isaac Sim 4.5. We follow the official [workstation installation guide](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_workstation.html) to install Isaac Sim.
+
+Clone this repository to your local machine. We recommend cloning the repository to the Isaac Sim workspace directory.
+<!-- cd to your isaac sim workspace -->
+```bash
+cd /path/to/isaac_sim/workspace/isaac-sim-4.5.0/extsUser
+git clone https://github.com/umfieldrobotics/OceanSim.git
+```
+
+Launch Isaac Sim follow this [guide](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_workstation.html#isaac-sim-short-app-selector).
+
+There is no building process needed. To load OceanSim, simply go to Isaac Sim and enable OceanSim in the Extensions menu.
