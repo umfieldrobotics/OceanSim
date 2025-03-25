@@ -12,7 +12,7 @@ from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim
 from isaacsim.sensors.physx import _range_sensor
 
 # Custom import
-from isaacsim.OceanSim.utils.MultivariateNormal import MultivariateNormal
+from isaacsim.oceansim.utils.MultivariateNormal import MultivariateNormal
 
 
 class DVLsensor:

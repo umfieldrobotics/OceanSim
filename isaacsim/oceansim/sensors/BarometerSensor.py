@@ -7,7 +7,7 @@ from isaacsim.core.api.sensors import BaseSensor
 from isaacsim.core.api.physics_context import PhysicsContext
 
 # Custom import
-from isaacsim.OceanSim.utils.MultivariateNormal import MultivariateNormal
+from isaacsim.oceansim.utils.MultivariateNormal import MultivariateNormal
 
 # TODO: Can not automatically resolve water surface height, need to write a separate class for water surface 
 # (essentially a warp kernel connecting to a plane mesh)

@@ -6,7 +6,7 @@ import warp as wp
 from omni.kit.viewport.utility import get_active_viewport
 
 # Custom import
-from isaacsim.OceanSim.utils.UWrenderer_utils import UW_render
+from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
 
 class Colorpicker_Scenario():
     def __init__(self):

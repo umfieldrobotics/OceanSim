@@ -21,7 +21,7 @@ from isaacsim.core.utils.extensions import get_extension_path
 # Custom import
 from .scenario import MHL_Sensor_Example_Scenario
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
-from isaacsim.OceanSim.utils.assets_utils import get_OceanSim_assets_path
+from isaacsim.oceansim.utils.assets_utils import get_oceansim_assets_path
 
 class UIBuilder():
     def __init__(self):
@@ -256,7 +256,7 @@ class UIBuilder():
 
             # add MHL scene as reference
             MHL_prim_path = '/World/mhl'
-            MHL_usd_path = get_OceanSim_assets_path() + "/collected_MHL/mhl_scaled.usd"
+            MHL_usd_path = get_oceansim_assets_path() + "/collected_MHL/mhl_scaled.usd"
             add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
             # Toggle MHL mesh's collider
             SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
@@ -266,7 +266,7 @@ class UIBuilder():
                                 semantic_label='1.0')
             # Load the rock
             rock_prim_path = '/World/rock'
-            rock_usd_path = get_OceanSim_assets_path() + "/collected_rock/rock.usd"
+            rock_usd_path = get_oceansim_assets_path() + "/collected_rock/rock.usd"
             rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
             # apply a reflectivity of 2.0 for sonar simulation
             add_update_semantics(prim=get_prim_at_path(rock_prim_path+ '/Mesh/mesh'),
@@ -285,7 +285,7 @@ class UIBuilder():
             
         # add bluerov robot as reference
         robot_prim_path = "/World/rob"
-        robot_usd_path = get_OceanSim_assets_path() + "/Bluerov/BROV_low.usd"
+        robot_usd_path = get_oceansim_assets_path() + "/Bluerov/BROV_low.usd"
         self._rob = add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         # Toggle rigid body and collider preset for robot, and set zero gravity to mimic underwater environment
         rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(robot_prim_path))
@@ -305,7 +305,7 @@ class UIBuilder():
         
 
         if self._use_sonar:
-            from ...sensors.ImagingSonarSensor import ImagingSonarSensor
+            from isaacsim.oceansim.sensors.ImagingSonarSensor import ImagingSonarSensor
             self._sonar = ImagingSonarSensor(prim_path=robot_prim_path + '/sonar',
                                             translation=self._sonar_trans,
                                             orientation=euler_angles_to_quat(np.array([0.0, 45, 0.0]),  degrees=True),
@@ -315,7 +315,7 @@ class UIBuilder():
                                             )
             
         if self._use_camera:
-            from ...sensors.UW_Camera import UW_Camera
+            from isaacsim.oceansim.sensors.UW_Camera import UW_Camera
 
             self._cam = UW_Camera(prim_path=robot_prim_path + '/UW_camera',
                                     resolution=[1920,1080],
@@ -324,7 +324,7 @@ class UIBuilder():
             self._cam.set_clipping_range(0.1, 100)
             
         if self._use_DVL:
-            from ...sensors.DVLsensor import DVLsensor
+            from isaacsim.oceansim.sensors.DVLsensor import DVLsensor
 
             self._DVL = DVLsensor(max_range=10)
             self._DVL.attachDVL(rigid_body_path=robot_prim_path,
@@ -332,7 +332,7 @@ class UIBuilder():
             self._DVL.add_debug_lines()
             
         if self._use_baro:
-            from ...sensors.BarometerSensor import BarometerSensor
+            from isaacsim.oceansim.sensors.BarometerSensor import BarometerSensor
 
             self._baro = BarometerSensor(prim_path=robot_prim_path + '/Baro',
                                         water_surface_z=self._water_surface)

@@ -11,7 +11,7 @@ import yaml
 import carb
 
 # Custom import
-from isaacsim.OceanSim.utils.UWrenderer_utils import UW_render
+from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
 
 
 class UW_Camera(Camera):
