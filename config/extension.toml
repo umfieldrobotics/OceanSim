@@ -28,6 +28,5 @@ name = "isaacsim.OceanSim.modules.SensorExample_python"
 [[python.module]]
 name = "isaacsim.OceanSim.modules.colorpicker_python"
 
-[[python.module]]
-name = "isaacsim.OceanSim.modules.OnurTask_python"
+
 
