@@ -30,6 +30,24 @@ class DVLsensor:
                  freq_dependenet_range_bound: tuple[float] = [7.5, 50.0], # m
                  sound_speed: float = 1500, # m/s
                  ):
+        """Initialize a DVL sensor with configurable beam geometry and operating parameters.
+
+        Args:
+            name (str): Identifier for the sensor. Defaults to "DVL".
+            elevation (float): Beam elevation angle from horizontal in degrees. Defaults to 22.5°.
+            rotation (float): Beam rotation about Z-axis in degrees. Defaults to 45° (Janus configuration).
+            vel_cov (float): Velocity measurement noise covariance. Defaults to 0 (no noise).
+            depth_cov (float): Depth measurement noise covariance. Defaults to 0 (no noise).
+            min_range (float): Minimum valid range in meters. Defaults to 0.1m.
+            max_range (float): Maximum valid range in meters. Defaults to 100m.
+            num_beams_out_range_threshold (int): Number of lost beams before declaring dropout. Defaults to 2.
+            freq (int, optional): Fixed operating frequency in Hz. If None, uses adaptive frequency. Defaults to None.
+            freq_bound (tuple[int]): (min_freq, max_freq) for adaptive operation. Defaults to (5, 100)Hz.
+            freq_dependenet_range_bound (tuple[float]): (min_range, max_range) for frequency adaptation. Defaults to (7.5, 50.0)m.
+            sound_speed (float): Speed of sound in water in m/s. Defaults to 1500m/s.
+        """
+
+
         self._name = name
 
         # DVL configuration params
@@ -75,10 +93,30 @@ class DVLsensor:
 
     def attachDVL(self, 
                   rigid_body_path:str, 
-                  position: np.ndarray = None,
-                  translation: np.ndarray = None,
-                  orientation: np.ndarray = None
+                  position = None,
+                  translation = None,
+                  orientation = None
                   ):
+        
+        """Attach the DVL sensor to a rigid body in the simulation.
+        ..note::
+            This function will create a BaseSensor object under the parent rigid body prim and create 4 LightBeamSensors.  
+        
+        Args:
+            rigid_body_path (str): USD path to the parent rigid body prim.
+            position (Optional[Sequence[float]], optional): position in the world frame of the prim. shape is (3, ).
+                                                    Defaults to None, which means left unchanged.
+            translation (Optional[Sequence[float]], optional): translation in the local frame of the prim
+                                                            (with respect to its parent prim). shape is (3, ).
+                                                            Defaults to None, which means left unchanged.
+            orientation (Optional[Sequence[float]], optional): quaternion orientation in the world/ local frame of the prim
+                                                            (depends if translation or position is specified).
+                                                            quaternion is scalar-first (w, x, y, z). shape is (4, ).
+                                                            Defaults to None, which means left unchanged.
+        Raises:
+            Exception: if translation and position defined at the same time
+
+        """
         self._rigid_body_path = rigid_body_path
         self._rigid_body_prim = SingleRigidPrim(prim_path=self._rigid_body_path)
         sensor_prim_path = rigid_body_path + "/" + self._name
@@ -122,20 +160,73 @@ class DVLsensor:
                 forward_axis=Gf.Vec3d(0, 0, -1),
                 num_rays=1,
                 )
+        """Add a single vertical beam to the DVL for simplified depth measurements.
+    
+        Creates an additional beam sensor oriented straight downward (along -Z axis).
+        The beam is created at: <rigid_body_path>/<DVL_name>/SingleBeam
+        
+        Note:
+            Primarily used for debugging or when single-beam depth measurement is sufficient.
+            Uses the same min/max range settings as the main DVL beams.
+        """
 
     def get_single_beam_range(self):
+        """Get depth measurement from the vertical single beam. Only call this function after you added a singlebeam.
+        
+        Returns:
+            float: Depth measurement in meters along the central beam.
+                Returns 0 if no valid return (unlike main beams which return NaN).
+                
+        Note:
+            This is a simpler alternative to get_depth() when only vertical range is needed.
+
+        """
         return self._DVL_interface.get_linear_depth_data(self._single_beam_path)[0]
     
     def get_DVL_interface(self):
+        """Get direct access to the underlying DVL sensor interface.
+        
+        Returns:
+            _range_sensor.LightBeamSensorInterface: The raw physics sensor interface.
+            
+        Note:
+            Advanced use only - provides low-level access to beam physics data.
+        """
         return self._DVL_interface
     
     def get_baseSensor(self):
+        """Get the core BaseSensor instance of the DVL.
+        
+        Returns:
+            BaseSensor: The fundamental sensor prim wrapper.
+            
+        Note:
+            Useful for modifying transform or visibility properties.
+        """
         return self._DVL
     
     def get_beam_paths(self):
+        """Get USD paths to all four DVL beam sensors.
+        
+        Returns:
+            list[str]: List of four prim paths in the order:
+                    [beam_0, beam_1, beam_2, beam_3]
+                    
+        Note:
+            Paths follow pattern: <rigid_body_path>/<DVL_name>/beam_<index>
+        """
         return self._beam_paths
     
     def get_depth(self):
+        """Get depth measurements from all four beams.
+    
+        Returns:
+            list[float]: Four depth measurements in meters. Returns NaN for beams with no return.
+            
+        Note:
+            - Applies Gaussian noise if depth_cov > 0
+            - Logs warning if >= num_beams_out_range_threshold beams are lost
+        """
         depth = []
         if_hit = []
         for beam_path in self._beam_paths:
@@ -154,6 +245,17 @@ class DVLsensor:
         return depth
     
     def get_dt(self):
+        """Get current sensor update period based on operating mode.
+    
+        Returns:
+            float: Update period in seconds.
+            
+        Note:
+            For adaptive frequency mode, calculates period based on:
+            - Fixed maximum frequency at close range
+            - Sound-speed limited frequency at long range
+            - Linear transition between bounds
+        """
         if self._user_static_freq_flag:
             return self._dt
         else:
@@ -169,12 +271,31 @@ class DVLsensor:
             return self._dt
         
     def get_beam_hit(self):
+        """Get hit detection status for all four DVL beams.
+    
+        Returns:
+            list[bool]: Boolean hit status for each beam in order [beam_0, beam_1, beam_2, beam_3]
+                        True indicates beam has valid return, False indicates no return detected.
+    
+        Note:
+            - Useful for monitoring individual beam performance
+            - Mirrors the hit detection used internally in get_depth() and get_linear_vel()
+            - Return order matches get_beam_paths() indices
+        """
         beam_hit = []
         for beam_path in self._beam_paths:
             beam_hit.append(self._DVL_interface.get_beam_hit_data(beam_path)[0].astype(bool))
         return beam_hit
     
     def get_linear_vel(self):
+        """Get 3D velocity vector in body frame.
+    
+        Returns:
+            np.ndarray: [vx, vy, vz] velocity in m/s. Returns zeros during dropout.
+            
+        Note:
+            - Applies Gaussian noise if vel_cov > 0
+        """
         if_hit = []
         for beam_path in self._beam_paths:
             if_hit.append(self._DVL_interface.get_beam_hit_data(beam_path)[0])
@@ -196,6 +317,14 @@ class DVLsensor:
     
 
     def get_linear_vel_fd(self, physics_dt: float):
+        """Frequency-dependent version of get_linear_vel() that respects sensor update rate.
+    
+        Args:
+            physics_dt (float): Current physics timestep duration.
+    
+        Returns:
+            Union[np.ndarray, float]: Velocity vector if update is due, otherwise NaN.
+        """
         if self.get_dt() < physics_dt:
             carb.log_warn(f'[{self._name}] Simulation physics_dt is larger than sensor_dt. Reduced to get_linear_vel().')
         self._elapsed_time_vel += physics_dt
@@ -206,6 +335,14 @@ class DVLsensor:
             return float('nan')
 
     def get_depth_fd(self, physics_dt: float):
+        """Frequency-dependent version of get_depth() that respects sensor update rate.
+    
+        Args:
+            physics_dt (float): Current physics timestep duration.
+    
+        Returns:
+            Union[list[float], float]: Depth measurements if update is due, otherwise NaN.
+        """
         if self.get_dt() < physics_dt:
             carb.log_warn(f'[{self._name}] Simulation physics_dt is larger than sensor_dt. Reduced to get_depth().')
         self._elapsed_time_depth += physics_dt
@@ -216,10 +353,28 @@ class DVLsensor:
             return float('nan')
         
     def set_freq(self, freq: float):
+        """Set a fixed operating frequency for the DVL sensor.
+    
+        Args:
+            freq (float): Desired operating frequency in Hz (must be > 0)
+    
+        Note:
+            - Overrides any adaptive frequency behavior
+            - Automatically calculates the corresponding period (dt = 1/freq)
+            - Sets internal flag to maintain fixed frequency mode
+            - To revert to adaptive frequency, create a new DVL instance
+    
+        Example:
+            >>> dvl.set_freq(10)  # Sets DVL to update at 10Hz
+        """        
         self._user_static_freq_flag = True
         self._dt = 1 / freq
 
     def add_debug_lines(self):
+        """Visualize DVL beams in the viewport using debug drawing.
+        
+        Creates an action graph that continuously draws the beam paths.
+        """
 
         (action_graph, new_nodes, _, _) = og.Controller.edit(
             {"graph_path": "/debugLines", "evaluator_name": "execution"},

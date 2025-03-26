@@ -4,162 +4,11 @@ import omni.ui as ui
 import numpy as np
 from omni.replicator.core.scripts.functional import write_np
 import warp as wp
+from isaacsim.oceansim.utils.ImagingSonar_kernels import *
+
+
 # Future TODO
 # In future release, wrap this class around RTX lidar
-
-
-@wp.func
-def cartesian_to_spherical(cart: wp.vec3) -> wp.vec3:
-    r = wp.sqrt(cart[0]*cart[0] + cart[1]*cart[1] + cart[2]*cart[2])
-    return wp.vec3(r,
-                wp.atan2(cart[1], cart[0]),
-                wp.acos(cart[2] / r)
-                )
-                                    
-
-@wp.kernel
-def compute_intensity(pcl: wp.array(ndim=2, dtype=wp.float32),
-                    normals: wp.array(ndim=2, dtype=wp.float32),
-                    viewTransform: wp.mat44,
-                    semantics: wp.array(ndim=1, dtype=wp.uint32),
-                    indexToRefl: wp.array(dtype=wp.float32),
-                    attenuation: float,
-                    intensity: wp.array(dtype=wp.float32)
-                    ):
-    tid = wp.tid()
-    pcl_vec = wp.vec3(pcl[tid,0], pcl[tid,1], pcl[tid,2])
-    normal_vec = wp.vec3(normals[tid,0], normals[tid,1],normals[tid,2])
-    R = wp.mat33(viewTransform[0,0], viewTransform[0,1], viewTransform[0,2],
-                 viewTransform[1,0], viewTransform[1,1], viewTransform[1,2],
-                 viewTransform[2,0], viewTransform[2,1], viewTransform[2,2])
-    T = wp.vec3(viewTransform[0,3], viewTransform[1,3], viewTransform[2,3])
-    sensor_loc = - (wp.transpose(R) @ T)
-    incidence = pcl_vec - sensor_loc
-    # Will use warp.math.norm_l2() in future release
-    dist = wp.sqrt(incidence[0]*incidence[0] + incidence[1]*incidence[1] + incidence[2]*incidence[2])
-    unit_directs = wp.normalize(pcl_vec - sensor_loc)
-    cos_theta = wp.dot(-unit_directs, normal_vec)
-    reflectivity = indexToRefl[semantics[tid]]
-    intensity[tid] = reflectivity * cos_theta * wp.exp(-attenuation * dist)
-
-@wp.kernel
-def world2local(viewTransform: wp.mat44,
-                pcl_world: wp.array(ndim=2, dtype=wp.float32),
-                pcl_local: wp.array(dtype=wp.vec3),
-                pcl_local_spher: wp.array(dtype=wp.vec3)):
-    tid = wp.tid()
-    pcl_world_homogeneous = wp.vec4(pcl_world[tid,0],
-                          pcl_world[tid,1],
-                          pcl_world[tid,2],
-                          wp.float32(1.0)
-                          )
-    pcl_local_homogeneous = viewTransform @ pcl_world_homogeneous
-    # Rotate axis such that y axis pointing forward for sonar data plotting
-    pcl_local[tid] = wp.vec3(pcl_local_homogeneous[0], -pcl_local_homogeneous[2], pcl_local_homogeneous[1])
-    pcl_local_spher[tid] = cartesian_to_spherical(pcl_local[tid])
-
-
-@wp.kernel
-def bin_intensity(pcl: wp.array(dtype=wp.vec3),
-                  intensity: wp.array(dtype=wp.float32),
-                  x_offset: wp.float32,
-                  y_offset: wp.float32,
-                  x_res: wp.float32,
-                  y_res: wp.float32,
-                  bin_sum: wp.array(ndim=2, dtype=wp.float32),
-                  bin_count: wp.array(ndim=2, dtype=wp.int32)
-                  ):
-    tid = wp.tid()
-
-    # Get the range, azimuth, and intensity of the point
-    x = pcl[tid][0]
-    y = pcl[tid][1]
-
-    # Calculate the bin indices for range and azimuth
-    x_bin_idx = wp.int32((x - x_offset) / x_res)
-    y_bin_idx = wp.int32((y - y_offset) / y_res)
-    wp.atomic_add(bin_sum, x_bin_idx, y_bin_idx, intensity[tid])
-    wp.atomic_add(bin_count, x_bin_idx, y_bin_idx, 1)
-
-@wp.kernel 
-def average(sum: wp.array(ndim=2, dtype=wp.float32),
-            count: wp.array(ndim=2, dtype=wp.int32),
-            avg: wp.array(ndim=2, dtype=wp.float32)):
-    i, j = wp.tid()
-    if count[i, j] > 0:
-        avg[i, j] = sum[i, j] / wp.float32(count[i, j])
-
-
-@wp.kernel
-def all_max(array: wp.array(ndim=2, dtype=wp.float32), 
-              max_value: wp.array(dtype=wp.float32)):
-    i,j = wp.tid()  
-    wp.atomic_max(max_value, 0, array[i, j])
-
-@wp.kernel
-def range_max(array: wp.array(ndim=2, dtype=wp.float32), 
-              max_value: wp.array(dtype=wp.float32)):
-    i, j = wp.tid()
-    wp.atomic_max(max_value, i, array[i,j])
-
-@wp.kernel 
-def make_sonar_map_all(r: wp.array(ndim=2, dtype=wp.float32),
-                       azi: wp.array(ndim=2, dtype=wp.float32),
-                       intensity: wp.array(ndim=2, dtype=wp.float32),
-                       max_intensity: wp.float32,
-                       gau_noise: wp.array(ndim=2, dtype=wp.float32),
-                       range_ray_noise: wp.array(ndim=2, dtype=wp.float32),
-                       offset: wp.float32,
-                       gain: wp.float32,
-                       result: wp.array(ndim=2, dtype=wp.vec3)):
-    i, j = wp.tid()
-    intensity[i,j] = intensity[i,j]/max_intensity
-    intensity[i,j] += offset
-    intensity[i,j] *= gain
-    intensity[i,j] *= (0.5 + gau_noise[i,j])
-    intensity[i,j] += range_ray_noise[i,j]
-    intensity[i,j] = wp.clamp(intensity[i,j], wp.float32(0.0), wp.float32(1.0))
-
-    result[i,j] = wp.vec3(r[i,j] * wp.cos(azi[i,j]),
-                          r[i,j] * wp.sin(azi[i,j]),
-                          intensity[i,j])
-
-@wp.kernel 
-def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
-                       azi: wp.array(ndim=2, dtype=wp.float32),
-                       intensity: wp.array(ndim=2, dtype=wp.float32),
-                       max_intensity: wp.array(ndim=1, dtype=wp.float32),
-                       gau_noise: wp.array(ndim=2, dtype=wp.float32),
-                       range_ray_noise: wp.array(ndim=2, dtype=wp.float32),
-                       offset: wp.float32,
-                       gain: wp.float32,
-                       result: wp.array(ndim=2, dtype=wp.vec3)):
-    i, j = wp.tid()
-
-    if max_intensity[i] !=0:
-        intensity[i,j] = intensity[i,j]/max_intensity[i]
-
-    intensity[i,j] *= (0.5 + gau_noise[i,j])
-    intensity[i,j] += range_ray_noise[i,j]
-    intensity[i,j] += offset
-    intensity[i,j] *= gain
-    intensity[i,j] = wp.clamp(intensity[i,j], wp.float32(0.0), wp.float32(1.0))
-
-    result[i,j] = wp.vec3(r[i,j] * wp.cos(azi[i,j]),
-                          r[i,j] * wp.sin(azi[i,j]),
-                          intensity[i,j])
-    
-@wp.kernel
-def make_sonar_image(sonar_data: wp.array(ndim=2, dtype=wp.vec3),
-                     sonar_image: wp.array(ndim=3, dtype=wp.uint8)):
-    i, j = wp.tid()
-    width = sonar_data.shape[1]
-    sonar_rgb = wp.uint8(sonar_data[i,j][2] * wp.float32(255))
-    sonar_image[i,width-j,0] = sonar_rgb
-    sonar_image[i,width-j,1] = sonar_rgb
-    sonar_image[i,width-j,2] = sonar_rgb
-    sonar_image[i,width-j,3] = wp.uint8(255)
-
 
 class ImagingSonarSensor(Camera):
     def __init__(self, 
@@ -181,6 +30,49 @@ class ImagingSonarSensor(Camera):
                  hori_res: int = 3000 # isaac camera render product only accepts square pixel, 
                                       # for now vertical res is automatically set with ratio of hori_fov vs.vert_fov 
                  ):
+        
+    
+        """Initialize an imaging sonar sensor with physical parameters.
+    
+        Args:
+            prim_path (str): prim path of the Camera Prim to encapsulate or create.
+            name (str, optional): shortname to be used as a key by Scene class.
+                                    Note: needs to be unique if the object is added to the Scene.
+                                    Defaults to "ImagingSonar".
+            frequency (Optional[int], optional): Frequency of the sensor (i.e: how often is the data frame updated).
+                                                Defaults to None.
+            dt (Optional[str], optional): dt of the sensor (i.e: period at which a the data frame updated). Defaults to None.
+            resolution (Optional[Tuple[int, int]], optional): resolution of the camera (width, height). Defaults to None.
+            position (Optional[Sequence[float]], optional): position in the world frame of the prim. shape is (3, ).
+                                                        Defaults to None, which means left unchanged.
+            translation (Optional[Sequence[float]], optional): translation in the local frame of the prim
+                                                            (with respect to its parent prim). shape is (3, ).
+                                                            Defaults to None, which means left unchanged.
+            orientation (Optional[Sequence[float]], optional): quaternion orientation in the world/ local frame of the prim
+                                                            (depends if translation or position is specified).
+                                                            quaternion is scalar-first (w, x, y, z). shape is (4, ).
+                                                            Defaults to None, which means left unchanged.
+            render_product_path (str): path to an existing render product, will be used instead of creating a new render product
+                                    the resolution and camera attached to this render product will be set based on the input arguments.
+                                    Note: Using same render product path on two Camera objects with different camera prims, resolutions is not supported
+                                    Defaults to None
+
+            physics_sim_view (_type_, optional): _description_. Defaults to None.            
+            min_range (float, optional): Minimum detection range in meters. Defaults to 0.2.
+            max_range (float, optional): Maximum detection range in meters. Defaults to 3.0.
+            range_res (float, optional): Range resolution in meters. Defaults to 0.008.
+            hori_fov (float, optional): Horizontal field of view in degrees. Defaults to 130.0.
+            vert_fov (float, optional): Vertical field of view in degrees. Defaults to 20.0.
+            angular_res (float, optional): Angular resolution in degrees. Defaults to 0.5.
+            hori_res (int, optional): Horizontal pixel resolution. Defaults to 3000.
+    
+        Note:
+            - Vertical resolution is automatically calculated to maintain aspect ratio
+            - Uses Warp for GPU-accelerated sonar image generation
+            - Creates polar coordinate meshgrid for sonar returns processing
+        """
+
+
         self._name = name
         # Raw parameters from Oculus M370s\MT370s\MD370s
         self.max_range = max_range # m (max is 200 m in datasheet )
@@ -260,6 +152,24 @@ class ImagingSonarSensor(Camera):
     # expected to be used immediately within the writer. Defaults to True.
 
     def sonar_initialize(self, output_dir : str = None, viewport: bool = True, include_unlabelled = False, if_array_copy: bool = True):
+        """Initialize sonar data processing pipeline and annotators.
+    
+        Args:
+            output_dir (str, optional): Directory to save sonar data. Defaults to None.
+                                        If set to None, sonar will not write data.
+            viewport (bool, optional): Enable viewport visualization. Defaults to True.
+                                        Set to False for Sonar running without visualization.
+            include_unlabelled (bool, optional): Include unlabelled objects to be scanned into sonar view. Defaults to False.
+            if_array_copy (bool, optional): If True, retrieve a copy of the data array. 
+                                            This is recommended for workflows using asynchronous backends to manage the data lifetime. 
+                                            Can be set to False to gain performance if the data is expected to be used immediately within the writer. 
+                                            Defaults to True.
+                                            
+        Note:
+            - Attaches pointcloud, camera params, and semantic segmentation annotators
+            - Sets up Warp arrays for sonar image processing
+            - Can optionally write data to disk if output_dir specified
+        """
         self.writing = False
         self._viewport = viewport
         self._device = str(wp.get_preferred_device())
@@ -310,6 +220,17 @@ class ImagingSonarSensor(Camera):
         
 
     def scan(self):
+
+        """Capture a single sonar scan frame and store the raw data.
+    
+        Returns:
+            bool: True if scan was successful (valid data received), False otherwise
+    
+        Note:
+            - Stores pointcloud, normals, semantics, and camera transform in scan_data dict
+            - First few frames may be empty due to CUDA initialization
+            - Automatically skips frames with no detected objects
+        """
         # Due to the time to load annotator to cuda, the first few simulation tick gives no annotation in memory.
         # This would also reult error when no mesh within the sonar fov
         # Ignore scan that gives empty data stream
@@ -336,13 +257,32 @@ class ImagingSonarSensor(Camera):
                         central_peak: float = 2, # control the strength of the streak
                         central_std: float = 0.001, # control the spread of the streak
                         ):
-        # A utility function helps to convert idToLabels into indexToProp array
-        # This manipulation facilitates warp computation framework
-        # indexToProp is an 1-dim array where the values associated with the query property 
-        # are placed at the index corresponding to the key
-        # First two entry are always zero because {'0': {'class': 'BACKGROUND'}, '1': {'class': 'UNLABELLED'}}
-        # eg: indexToProp = [0, 0, 0.1, 1 .....] 
+        """Process raw scan data into a sonar image with configurable parameters.
+
+        Args:
+            binning_method (str): "sum" or "mean" for intensity accumulation
+            normalizing_method (str): "all" (global max) or "range" (per-range max)
+            query_prop (str): Material property to query (default 'reflectivity')
+                            Don't modify this if not for development.
+            attenuation (float): Distance attenuation coefficient (0-1)
+            gau_noise_param (float): Gaussian noise multiplier
+            ray_noise_param (float): Rayleigh noise scale factor
+            intensity_offset (float): Post-normalization intensity offset
+            intensity_gain (float): Post-normalization intensity multiplier
+            central_peak (float): Central beam streak intensity
+            central_std (float): Central beam streak width
+    
+        """
+
+
+
         def make_indexToProp_array(idToLabels: dict, query_property: str):
+            # A utility function helps to convert idToLabels into indexToProp array
+            # This manipulation facilitates warp computation framework
+            # indexToProp is an 1-dim array where the values associated with the query property 
+            # are placed at the index corresponding to the key
+            # First two entry are always zero because {'0': {'class': 'BACKGROUND'}, '1': {'class': 'UNLABELLED'}}
+            # eg: indexToProp = [0, 0, 0.1, 1 .....] 
             max_id = max(idToLabels.keys(), default=-1)
             indexToProp_array = np.ones((int(max_id)+1,))
             for id in idToLabels.keys():
@@ -531,8 +471,16 @@ class ImagingSonarSensor(Camera):
         self.id += 1
     
 
-    # This is a utility function that converts sonar_data to grey scale sonar image for viewport visualization
     def make_sonar_image(self):
+        """Convert processed sonar data to a viewable grayscale image.
+    
+        Returns:
+            wp.array: GPU array containing the sonar image (RGBA format)
+    
+        Note:
+            - Used internally for viewport display
+            - Image dimensions match the sonar's polar binning resolution
+        """
         self.sonar_image.zero_()
         wp.launch(
             dim=self.sonar_map.shape,
@@ -548,6 +496,13 @@ class ImagingSonarSensor(Camera):
     
 
     def make_sonar_viewport(self):
+        """Create an interactive viewport window for real-time sonar visualization.
+    
+        Note:
+            - Displays live sonar images when simulation is running
+            - Includes range and azimuth tick marks
+            - Window size is fixed at 800x800 pixels
+        """
         self.wrapped_ui_elements = []
 
         range_tick_num = 10
@@ -589,16 +544,31 @@ class ImagingSonarSensor(Camera):
         self.wrapped_ui_elements.append(self._sonar_provider)
         self.wrapped_ui_elements.append(self._window)
 
-    def get_range(self):
+    def get_range(self) -> list[float]:
+        """Get the configured operating range of the sonar.
+    
+        Returns:
+            list[float]: [min_range, max_range] in meters
+        """
         return [self.min_range, self.max_range]
     
-    def get_fov(self):
+    def get_fov(self) -> list[float]:
+        """Get the configured field of view angles.
+    
+        Returns:
+            list[float]: [horizontal_fov, vertical_fov] in degrees
+        """
         return [self.hori_fov, self.vert_fov]
     
 
     
-    # Detach the annotator from render product and clear the data cache
     def close(self):
+        """Clean up resources by detaching annotators and clearing caches.
+    
+        Note:
+            - Required for proper shutdown when done using the sensor
+            - Also closes viewport window if one was created
+        """
         self.pointcloud_annot.detach(self._render_product_path)
         self.cameraParams_annot.detach(self._render_product_path)
         self.semanticSeg_annot.detach(self._render_product_path)
@@ -615,5 +585,11 @@ class ImagingSonarSensor(Camera):
 
 
     def ui_destroy(self):
+        """Explicitly destroy viewport UI elements.
+    
+        Note:
+            - Called automatically by close()
+            - Only needed if manually managing UI lifecycle
+        """
         for elem in self.wrapped_ui_elements:
             elem.destroy()

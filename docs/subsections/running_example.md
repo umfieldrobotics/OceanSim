@@ -27,7 +27,7 @@ User can adjust reflectivity of objects in the sonar perception via adding seman
 Semantic type must be `reflectivity` as string. 
 And corresponding semantic data must be float, eg. `0.2`.
 
-Semantic configuration can either be performed by code:
+Semantic configuration can either be performed by code during scene setup:
 <!-- configure Prim Semantics by code -->
 ```bash
 from isaacsim.core.utils.semantics import add_update_semantics
@@ -35,14 +35,18 @@ add_update_semantics(prim=<object_prim>,
                     type_label='reflectivity',
                     semantic_label='1.0')
 ```
-Or with UI provided in `semantics.schema.editor` ([Semantic Schema Editor](https://docs.omniverse.nvidia.com/extensions/latest/ext_replicator/semantics_schema_editor.html) should be auto loaded as Isaac Sim starts up). A simple tutorial is as followed:
+Or with UI provided in `semantics.schema.editor` ([Semantic Schema Editor](https://docs.omniverse.nvidia.com/extensions/latest/ext_replicator/semantics_schema_editor.html) should be auto loaded as Isaac Sim starts up). 
+
+A simple tutorial is as followed:
 <!-- (../../media/semantic_editor.gif) -->
 ![Add reflectivity by Semantic Editor](../../media/semantic_editor.gif)
 
-## Adding Caustics from Wave Deformation
-Notice the below way of adding water caustics into the USD scene is still in exploration and thus may lead to performance issud and crash during the simulation.
+As demonstrated by this workflow, developers are freely to add more modeling parameters as a new semantic type to improve sonar fidelity.  
 
-To turn on rendering water caustics, `Render Settings - Ray Tracing - Caustics` will be set `on`, and `Enable Caustics` in the UsdLux that supports caustics will be set `on` for the light source.
+## Adding Caustics from Wave Deformation
+Notice the below way of adding water caustics into the USD scene is still in exploration and thus may lead to performance issue and crash during the simulation.
+
+To turn on rendering caustics, `Render Settings - Ray Tracing - Caustics` will be set `on`, and `Enable Caustics` in the UsdLux that supports caustics will be set `on` for the light source.
 
 Next we assign `transparent materials` (eg. Water, glass) to any mesh surface that we wish to [deflect photons](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-2-rendering-water-caustics) and create caustics.
 
