@@ -24,7 +24,7 @@ For more instructions when using this example, refer to [information panel](../.
 ## Tuning Object Reflectivity for Imaging Sonar
 User can adjust reflectivity of objects in the sonar perception via adding semantic label to the object. 
 
-Semantic type must be `reflectivity` as string. 
+Semantic type must be `"reflectivity"` as string. 
 And corresponding semantic data must be float, eg. `0.2`.
 
 Semantic configuration can either be performed by code during scene setup:
@@ -43,7 +43,7 @@ A simple tutorial is as followed:
 
 As demonstrated by this workflow, developers are freely to add more modeling parameters as a new semantic type to improve sonar fidelity.  
 
-## Adding Caustics from Wave Deformation
+## Adding Water Caustics
 Notice the below way of adding water caustics into the USD scene is still in exploration and thus may lead to performance issue and crash during the simulation.
 
 To turn on rendering caustics, `Render Settings - Ray Tracing - Caustics` will be set `on`, and `Enable Caustics` in the UsdLux that supports caustics will be set `on` for the light source.
@@ -52,7 +52,9 @@ Next we assign `transparent materials` (eg. Water, glass) to any mesh surface th
 
 Lastly to simulate water caustics, we will deform the surface according to realistic water surface deformation.
 
-A USD file containing the caustic settings and surface deformation powered by a Warp kernel can be found in the [OceanSim assets]()`(TODO)` we published. And the corresponding demo video is provided below:
+A USD file containing the caustic settings and surface deformation powered by a Warp kernel can be found in the OceanSim assets `~\OceanSim_assets\collected_MHL\mhl_water.usd` we published. 
+
+And the corresponding demo video is provided below:
 
 <!-- (../../media/caustics.gif) -->
 ![How to turn on Caustics](../../media/caustics.gif)

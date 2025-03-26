@@ -44,7 +44,7 @@ OceanSim is a high-fidelity underwater simulation framework designed to accelera
 <!-- installation, running examples, building your own digital twins-->
 We divide the documentation into three parts:
 - [Installation](subsections/installation.md)
-- [Running Examples](subsections/running_examples.md)
+- [Running Examples](subsections/running_example.md)
 - [Building Your Own Digital Twins with OceanSim](subsections/building_own_digital_twin.md)
 
 ## Support and Contributing

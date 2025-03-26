@@ -17,6 +17,14 @@ cd /path/to/isaac_sim/workspace/isaac-sim-4.5.0/extsUser
 git clone https://github.com/umfieldrobotics/OceanSim.git
 ```
 
+Download `OceanSim_assets` from `(TODO) Google drive link` which contains USD assets of robot and environment.
+
+And change function `get_oceansim_assets_path()` in [~/issacsim/oceansim/utils/assets_utils.py](../../isaacsim/oceansim/utils/assets_utils.py) to return the path to the installed assets folder.
+```bash
+def get_oceansim_assets_path() -> str:
+    return "/path/to/downloaded/assets/OceanSim_assets"
+```
+
 Launch Isaac Sim follow this [guide](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_workstation.html#isaac-sim-short-app-selector).
 
 There is no building process needed. To load OceanSim, simply go to Isaac Sim and enable OceanSim in the Extensions menu.
