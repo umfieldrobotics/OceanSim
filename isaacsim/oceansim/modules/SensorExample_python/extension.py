@@ -69,7 +69,7 @@ class Extension(omni.ext.IExt):
 
         self._menu_items = [
             MenuItemDescription(
-                name="Sensor",
+                name="Examples",
                 onclick_action=(ext_id, f"CreateUIExtension:{EXTENSION_TITLE}"),
                 sub_menu=[
                     make_menu_item_description(

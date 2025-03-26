@@ -67,15 +67,7 @@ class Extension(omni.ext.IExt):
 
 
         self._menu_items = [
-            MenuItemDescription(
-                name="Tools",
-                onclick_action=(ext_id, f"CreateUIExtension:{EXTENSION_TITLE}"),
-                sub_menu=[
-                    make_menu_item_description(
-                        ext_id, "Color Picker", lambda a=weakref.proxy(self): a._menu_callback()
-                    )
-                ],
-            )
+            make_menu_item_description(ext_id, EXTENSION_TITLE, lambda a=weakref.proxy(self): a._menu_callback())
         ]
 
         add_menu_items(self._menu_items, "OceanSim")

@@ -12,7 +12,6 @@ We have tested OceanSim on Ubuntu 20.04, 22.04, and 24.04. We have also tested O
 Install NVIDIA Isaac Sim 4.5. We follow the official [workstation installation guide](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_workstation.html) to install Isaac Sim.
 
 Clone this repository to your local machine. We recommend cloning the repository to the Isaac Sim workspace directory.
-<!-- cd to your isaac sim workspace -->
 ```bash
 cd /path/to/isaac_sim/workspace/isaac-sim-4.5.0/extsUser
 git clone https://github.com/umfieldrobotics/OceanSim.git
