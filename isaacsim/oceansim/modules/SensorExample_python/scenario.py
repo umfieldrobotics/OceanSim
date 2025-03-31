@@ -152,7 +152,6 @@ class MHL_Sensor_Example_Scenario():
             if len(self.waypoints) > 0:
                 waypoints = self.waypoints[0]
                 self._rob.GetAttribute('xformOp:translate').Set(Gf.Vec3f(waypoints[0], waypoints[1], waypoints[2]))
-                # print()
                 self._rob.GetAttribute('xformOp:orient').Set(Gf.Quatd(waypoints[3], waypoints[4], waypoints[5], waypoints[6]))
                 self.waypoints.pop(0)
             else:

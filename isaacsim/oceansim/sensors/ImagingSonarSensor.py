@@ -89,19 +89,23 @@ class ImagingSonarSensor(Camera):
 
 
         # Generate sonar map's r and z meshgrid
-        self.r, self.azi = np.meshgrid(np.arange(self.min_range,self.max_range,self.range_res),
+        self.min_azi = np.deg2rad(90-self.hori_fov/2)
+        r, azi = np.meshgrid(np.arange(self.min_range,self.max_range,self.range_res),
                                        np.arange(np.deg2rad(90-self.hori_fov/2), np.deg2rad(90+self.hori_fov/2), np.deg2rad(self.angular_res)),
                                        indexing='ij')
+        self.r = wp.array(r, shape=r.shape, dtype=wp.float32)
+        self.azi = wp.array(azi, shape=r.shape, dtype=wp.float32)
 
         # Load array that doesn't change shapes to cuda for reusage memory
         # Users can also automatically see if they have set a reasonable parameter 
         # for sonar map bin size\resolution once load the sensor
         self.bin_sum = wp.zeros(shape=self.r.shape, dtype=wp.float32)
         self.bin_count = wp.zeros(shape=self.r.shape, dtype=wp.int32)
-        self.binned_intensity = wp.zeros(shape=self.r.shape, dtype=wp.int32)
+        self.binned_intensity = wp.zeros(shape=self.r.shape, dtype=wp.float32)
         self.sonar_map = wp.zeros(shape=self.r.shape, dtype=wp.vec3)
         self.sonar_image = wp.zeros(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
-
+        self.gau_noise = wp.zeros(shape=self.r.shape, dtype=wp.float32)
+        self.range_dependent_ray_noise = wp.zeros(shape=self.r.shape, dtype=wp.float32)
 
         self.AR = self.hori_fov / self.vert_fov
         self.vert_res = int(self.hori_res / self.AR)
@@ -216,6 +220,8 @@ class ImagingSonarSensor(Camera):
         self.binned_intensity.zero_()
         self.sonar_map.zero_()
         self.sonar_image.zero_()
+        self.range_dependent_ray_noise.zero_()
+        self.gau_noise.zero_()
 
         
 
@@ -261,7 +267,9 @@ class ImagingSonarSensor(Camera):
 
         Args:
             binning_method (str): "sum" or "mean" for intensity accumulation
+                                Remember to adjust your noise scale accordingly after changing this.
             normalizing_method (str): "all" (global max) or "range" (per-range max)
+                                Remember to adjust your noise scale accordingly after changing this.
             query_prop (str): Material property to query (default 'reflectivity')
                             Don't modify this if not for development.
             attenuation (float): Distance attenuation coefficient (0-1)
@@ -349,8 +357,8 @@ class ImagingSonarSensor(Camera):
                   inputs=[
                       pcl_spher,
                       intensity,
-                      self.r[0,0],
-                      self.azi[0,0],
+                      self.min_range,
+                      self.min_azi,
                       self.range_res,
                       wp.radians(self.angular_res),
                   ],
@@ -378,19 +386,50 @@ class ImagingSonarSensor(Camera):
             self.binned_intensity = self.bin_sum
 
 
-        # Calculate additive rayleigh noise (range dependent and mimic central beam)
-        # Calculate multiplicative gaussian noise
-        gau_noise = np.random.normal(loc=0, scale=gau_noise_param, size=self.bin_sum.shape)
-        ray_noise = np.random.rayleigh(scale=ray_noise_param, size=self.bin_sum.shape)
-        range_dependent_ray_noise = (self.r/self.max_range)**2*(1 + central_peak*np.exp(-(self.azi-np.pi/2)**2/central_std))*ray_noise 
-
-        # Normalizing intensity at each bin either by global maximum or rangewise maximum
-
+        self.range_dependent_ray_noise.zero_()
+        self.gau_noise.zero_()
         self.sonar_map.zero_()
 
+        # Calculate multiplicative gaussian noise
+        
+        wp.launch(
+            kernel=normal_2d,
+            dim=self.bin_sum.shape,
+            inputs=[
+                self.id,   # use frame num for RNG seed increment
+                0.0,
+                gau_noise_param
+            ],
+            outputs=[
+                self.gau_noise
+            ]
+        )
+
+        # Calculate additive rayleigh noise (range dependent and mimic central beam)
+
+        wp.launch(
+            kernel=range_dependent_rayleigh_2d,
+            dim=self.bin_sum.shape,
+            inputs=[
+                self.id,   # use frame num for RNG seed increment
+                self.r,
+                self.azi,
+                self.max_range,
+                ray_noise_param,
+                central_peak,
+                central_std,
+            ],
+            outputs=[
+                self.range_dependent_ray_noise
+
+            ]
+        )
+
+        
+        
+        # Normalizing intensity at each bin either by global maximum or rangewise maximum
         # Compute global maximum
         if normalizing_method == "all":
-            # warp.max(scalar, scalar) has bug. Now using the warp.atomic_max(array, i, value)
             maximum = wp.zeros(shape=(1,), dtype=wp.float32)
             wp.launch(
                 dim=self.bin_sum.shape,
@@ -399,22 +438,21 @@ class ImagingSonarSensor(Camera):
                     self.binned_intensity,
                 ],
                 outputs=[
-                    maximum # wp.array of shape (1,)
+                    maximum # wp.array of shape (1,), max value is stored at maximum[0]
                 ]
             )
-            # TODO in future release, this will be fixed so everything stays on CUDA
-            maximum = maximum.numpy()[0]
+            
             # Apply noise, normalize by global maximum, and convert (r, azi) to (x,y) for plotting
             wp.launch(
                   kernel=make_sonar_map_all,
                   dim=self.sonar_map.shape,
                   inputs=[
-                      wp.array(self.r, ndim=2, dtype=wp.float32),
-                      wp.array(self.azi, ndim=2, dtype=wp.float32),
+                      self.r,
+                      self.azi,
                       self.binned_intensity,
                       maximum,
-                      wp.array(gau_noise, ndim=2, dtype=wp.float32),
-                      wp.array(range_dependent_ray_noise, ndim=2, dtype=wp.float32),
+                      self.gau_noise,
+                      self.range_dependent_ray_noise,
                       intensity_offset,
                       intensity_gain
                   ],
@@ -441,12 +479,12 @@ class ImagingSonarSensor(Camera):
                   kernel=make_sonar_map_range,
                   dim=self.sonar_map.shape,
                   inputs=[
-                      wp.array(self.r, ndim=2, dtype=wp.float32),
-                      wp.array(self.azi, ndim=2, dtype=wp.float32),
+                      self.r,
+                      self.azi, 
                       self.binned_intensity,
                       maximum,
-                      wp.array(gau_noise, ndim=2, dtype=wp.float32),
-                      wp.array(range_dependent_ray_noise, ndim=2, dtype=wp.float32),
+                      self.gau_noise,
+                      self.range_dependent_ray_noise,
                       intensity_offset,
                       intensity_gain
                   ],

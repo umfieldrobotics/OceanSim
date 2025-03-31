@@ -95,18 +95,60 @@ def range_max(array: wp.array(ndim=2, dtype=wp.float32),
     i, j = wp.tid()
     wp.atomic_max(max_value, i, array[i,j])
 
+
+
+@wp.kernel
+def normal_2d(seed: int,
+              mean: float,
+              std: float,
+              output: wp.array(ndim=2, dtype=wp.float32),
+
+):
+    i, j = wp.tid()
+    state = wp.rand_init(seed, i * output.shape[1] + j)  
+    
+    # Generate normal random variable
+    output[i,j] = mean + std * wp.randn(state)
+
+
+
+@wp.kernel
+def range_dependent_rayleigh_2d(seed: int,
+                                r: wp.array(ndim=2, dtype=wp.float32),
+                                azi: wp.array(ndim=2, dtype=wp.float32),
+                                max_range: float,
+                                rayleigh_scale: float,
+                                central_peak: float,
+                                central_std: float,
+                                output: wp.array(ndim=2, dtype = wp.float32)
+):
+    i, j = wp.tid()
+    state = wp.rand_init(seed, i * output.shape[1] + j)
+    
+    # Generate two uniform random numbers
+    n1 = wp.randn(state)
+    n2 = wp.randn(state)  # Offset for independence
+    
+    # Transform to Rayleigh distribution
+    rayleigh = rayleigh_scale * wp.sqrt(n1*n1 + n2*n2)
+    # Apply range dependency
+    output[i,j] = wp.pow(r[i,j]/max_range, 2.0) * (1.0 + central_peak * wp.exp(-wp.pow(azi[i,j] - wp.PI/2.0, 2.0) / central_std)) * rayleigh
+
+
+
+
 @wp.kernel 
 def make_sonar_map_all(r: wp.array(ndim=2, dtype=wp.float32),
                        azi: wp.array(ndim=2, dtype=wp.float32),
                        intensity: wp.array(ndim=2, dtype=wp.float32),
-                       max_intensity: wp.float32,
+                       max_intensity: wp.array(ndim=1, dtype=wp.float32),
                        gau_noise: wp.array(ndim=2, dtype=wp.float32),
                        range_ray_noise: wp.array(ndim=2, dtype=wp.float32),
                        offset: wp.float32,
                        gain: wp.float32,
                        result: wp.array(ndim=2, dtype=wp.vec3)):
     i, j = wp.tid()
-    intensity[i,j] = intensity[i,j]/max_intensity
+    intensity[i,j] = intensity[i,j]/max_intensity[0]
     intensity[i,j] += offset
     intensity[i,j] *= gain
     intensity[i,j] *= (0.5 + gau_noise[i,j])
