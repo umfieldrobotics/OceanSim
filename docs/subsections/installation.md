@@ -17,7 +17,7 @@ cd /path/to/isaacsim/extsUser
 git clone https://github.com/umfieldrobotics/OceanSim.git
 ```
 
-Download `OceanSim_assets` from `(TODO) Google drive link` which contains USD assets of robot and environment.
+Download `OceanSim_assets` from [Google Drive](https://drive.google.com/drive/folders/14lOFh-A8AnXomozVdlOXeVDi2udlHRVn?usp=drive_link) which contains USD assets of robot and environment.
 
 And change function `get_oceansim_assets_path()` in [~/isaacsim/extsUser/OceanSim/isaacsim/oceansim/utils/assets_utils.py](../../isaacsim/oceansim/utils/assets_utils.py) to return the path to the installed assets folder.
 ```bash
