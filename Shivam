@@ -1,0 +1,10 @@
+git clone https://github.com/yourusername/underwater-gpu.git  
+cd underwater-gpu  
+pip install -r requirements.txt
+import cv2  
+import numpy as np  
+from gpu_enhancer import underwater_filter  
+
+image = cv2.imread("coral_reef.jpg")  
+enhanced = underwater_filter(image, mode='deep_sea')  
+cv2.imwrite("enhanced_reef.jpg", enhanced)
