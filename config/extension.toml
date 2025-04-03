@@ -1,0 +1,32 @@
+[core]
+reloadable = true
+order = 0
+
+[package]
+version = "1.0.0"
+category = "Simulation"
+title = "OceanSim"
+description = "Underwater simulation utilities"
+authors = ["FRoG--University of Michigan"]
+repository = ""
+keywords = ["Underwater","Sensor","Scene"]
+changelog = "docs/CHANGELOG.md"
+readme = "docs/README.md"
+preview_image = "data/preview.png"
+icon = "data/icon.png"
+
+
+[dependencies]
+"omni.kit.uiapp" = {}
+"omni.isaac.ui" = {}
+"omni.isaac.core" = {}
+
+
+[[python.module]]
+name = "isaacsim.oceansim.modules.SensorExample_python"
+
+[[python.module]]
+name = "isaacsim.oceansim.modules.colorpicker_python"
+
+
+
