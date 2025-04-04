@@ -67,7 +67,7 @@ OceanSim is an open-source project initiated by the [Field Robotics Group](https
 
 
 ## Citation
-If you use OceanSim useful in your research, we will really appreciate that you cite our paper:
+If you find OceanSim useful for your research, we would appreciate that you cite our paper:
 ```
 @misc{song2025oceansim,
       title={OceanSim: A GPU-Accelerated Underwater Robot Perception Simulation Framework}, 
@@ -79,7 +79,7 @@ If you use OceanSim useful in your research, we will really appreciate that you 
       url={https://arxiv.org/abs/2503.01074}, 
 }
 ```
-If you use the sonar model in OceanSim, please also cite the HoloOcean paper as our sonar model implementation is inspired by the HoloOcean sonar model:
+If you use the sonar model in OceanSim, please also cite the HoloOcean paper as the HoloOcean sonar model inspires our sonar model implementation:
 ```
 @inproceedings{Potokar22iros,
   author = {E. Potokar and K. Lay and K. Norman and D. Benham and T. Neilsen and M. Kaess and J. Mangelson},
