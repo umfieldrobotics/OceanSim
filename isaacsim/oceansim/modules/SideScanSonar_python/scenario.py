@@ -1,7 +1,7 @@
 import numpy as np
 from omni.replicator.core.scripts.functional import write_np
 import omni.replicator.core as rep
-class ImagingSonarScenario():
+class SideScanSonarScenario():
     def __init__(self):
         self._rob = None
         self._sonar = None
@@ -32,10 +32,10 @@ class ImagingSonarScenario():
             return
         self._time += step
 
-        data = self._sonar.get_data()
-        self.backend.schedule(write_np, data=data['info']['radialDistance'], path='r.npy')
-        self.backend.schedule(write_np, data=data['info']['azimuth'], path='azi.npy')
-        self.backend.schedule(write_np, data=data['info']['elevation'], path='ele.npy')
+        # data = self._sonar.get_data()
+        # self.backend.schedule(write_np, data=data['info']['radialDistance'], path='r.npy')
+        # self.backend.schedule(write_np, data=data['info']['azimuth'], path='azi.npy')
+        # self.backend.schedule(write_np, data=data['info']['elevation'], path='ele.npy')
 
 
 

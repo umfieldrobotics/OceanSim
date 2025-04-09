@@ -31,3 +31,5 @@ name = "isaacsim.oceansim.modules.colorpicker_python"
 [[python.module]]
 name = "isaacsim.oceansim.modules.ImagingSonar_python"
 
+[[python.module]]
+name = "isaacsim.oceansim.modules.SideScanSonar_python"

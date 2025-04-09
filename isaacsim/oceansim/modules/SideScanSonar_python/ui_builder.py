@@ -27,9 +27,9 @@ from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 
 
 # Custom import
-from .scenario import ImagingSonarScenario
+from .scenario import SideScanSonarScenario
 import omni.replicator.core as rep
-
+from isaacsim.oceansim.sensors.SideScanSonarSensor import SideScanSonarSensor
 class UIBuilder:
     def __init__(self):
         # Frames are sub-windows that can contain multiple UI elements
@@ -144,10 +144,11 @@ class UIBuilder:
         self._sonar = None
         self._sensor_location = [0.3, 0.0, 0.0]
         self._init_rob_pos = np.array([0, 0, 2])
-        self._init_rob_orien = euler_angles_to_quat(np.array([0, 45, 0]), degrees=True)
+        self._init_rob_orien = euler_angles_to_quat(np.array([0, 0, 0]), degrees=True)
+        # self._init_rob_orien = euler_angles_to_quat(np.array([0, 45, 0]), degrees=True)
         self._rob_mass = 10 #kg Need this value to supress a warning given by automatic mass computation from collider assignment
 
-        self._scenario = ImagingSonarScenario()
+        self._scenario = SideScanSonarScenario()
 
     def _add_light_to_stage(self):
         """
@@ -174,64 +175,23 @@ class UIBuilder:
         # you can create a new stage. Or comment out this line to load on current stage
         create_new_stage()
         add_reference_to_stage(usd_path='https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5/Isaac/Environments/Simple_Room/simple_room.usd',
-                               prim_path='/World')
-        # Add light 
-        # self._add_light_to_stage()
+                               prim_path='/World/room')
 
-        # # Load the robot
-        # robot_prim_path = "/World/rob"
 
-        # DynamicCuboid(prim_path=robot_prim_path, size=0.5, color=np.array([0.1,0.5,1]))
-        # self._rob = get_prim_at_path(robot_prim_path)
-        # SingleXFormPrim(robot_prim_path).set_world_pose(position=self._init_rob_pos, orientation=self._init_rob_orien)
+        # Load the robot
+        robot_prim_path = "/World/rob" 
+        DynamicCuboid(prim_path=robot_prim_path, size=0.5, color=np.array([0.1,0.5,1]))
+        self._rob = get_prim_at_path(robot_prim_path)
+        SingleXFormPrim(robot_prim_path).set_world_pose(position=self._init_rob_pos, orientation=self._init_rob_orien)
 
-        
-        # # Toggle rigid body and apply zero gravity and zero damping
-        # rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(self._rob)
-        # rob_rigidBody_API.CreateDisableGravityAttr(True)
-        # rob_rigidBody_API.GetLinearDampingAttr().Set(0.0)
-        # rob_rigidBody_API.GetAngularDampingAttr().Set(0.0)
-        # rob_rigid_prim = SingleRigidPrim(robot_prim_path, mass=self._rob_mass)
+        # Toggle rigid body and apply zero gravity and zero damping
+        rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(self._rob)
+        rob_rigidBody_API.CreateDisableGravityAttr(True)
+        rob_rigidBody_API.GetLinearDampingAttr().Set(0.0)
+        rob_rigidBody_API.GetAngularDampingAttr().Set(0.0)
+        rob_rigid_prim = SingleRigidPrim(robot_prim_path, mass=self._rob_mass)
 
-        # Set the default viewport view angle
-        config = "Example_sonar"
 
-        # 1. Create The Camera
-        _, sensor = omni.kit.commands.execute(
-            "IsaacSensorCreateRtxRadar",
-            path="/sensor",
-            parent=None,
-            config=config,
-            translation=(-3.6, 0, 0.5),
-            # orientation=Gf.Quatd(1,0,0,0),
-        )
-        # 2. Create and Attach a render product to the camera
-        render_product = rep.create.render_product(sensor.GetPath(), [1, 1]).path
-        annotator = rep.AnnotatorRegistry.get_annotator("RtxSensorCpuIsaacComputeRTXRadarPointCloud")
-        # Initialize the annotator
-        annotator.initialize()
-        writer = rep.writers.get("RtxRadar" + "DebugDrawPointCloud")
-        writer.attach([render_product])
-        # Attach the render product after the annotator is initialized.
-        annotator.attach([render_product])
-        self._sonar = annotator
-        # 4. Create a Replicator Writer that "writes" points into the scene for debug viewing
-        # writer = rep.writers.get("RtxRadarDebugDrawPointCloud")
-        # writer.attach(render_product)
-    
-        #For now use the flat ground plane as the seafloor
-        # sea_floor_prim_path = "/World/SeaFloor"
-        # GroundPlane(prim_path=sea_floor_prim_path)
-        
-        # cube_prim_paths = [f'/World/Cube_{i}' for i in range(3)]
-        # for i in range(len(cube_prim_paths)):
-        #     DynamicCuboid(prim_path=cube_prim_paths[i],
-        #                 position=np.array([1.5, -1 + i, 1]),
-        #                 color=np.array([0.1+0.3*i, 0, 1]),
-        #                 size=0.25)
-
-        
-        # RigidPrim(cube_prim_paths)
         
 
     def _setup_scenario(self):
