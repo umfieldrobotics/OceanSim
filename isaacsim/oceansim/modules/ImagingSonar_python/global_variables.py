@@ -7,6 +7,6 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
-EXTENSION_TITLE = "ImagingSonar"
+EXTENSION_TITLE = "FLS_TEST"
 
-EXTENSION_DESCRIPTION = "ImagingSonar utilities"
+EXTENSION_DESCRIPTION = "FLS_TEST"
