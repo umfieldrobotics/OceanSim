@@ -30,8 +30,9 @@ OceanSim is a high-fidelity underwater simulation framework designed to accelera
 
 
 ## Latest Updates
+- `[2025/4]` OceanSim is featured by [NVIDIA Robotics](https://www.linkedin.com/posts/nvidiarobotics_robotics-underwaterrobotics-simulation-activity-7313986055894880257-Dfmq?utm_source=share&utm_medium=member_desktop&rcm=ACoAACB8Y7sB7ikB6wVGPL5NrxYkNwk8RTEJ-3Y)!
 - `[2025/4]` 🔥 Beta version of OceanSim is released!
-- `[2025/3]` 🎉 OceanSim will be presented at [AQ²UASIM](https://sites.google.com/view/aq2uasim/home?authuser=0) at [ICRA 2025](https://2025.ieee-icra.org/)!
+- `[2025/3]` 🎉 OceanSim will be presented at [AQ²UASIM](https://sites.google.com/view/aq2uasim/home?authuser=0) and the late-breaking poster session at [ICRA 2025](https://2025.ieee-icra.org/)!
 - `[2025/3]` OceanSim paper is available on arXiv. Check it out [here](https://arxiv.org/abs/2503.01074).
 
 ## TODO
