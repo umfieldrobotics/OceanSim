@@ -57,9 +57,9 @@ We welcome contributions and discussions from the community!
 ## Contributors
 OceanSim is an open-source project initiated by the [Field Robotics Group](https://fieldrobotics.engin.umich.edu/) (FRoG) at the University of Michigan. We hope to build a vibrant community around OceanSim and invite contributions from researchers and developers around the world! A big shoutout to our contributors:
 
-[Jingyu Song](https://song-jingyu.github.io/), [Haoyu Ma](https://www.linkedin.com/in/haoyuma2002814/), [Onur Bagoren](https://www.obagoren.com/), [Advaith V. Sethuraman](https://www.advaiths.com/), [Yiting Zhang](https://sites.google.com/umich.edu/yitingzhang/), and [Katherine A. Skinner](https://fieldrobotics.engin.umich.edu/).
+[Jingyu Song](https://song-jingyu.github.io/), [Haoyu Ma](https://haoyuma2002814.github.io/), [Onur Bagoren](https://www.obagoren.com/), [Advaith V. Sethuraman](https://www.advaiths.com/), [Yiting Zhang](https://sites.google.com/umich.edu/yitingzhang/), and [Katherine A. Skinner](https://fieldrobotics.engin.umich.edu/).
 <!-- - [Jingyu Song](https://song-jingyu.github.io/)  
-- [Haoyu Ma](https://www.linkedin.com/in/haoyuma2002814//)  
+- [Haoyu Ma](https://haoyuma2002814.github.io/)  
 - [Onur Bagoren](https://www.obagoren.com/)  
 - [Advaith V. Sethuraman](https://www.advaiths.com/)  
 - [Yiting Zhang](https://sites.google.com/umich.edu/yitingzhang/)  
