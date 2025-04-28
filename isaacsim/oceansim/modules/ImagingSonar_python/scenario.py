@@ -13,7 +13,7 @@ class ImagingSonarScenario():
 
         self._running_scenario = False
         self._time = 0.0
-        self._output_dir = '/home/haoyu/Desktop/viz'
+        self._output_dir = '/home/haoyu-ma/Desktop/viz'
         self._force_cmd = None
         self._torque_cmd = None
         
