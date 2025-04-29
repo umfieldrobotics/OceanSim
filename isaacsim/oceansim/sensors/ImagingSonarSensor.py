@@ -200,13 +200,20 @@ class ImagingSonarSensor(Camera):
             device=self._device
         )
 
+        self.bbox_annot = rep.AnnotatorRegistry.get_annotator(
+            name='bounding_box_3d_fast',
+            do_array_copy=if_array_copy,
+        )
+
         print(f'[{self._name}] Using {self._device}' )
         print(f'[{self._name}] Render query res: {self.hori_res} x {self.vert_res}. Binning res: {self.r.shape[0]} x {self.r.shape[1]}')
 
         self.pointcloud_annot.attach(self._render_product_path)
         self.cameraParams_annot.attach(self._render_product_path)
         self.semanticSeg_annot.attach(self._render_product_path)
-        
+        self.bbox_annot.attach(self._render_product_path)
+
+
         if output_dir is not None:
             self.writing = True
             self.backend = rep.BackendDispatch({"paths": {"out_dir": output_dir}})
@@ -246,10 +253,58 @@ class ImagingSonarSensor(Camera):
             self.scan_data['semantics'] = self.pointcloud_annot.get_data(device=self._device)['info']['pointSemantic'][0] # shape: (1, N) <class 'warp.types.array'>
             self.scan_data['viewTransform'] = self.cameraParams_annot.get_data()['cameraViewTransform'].reshape(4,4).T # 4 by 4 np.ndarray extrinsic matrix
             self.scan_data['idToLabels'] = self.semanticSeg_annot.get_data()['info']['idToLabels'] # dict 
+            self.scan_data['bbox'] = self.bbox_annot.get_data()['data']
             return True
         else:
             return False
+        
 
+    @staticmethod
+    def make_indexToProp_array(idToLabels: dict, query_property: str):
+        """ A utility function helps to convert idToLabels into indexToProp array
+        This manipulation facilitates warp computation framework
+        indexToProp is an 1-dim array where the values associated with the query property 
+        are placed at the index corresponding to the key
+        First two entry are always zero because {'0': {'class': 'BACKGROUND'}, '1': {'class': 'UNLABELLED'}}
+        eg: indexToProp = [0, 0, 0.1, 1 .....] 
+        """
+        max_id = max(idToLabels.keys(), default=-1)
+        indexToProp_array = np.ones((int(max_id)+1,))
+        for id in idToLabels.keys():
+            for property in idToLabels.get(id):
+                if property == query_property:
+                    indexToProp_array[int(id)] = idToLabels.get(id).get(property)
+        return indexToProp_array
+    
+    @staticmethod
+    def get_bbox_3d_corners(bbox_data):
+        """Return transformed points in the following order: [LDB, RDB, LUB, RUB, LDF, RDF, LUF, RUF]
+        where R=Right, L=Left, D=Down, U=Up, B=Back, F=Front and LR: x-axis, UD: y-axis, FB: z-axis.
+
+        Args:
+            bbox_data (numpy.ndarray): A structured numpy array containing the fields: [`x_min`, `y_min`,
+                `x_max`, `y_max`, `transform`.
+
+        Returns:
+            (numpy.ndarray): Transformed corner coordinates with shape `(N, 8, 3)`.
+        """
+
+        # extend the demension of input data to fit the format of helper method parameter"""
+
+        rdb = [bbox_data["x_max"], bbox_data["y_min"], bbox_data["z_min"]]
+        ldb = [bbox_data["x_min"], bbox_data["y_min"], bbox_data["z_min"]]
+        lub = [bbox_data["x_min"], bbox_data["y_max"], bbox_data["z_min"]]
+        rub = [bbox_data["x_max"], bbox_data["y_max"], bbox_data["z_min"]]
+        ldf = [bbox_data["x_min"], bbox_data["y_min"], bbox_data["z_max"]]
+        rdf = [bbox_data["x_max"], bbox_data["y_min"], bbox_data["z_max"]]
+        luf = [bbox_data["x_min"], bbox_data["y_max"], bbox_data["z_max"]]
+        ruf = [bbox_data["x_max"], bbox_data["y_max"], bbox_data["z_max"]]
+        tfs = bbox_data["transform"]
+        corners = np.stack((ldb, rdb, lub, rub, ldf, rdf, luf, ruf), 0)
+        corners_homo = np.pad(corners, ((0, 0), (0, 1), (0, 0)), constant_values=1.0)
+        print(tfs)
+        return np.einsum("jki,ikl->ijl", corners_homo, tfs)[..., :3]
+    
 
     def make_sonar_data(self, 
                         binning_method: str = "sum", 
@@ -282,27 +337,10 @@ class ImagingSonarSensor(Camera):
     
         """
 
-
-
-        def make_indexToProp_array(idToLabels: dict, query_property: str):
-            # A utility function helps to convert idToLabels into indexToProp array
-            # This manipulation facilitates warp computation framework
-            # indexToProp is an 1-dim array where the values associated with the query property 
-            # are placed at the index corresponding to the key
-            # First two entry are always zero because {'0': {'class': 'BACKGROUND'}, '1': {'class': 'UNLABELLED'}}
-            # eg: indexToProp = [0, 0, 0.1, 1 .....] 
-            max_id = max(idToLabels.keys(), default=-1)
-            indexToProp_array = np.ones((int(max_id)+1,))
-            for id in idToLabels.keys():
-                for property in idToLabels.get(id):
-                    if property == query_property:
-                        indexToProp_array[int(id)] = idToLabels.get(id).get(property)
-            return indexToProp_array
-
         if self.scan():
             num_points = self.scan_data['pcl'].shape[0]
             # Load these small numpy arrays to cuda
-            indexToRefl = wp.array(make_indexToProp_array(idToLabels=self.scan_data['idToLabels'],
+            indexToRefl = wp.array(self.make_indexToProp_array(idToLabels=self.scan_data['idToLabels'],
                                                          query_property=query_prop),
                                                          dtype=wp.float32)
             viewTransform=wp.mat44(self.scan_data['viewTransform'])
@@ -310,6 +348,11 @@ class ImagingSonarSensor(Camera):
             pcl = self.scan_data['pcl']
             normals = self.scan_data['normals']
             semantics = self.scan_data['semantics']
+            print('-------------------')
+            # print(self.scan_data['bbox'])
+            self.get_bbox_3d_corners(self.scan_data['bbox'])
+            print('-------------------')
+
         else:
             return
 

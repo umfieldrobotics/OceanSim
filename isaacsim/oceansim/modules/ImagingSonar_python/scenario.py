@@ -13,7 +13,7 @@ class ImagingSonarScenario():
 
         self._running_scenario = False
         self._time = 0.0
-        self._output_dir = '/home/haoyu-ma/Desktop/viz'
+        self._output_dir = '/home/haoyu/Desktop/viz'
         self._force_cmd = None
         self._torque_cmd = None
         
@@ -79,7 +79,7 @@ class ImagingSonarScenario():
         self._time += step
 
 
-        self._sonar.make_sonar_data(gau_noise_param=0.5)
+        self._sonar.make_sonar_data()
         force_cmd = Gf.Vec3f(*self._force_cmd._base_command)
         torque_cmd = Gf.Vec3f(*self._torque_cmd._base_command)
         self._rob_forceAPI.CreateForceAttr().Set(force_cmd)

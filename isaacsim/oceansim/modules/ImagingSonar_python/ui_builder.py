@@ -180,7 +180,7 @@ class UIBuilder:
         add_reference_to_stage(usd_path='https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5/Isaac/Environments/Simple_Room/simple_room.usd',
                                prim_path= world_prim_path + '/room')
         # Load the robot
-        robot_prim_path = "/rob" 
+        robot_prim_path = world_prim_path + "/rob" 
         DynamicCuboid(prim_path=robot_prim_path, size=0.5, color=np.array([0.1,0.5,1]))
         self._rob = get_prim_at_path(robot_prim_path)
         SingleXFormPrim(robot_prim_path).set_world_pose(position=self._init_rob_pos, orientation=self._init_rob_orien)
@@ -198,6 +198,19 @@ class UIBuilder:
                                 angular_res=0.2,
                                 hori_res=3000
                                 )
+        
+        # add testing object
+        cube_position =  [(-0.3, 0.3, 0.3), (-0.3, -0.3, 0.3), (0.3, -0.3, 0.3), (0.3, 0, 0.3)]
+        # cube_position =  [(-0.3, -0.3, 0.3)]
+
+        for i in range(len(cube_position)):
+            cube_path = world_prim_path + f"/cube_{i}"
+            DynamicCuboid(prim_path=cube_path,
+                          position=cube_position[i],
+                          scale=[0.1]*3)
+            add_update_semantics(prim=get_prim_at_path(cube_path),
+                                 semantic_label="cube")
+            PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(cube_path))
 
     def _setup_scenario(self):
         """
