@@ -53,26 +53,59 @@ def world2local(viewTransform: wp.mat44,
 
 
 @wp.kernel
-def bin_intensity(pcl: wp.array(dtype=wp.vec3),
+def bin_process(pcl: wp.array(dtype=wp.vec3),
                   intensity: wp.array(dtype=wp.float32),
+                  semantics: wp.array(dtype=wp.uint32),
                   x_offset: wp.float32,
                   y_offset: wp.float32,
                   x_res: wp.float32,
                   y_res: wp.float32,
                   bin_sum: wp.array(ndim=2, dtype=wp.float32),
-                  bin_count: wp.array(ndim=2, dtype=wp.int32)
+                  bin_count: wp.array(ndim=2, dtype=wp.int32),
+                  pcl_bin_idx: wp.array(dtype=wp.vec2ui),
+                  bin_min_zenith: wp.array(ndim=2, dtype=wp.float32)
                   ):
     tid = wp.tid()
 
-    # Get the range, azimuth, and intensity of the point
+    # Get the range, azimuth of the point
     x = pcl[tid][0]
     y = pcl[tid][1]
 
     # Calculate the bin indices for range and azimuth
-    x_bin_idx = wp.int32((x - x_offset) / x_res)
-    y_bin_idx = wp.int32((y - y_offset) / y_res)
+    x_bin_idx = wp.uint32((x - x_offset) / x_res)
+    y_bin_idx = wp.uint32((y - y_offset) / y_res)
     wp.atomic_add(bin_sum, x_bin_idx, y_bin_idx, intensity[tid])
     wp.atomic_add(bin_count, x_bin_idx, y_bin_idx, 1)
+    # Store the bin idx that corresponding to this pcl
+    pcl_bin_idx[tid] = wp.vec2ui(x_bin_idx, y_bin_idx)
+    # Store the minimum zenith value recorded for all the pcl 
+    # that falls into this bin and is not background or unlabelled
+    if semantics[tid] != 0 or 1:
+        wp.atomic_min(bin_min_zenith, x_bin_idx, y_bin_idx, pcl[tid][2])
+
+
+
+
+@wp.kernel
+def bin_semantics_process(pcl: wp.array(dtype=wp.vec3),
+                          semantics: wp.array(dtype=wp.uint32),
+                          pcl_bin_idx: wp.array(dtype=wp.vec2ui),
+                          bin_min_zenith: wp.array(ndim=2, dtype=wp.float32),
+                          bin_semantics: wp.array(ndim=2, dtype=wp.uint32)
+                          ):
+    tid = wp.tid()
+
+    # Get the zenith of the this pcl
+    z = pcl[tid][2]
+
+    # Get the index of the bin in which this pcl falls in
+    x_bin_idx = pcl_bin_idx[tid][0]
+    y_bin_idx = pcl_bin_idx[tid][1]
+    # This ensures the semantics of this cell only belongs to the pcl semantics with the smallest zenith value
+    if (z < bin_min_zenith[x_bin_idx, y_bin_idx]) or (z == bin_min_zenith[x_bin_idx, y_bin_idx]):
+        bin_semantics[x_bin_idx, y_bin_idx] = semantics[tid]
+
+
 
 @wp.kernel 
 def average(sum: wp.array(ndim=2, dtype=wp.float32),
@@ -194,3 +227,20 @@ def make_sonar_image(sonar_data: wp.array(ndim=2, dtype=wp.vec3),
     sonar_image[i,width-j,1] = sonar_rgb
     sonar_image[i,width-j,2] = sonar_rgb
     sonar_image[i,width-j,3] = wp.uint8(255)
+
+
+# TODO add more class into the scene and colorize different classes in semantics image
+@wp.kernel
+def make_semantics_image(bin_semantics: wp.array(ndim=2, dtype=wp.uint32),
+                         sonar_semantics_image: wp.array(ndim=3, dtype=wp.uint8)
+                         ):
+    i, j = wp.tid()
+    width = bin_semantics.shape[1]
+    semantics_r = wp.uint8(bin_semantics[i,j] / wp.uint32(2) * wp.uint32(255))
+    semantics_g = wp.uint8(bin_semantics[i,j] / wp.uint32(2) * wp.uint32(255))
+    semantics_b = wp.uint8(bin_semantics[i,j] / wp.uint32(2) * wp.uint32(255))
+
+    sonar_semantics_image[i,width-j,0] = semantics_r
+    sonar_semantics_image[i,width-j,1] = wp.uint8(125)
+    sonar_semantics_image[i,width-j,2] = wp.uint8(255)
+    sonar_semantics_image[i,width-j,3] = wp.uint8(255)

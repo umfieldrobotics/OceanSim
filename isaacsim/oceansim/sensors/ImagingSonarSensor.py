@@ -13,7 +13,7 @@ from isaacsim.oceansim.utils.ImagingSonar_kernels import *
 class ImagingSonarSensor(Camera):
     def __init__(self, 
                  prim_path, 
-                 name = "ImagingSonar", 
+                 name = "FLS", 
                  frequency = None, 
                  dt = None, 
                  position = None, 
@@ -99,13 +99,16 @@ class ImagingSonarSensor(Camera):
         # Load array that doesn't change shapes to cuda for reusage memory
         # Users can also automatically see if they have set a reasonable parameter 
         # for sonar map bin size\resolution once load the sensor
-        self.bin_sum = wp.zeros(shape=self.r.shape, dtype=wp.float32)
-        self.bin_count = wp.zeros(shape=self.r.shape, dtype=wp.int32)
-        self.binned_intensity = wp.zeros(shape=self.r.shape, dtype=wp.float32)
-        self.sonar_map = wp.zeros(shape=self.r.shape, dtype=wp.vec3)
-        self.sonar_image = wp.zeros(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
-        self.gau_noise = wp.zeros(shape=self.r.shape, dtype=wp.float32)
-        self.range_dependent_ray_noise = wp.zeros(shape=self.r.shape, dtype=wp.float32)
+        self.bin_sum = wp.empty(shape=self.r.shape, dtype=wp.float32)
+        self.bin_count = wp.empty(shape=self.r.shape, dtype=wp.int32)
+        self.bin_min_zenith = wp.full(shape=self.r.shape, value=wp.PI, dtype=wp.float32)
+        self.bin_semantics = wp.zeros(shape=self.r.shape, dtype=wp.uint32)
+        self.binned_intensity = wp.empty(shape=self.r.shape, dtype=wp.float32)
+        self.sonar_map = wp.empty(shape=self.r.shape, dtype=wp.vec3)
+        self.sonar_image = wp.empty(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
+        self.sonar_semantics_image = wp.empty(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
+        self.gau_noise = wp.empty(shape=self.r.shape, dtype=wp.float32)
+        self.range_dependent_ray_noise = wp.empty(shape=self.r.shape, dtype=wp.float32)
 
         self.AR = self.hori_fov / self.vert_fov
         self.vert_res = int(self.hori_res / self.AR)
@@ -155,7 +158,10 @@ class ImagingSonarSensor(Camera):
     # Can be set to False to gain performance if the data is 
     # expected to be used immediately within the writer. Defaults to True.
 
-    def sonar_initialize(self, output_dir : str = None, viewport: bool = True, include_unlabelled = False, if_array_copy: bool = True):
+    def sonar_initialize(self, output_dir : str = None, 
+                         viewport: bool = True, 
+                         include_unlabelled = False, 
+                         if_array_copy: bool = True):
         """Initialize sonar data processing pipeline and annotators.
     
         Args:
@@ -222,13 +228,6 @@ class ImagingSonarSensor(Camera):
         
         print(f'[{self._name}] Initialized successfully. Data writing: {self.writing}')
 
-        self.bin_sum.zero_()
-        self.bin_count.zero_()
-        self.binned_intensity.zero_()
-        self.sonar_map.zero_()
-        self.sonar_image.zero_()
-        self.range_dependent_ray_noise.zero_()
-        self.gau_noise.zero_()
 
         
 
@@ -312,7 +311,6 @@ class ImagingSonarSensor(Camera):
                                                                           [0,0,-1,0],
                                                                           [0,1,0,0],
                                                                           [0,0,0,1]]))
-        # TODO verify the bbox corner is correct by saving this data to npy and plot open3d
         return corners_local[..., :3]
     
 
@@ -358,10 +356,8 @@ class ImagingSonarSensor(Camera):
             pcl = self.scan_data['pcl']
             normals = self.scan_data['normals']
             semantics = self.scan_data['semantics']
-            print('-------------------')
+            # TODO already computed the corners' cartesian coordinates in local sensor frame, how to collpase it into 2d sonar map?
             self.get_bbox_3d_corners(self.scan_data['bbox'], self.scan_data['viewTransform'])
-            print('-------------------')
-
         else:
             return
 
@@ -383,8 +379,9 @@ class ImagingSonarSensor(Camera):
                 )
                 
         # Transform pointcloud from world cooridates to sonar local
-        pcl_local =wp.empty(shape=(num_points,), dtype=wp.vec3)
-        pcl_spher = wp.empty(shape=(num_points,), dtype=wp.vec3)
+        pcl_bin_idx = wp.empty(shape=(num_points, ), dtype=wp.vec2ui)
+        pcl_local =wp.empty(shape=(num_points,), dtype=wp.vec3) # FUTURE: get rid of this, intermdediate debug use. wasting memory
+        pcl_spher = wp.empty(shape=(num_points,), dtype=wp.vec3) # FUTURE: get rid of this, intermdediate debug use. wasting memory
         wp.launch(kernel=world2local,
                   dim=num_points,
                   inputs=[
@@ -396,19 +393,19 @@ class ImagingSonarSensor(Camera):
                       pcl_spher
                     ]
                 )
-        
         # Collapse three dimensional intensity data to 2D
         # Simply sum intensity return and compute number of return that falls into the same bin
-        self.bin_sum.zero_()
-        self.bin_count.zero_()
-        self.binned_intensity.zero_()
-
         
-        wp.launch(kernel=bin_intensity,
+        # Zero out intensity in each bin (do not omit this, this is actually necessary)
+        self.binned_intensity.zero_()
+        self.bin_min_zenith.fill_(wp.PI)
+        self.bin_semantics.zero_()
+        wp.launch(kernel=bin_process,
                   dim=num_points,
                   inputs=[
                       pcl_spher,
                       intensity,
+                      semantics,
                       self.min_range,
                       self.min_azi,
                       self.range_res,
@@ -416,11 +413,29 @@ class ImagingSonarSensor(Camera):
                   ],
                   outputs=[
                       self.bin_sum,
-                      self.bin_count
+                      self.bin_count,
+                      pcl_bin_idx,
+                      self.bin_min_zenith
                   ]
                   )
         
+        wp.launch(kernel=bin_semantics_process,
+                  dim=num_points,
+                  inputs=[
+                      pcl_spher,
+                      semantics,
+                      pcl_bin_idx,
+                      self.bin_min_zenith
+                  ],
+                  outputs=[
+                      self.bin_semantics
+                  ]
+                  )
+        # print(self.bin_semantics)
+        # print(self.scan_data['idToLabels'])
+        # print(self.bin_semantics)
         # Process intensity data by either sum as it is or averaging
+
         if binning_method == "mean":
             wp.launch(
                 kernel=average,
@@ -554,9 +569,14 @@ class ImagingSonarSensor(Camera):
             print(f"[{self._name}] [{self.id}] Writing sonar data to {self.backend.output_dir}")
         
         if self._viewport:
-            self._sonar_provider.set_bytes_data_from_gpu(self.make_sonar_image().ptr, 
-                                                    [self.sonar_map.shape[1], self.sonar_map.shape[0]])
+            # self.make_sonar_image()
+            # self._sonar_provider.set_bytes_data_from_gpu(self.sonar_image.ptr, 
+            #                                         [self.sonar_map.shape[1], self.sonar_map.shape[0]])
             # self.backend.schedule(write_image, f'sonar_{self.id}.png', data = self.make_sonar_image())        
+            self.make_semantics_image()
+            print(self.sonar_semantics_image)
+            self._sonar_provider.set_bytes_data_from_gpu(self.sonar_semantics_image.ptr, 
+                                                    [self.sonar_semantics_image.shape[1], self.sonar_semantics_image.shape[0]])
             
         self.id += 1
     
@@ -582,8 +602,20 @@ class ImagingSonarSensor(Camera):
                 self.sonar_image
             ]
         )
-        return self.sonar_image
     
+    def make_semantics_image(self):
+        self.sonar_semantics_image.zero_()
+        wp.launch(
+            dim=self.bin_semantics.shape,
+            kernel=make_semantics_image,
+            inputs=[
+                self.bin_semantics
+            ],
+            outputs=[
+                self.sonar_semantics_image
+            ]
+        )
+
 
     def make_sonar_viewport(self):
         """Create an interactive viewport window for real-time sonar visualization.
