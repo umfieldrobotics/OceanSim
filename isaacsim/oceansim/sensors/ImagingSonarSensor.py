@@ -277,7 +277,7 @@ class ImagingSonarSensor(Camera):
         return indexToProp_array
     
     @staticmethod
-    def get_bbox_3d_corners(bbox_data):
+    def get_bbox_3d_corners(bbox_data, view_tf : np.ndarray):
         """Return transformed points in the following order: [LDB, RDB, LUB, RUB, LDF, RDF, LUF, RUF]
         where R=Right, L=Left, D=Down, U=Up, B=Back, F=Front and LR: x-axis, UD: y-axis, FB: z-axis.
 
@@ -301,9 +301,19 @@ class ImagingSonarSensor(Camera):
         ruf = [bbox_data["x_max"], bbox_data["y_max"], bbox_data["z_max"]]
         tfs = bbox_data["transform"]
         corners = np.stack((ldb, rdb, lub, rub, ldf, rdf, luf, ruf), 0)
+        # Homogenize the coordinate
         corners_homo = np.pad(corners, ((0, 0), (0, 1), (0, 0)), constant_values=1.0)
-        print(tfs)
-        return np.einsum("jki,ikl->ijl", corners_homo, tfs)[..., :3]
+        # local object frame to world frame
+        corners_world = np.einsum("jki,ikl->ijl", corners_homo, tfs)
+        # world frame to camera frame
+        corners_local = np.einsum('ijk,lk->ijl', corners_world, view_tf)
+        # Rotate axis such that y axis pointing forward for sonar data plotting
+        corners_local = np.einsum('ijk,lk->ijl', corners_local, np.array([[1,0,0,0],
+                                                                          [0,0,-1,0],
+                                                                          [0,1,0,0],
+                                                                          [0,0,0,1]]))
+        # TODO verify the bbox corner is correct by saving this data to npy and plot open3d
+        return corners_local[..., :3]
     
 
     def make_sonar_data(self, 
@@ -349,8 +359,7 @@ class ImagingSonarSensor(Camera):
             normals = self.scan_data['normals']
             semantics = self.scan_data['semantics']
             print('-------------------')
-            # print(self.scan_data['bbox'])
-            self.get_bbox_3d_corners(self.scan_data['bbox'])
+            self.get_bbox_3d_corners(self.scan_data['bbox'], self.scan_data['viewTransform'])
             print('-------------------')
 
         else:
