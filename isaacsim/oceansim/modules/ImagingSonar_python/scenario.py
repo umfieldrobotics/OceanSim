@@ -20,10 +20,12 @@ class ImagingSonarScenario():
     def setup_scenario(self, rob, sonar : ImagingSonarSensor):
         self._rob = rob
         self._sonar = sonar     
-        self._sonar.sonar_initialize(include_unlabelled=True)
+        self._sonar.sonar_initialize(include_unlabelled=True, 
+                                    #  output_dir=self._output_dir
+                                     )
    
         self._running_scenario = True
-        self.backend = rep.BackendDispatch({"paths": {"out_dir": self._output_dir}})
+        # self.backend = rep.BackendDispatch({"paths": {"out_dir": self._output_dir}})
 
         self._rob_forceAPI = PhysxSchema.PhysxForceAPI.Apply(self._rob)
         self._force_cmd = keyboard_cmd(base_command=np.array([0.0, 0.0, 0.0]),

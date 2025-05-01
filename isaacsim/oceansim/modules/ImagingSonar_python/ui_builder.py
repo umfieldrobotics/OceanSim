@@ -16,7 +16,7 @@ from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
 import omni.replicator.core as rep
 
 # Isaac sim import
-from isaacsim.core.api.objects import DynamicCuboid, GroundPlane, FixedCuboid
+from isaacsim.core.api.objects import DynamicCuboid, DynamicSphere
 from isaacsim.core.prims import SingleXFormPrim, SingleRigidPrim, SingleGeometryPrim
 from isaacsim.core.utils.prims import get_prim_at_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage, open_stage
@@ -181,7 +181,7 @@ class UIBuilder:
                                prim_path= world_prim_path + '/room')
         # Load the robot
         robot_prim_path = world_prim_path + "/rob" 
-        DynamicCuboid(prim_path=robot_prim_path, size=0.5, color=np.array([0.1,0.5,1]))
+        DynamicCuboid(prim_path=robot_prim_path, size=0.2, color=np.array([0.1,0.5,1]))
         self._rob = get_prim_at_path(robot_prim_path)
         SingleXFormPrim(robot_prim_path).set_world_pose(position=self._init_rob_pos, orientation=self._init_rob_orien)
         set_camera_view(eye=self._init_rob_pos + np.array([2,2,2]), target=self._init_rob_pos)
@@ -201,8 +201,7 @@ class UIBuilder:
         
         # add testing object
         cube_position =  [(-0.3, 0.3, 0.3), (-0.3, -0.3, 0.3), (0.3, -0.3, 0.3), (0.3, 0, 0.3)]
-        # cube_position =  [(-0.3, -0.3, 0.3)]
-
+        sphere_position = [(-0.3, 0.3, 0.6), (0, 0, 0.3), (0.3, 0.3, 0.3)]
         for i in range(len(cube_position)):
             cube_path = world_prim_path + f"/cube_{i}"
             DynamicCuboid(prim_path=cube_path,
@@ -212,6 +211,14 @@ class UIBuilder:
                                  semantic_label="cube")
             PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(cube_path))
 
+        for i in range(len(sphere_position)):
+            sphere_path = world_prim_path + f"/sphere_{i}"
+            DynamicSphere(prim_path=sphere_path,
+                          position=sphere_position[i],
+                          scale=[0.1]*3)
+            add_update_semantics(prim=get_prim_at_path(sphere_path),
+                                 semantic_label="sphere")
+            PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(sphere_path))
     def _setup_scenario(self):
         """
         This function is attached to the Load Button as the setup_post_load_fn callback.
