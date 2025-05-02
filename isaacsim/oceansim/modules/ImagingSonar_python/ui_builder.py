@@ -196,12 +196,15 @@ class UIBuilder:
                                 orientation=euler_angles_to_quat(np.array([0.0, 45, 0.0]),  degrees=True),
                                 range_res=0.005,
                                 angular_res=0.2,
-                                hori_res=3000
+                                hori_res=3000,
                                 )
         
         # add testing object
-        cube_position =  [(-0.3, 0.3, 0.3), (-0.3, -0.3, 0.3), (0.3, -0.3, 0.3), (0.3, 0, 0.3)]
-        sphere_position = [(-0.3, 0.3, 0.6), (0, 0, 0.3), (0.3, 0.3, 0.3)]
+        # cube_posit/ion =  [(-0.3, 0.3, 0.3), (-0.3, -0.3, 0.3), (0.3, -0.3, 0.3), (0.3, 0, 0.3)]
+        # sphere_pos/ition = [(-0.3, 0.3, 0.6), (0, 0, 0.3), (0.3, 0.3, 0.3)]
+        cube_position = []
+        sphere_position = [(0,0,0.3)]
+
         for i in range(len(cube_position)):
             cube_path = world_prim_path + f"/cube_{i}"
             DynamicCuboid(prim_path=cube_path,

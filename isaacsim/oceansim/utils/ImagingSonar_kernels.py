@@ -114,52 +114,51 @@ def bin_bbox_process(bbox_corners: wp.array(ndim=3, dtype=wp.float32),
                      y_offset: wp.float32,
                      x_res: wp.float32,
                      y_res: wp.float32,
-                    #  bbox_corners_bin_idx: wp.array(ndim=2, dtype=wp.vec2ui),
-                    aligned_bbox_corners_idx: wp.array(ndim=2, dtype=wp.uint32)
+                     aligned_bbox_min: wp.array(ndim=2, dtype=wp.int32),
+                     aligned_bbox_max: wp.array(ndim=2, dtype=wp.int32)
                     ):
     i, j = wp.tid()
+    # Convert 8 corners local frame carteisan to local frame spherical
     bbox_corner_spher = cartesian_to_spherical(wp.vec3(bbox_corners[i,j,0],
                                                        bbox_corners[i,j,1],
                                                        bbox_corners[i,j,1]))
-    
-    x_bin_idx = wp.uint32((bbox_corner_spher[0] - x_offset) / x_res)
-    y_bin_idx = wp.uint32((bbox_corner_spher[1] - y_offset) / y_res)
-    # bbox_corners_bin_idx[i, j] = wp.vec2ui(x_bin_idx, y_bin_idx)
+    # collapse 8 corners to the sonar grid
+    x_bin_idx = wp.int32((bbox_corner_spher[0] - x_offset) / x_res)
+    y_bin_idx = wp.int32((bbox_corner_spher[1] - y_offset) / y_res)
+    # Compute an axis-aligned minimum-area bbox 
+    # that contains all 8 corners of the 3d bbox
     # x_min
-    # TODO don't use cuda to compute adjusted bounding box, atomic_min is broken
-    wp.atomic_min(aligned_bbox_corners_idx, wp.uint32(0), wp.uint32(0), x_bin_idx)
-
+    wp.atomic_min(aligned_bbox_min, i, 0, x_bin_idx)
+    # y_min
+    wp.atomic_min(aligned_bbox_min, i, 1, y_bin_idx)
     # x_max
-    # wp.atomic_max(aligned_bbox_corners_idx, 0, 1, x_bin_idx)
-    # # y_mid
-    # wp.atomic_min(aligned_bbox_corners_idx, 0, 2, y_bin_idx)
-    # # y_max
-    # wp.atomic_max(aligned_bbox_corners_idx, 0, 3, y_bin_idx)
- 
-# @wp.kernel
-# def align_bbox(bbox_corners_bin_idx: wp.array(ndim=2, dtype=wp.vec2ui),
-#                aligned_bbox_corners_idx: wp.array(ndim=2, dtype=wp.uint32)):
-#     """This kernel parallels the computation of axis-aligned minimum-area bbox 
-#     that contains all 8 corners of the 3d bbox. N is the total number of bboxes.
-    
-#     Args:
-#         bbox_corners_bin_idx (wp.array(ndim=2, dtype=wp.vec2ui): 
-#         is shape of (N, 8) with each entry contains a vector represents
-#         the pixel location of the collapsed 3D bbox corners.
-#         aligned_bbox_corners_pix (wp.array(ndim=2, dtype=wp.uint32)):
-#         is shape of (N,4), with the 4 represents (x_min, x_max, y_min, y_max)
+    wp.atomic_max(aligned_bbox_max, i, 0, x_bin_idx)
+    # y_max
+    wp.atomic_max(aligned_bbox_max, i, 1, y_bin_idx)
 
-#     """
+
+@wp.kernel
+def draw_bbox(n : int,
+              aligned_bbox_min: wp.array(ndim=2, dtype=wp.int32),
+              aligned_bbox_max: wp.array(ndim=2, dtype=wp.int32),
+              bbox_colors: wp.array(ndim=2, dtype=wp.uint8),
+              image: wp.array(ndim=3, dtype=wp.uint8),
+              ):
+    # loop through the horizontal and vertical length, respectively
+    i, j = wp.tid()
+    width = image.shape[1]
     
-#     i, j = wp.tid()
-#     # x_min
-#     wp.atomic_min(aligned_bbox_corners_idx, i, 0, bbox_corners_bin_idx[i,j][0])
-#     # x_max
-#     wp.atomic_max(aligned_bbox_corners_idx, i, 1, bbox_corners_bin_idx[i,j][0])
-#     # y_mid
-#     wp.atomic_min(aligned_bbox_corners_idx, i, 2, bbox_corners_bin_idx[i,j][1])
-#     # y_max
-#     wp.atomic_max(aligned_bbox_corners_idx, i, 3, bbox_corners_bin_idx[i,j][1])
+    x_min = aligned_bbox_min[n,0]
+    y_min = aligned_bbox_min[n,1]
+    x_max = aligned_bbox_max[n,0]
+    y_max = aligned_bbox_max[n,1]
+
+    for c in range(4):
+        image[x_min + i, width - y_min, c] = bbox_colors[n, c]
+        image[x_min + i, width - y_max, c] = bbox_colors[n, c]
+        image[x_min, width - (y_min + j), c] = bbox_colors[n, c]
+        image[x_max, width - (y_min + j), c] = bbox_colors[n, c]
+
 
 @wp.kernel 
 def average(sum: wp.array(ndim=2, dtype=wp.float32),
@@ -286,35 +285,13 @@ def make_sonar_image(sonar_data: wp.array(ndim=2, dtype=wp.vec3),
 @wp.kernel
 def make_semantics_image(bin_semantics: wp.array(ndim=2, dtype=wp.uint32),
                          semantics_color: wp.array(ndim=2, dtype=wp.uint8),
-                         sonar_semantics_image: wp.array(ndim=3, dtype=wp.uint8),
+                         semantics_image: wp.array(ndim=3, dtype=wp.uint8),
 
                          ):
     i, j = wp.tid()
     width = bin_semantics.shape[1]
-    sonar_semantics_image[i,width-j,0] = semantics_color[bin_semantics[i,j], 0]
-    sonar_semantics_image[i,width-j,1] = semantics_color[bin_semantics[i,j], 1]
-    sonar_semantics_image[i,width-j,2] = semantics_color[bin_semantics[i,j], 2]
-    sonar_semantics_image[i,width-j,3] = semantics_color[bin_semantics[i,j], 3]
+    semantics_image[i,width-j,0] = semantics_color[bin_semantics[i,j], 0]
+    semantics_image[i,width-j,1] = semantics_color[bin_semantics[i,j], 1]
+    semantics_image[i,width-j,2] = semantics_color[bin_semantics[i,j], 2]
+    semantics_image[i,width-j,3] = semantics_color[bin_semantics[i,j], 3]
 
-# Computation heavy due to many if
-@wp.kernel
-def draw_bbox(x_min: int,
-              x_max: int,
-              y_min: int,
-              y_max: int,
-              sonar_image: wp.array(ndim=3, dtype=wp.uint8),
-              color: wp.array(dtype=wp.uint8)):
-    i, j = wp.tid()
-    flipped_j = sonar_image.shape[1] - j
-    if (x_min <= i <= x_max) and (j == y_min or j == y_max):
-        sonar_image[i,flipped_j,0] = color[0]
-        sonar_image[i,flipped_j,1] = color[1]
-        sonar_image[i,flipped_j,2] = color[2]
-        sonar_image[i,flipped_j,3] = color[3]
-        return
-    if (y_min <= j <= y_max) and (i == x_min or i == x_max):
-        sonar_image[i,flipped_j,0] = color[0]
-        sonar_image[i,flipped_j,1] = color[1]
-        sonar_image[i,flipped_j,2] = color[2]
-        sonar_image[i,flipped_j,3] = color[3]
-        return

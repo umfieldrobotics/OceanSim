@@ -3,7 +3,7 @@ import omni.replicator.core as rep
 import omni.ui as ui
 import numpy as np
 import matplotlib.pyplot as plt
-from omni.replicator.core.scripts.functional import write_np
+from omni.replicator.core.scripts.functional import write_np, write_image
 import warp as wp
 from isaacsim.oceansim.utils.ImagingSonar_kernels import *
 
@@ -360,8 +360,9 @@ class ImagingSonarSensor(Camera):
             pcl = self.scan_data['pcl']
             normals = self.scan_data['normals']
             semantics = self.scan_data['semantics']
-            bbox_corners = wp.array(data=self.get_bbox_3d_corners(self.scan_data['bbox'], self.scan_data['viewTransform']),
-                                    ndim=3, dtype=wp.float32)
+            # bbox_corners = wp.array(data=self.get_bbox_3d_corners(self.scan_data['bbox'], self.scan_data['viewTransform']),
+            #                         ndim=3, dtype=wp.float32)
+            bbox_corners = self.get_bbox_3d_corners(self.scan_data['bbox'], self.scan_data['viewTransform'])
         else:
             return
 
@@ -435,31 +436,45 @@ class ImagingSonarSensor(Camera):
                       self.bin_semantics
                   ]
                   )
+        print(bbox_corners)
+        x_offset = self.min_range
+        y_offset = self.min_azi
+        x_res = self.range_res
+        y_res = wp.radians(self.angular_res)
+        corner_pix = np.zeros(shape=(bbox_corners.shape[0], 8, 2), dtype=np.int32)
+        for i in range(bbox_corners.shape[0]):
+            for j in range(bbox_corners.shape[1]):
+                corner_cart = bbox_corners[i,j,:]
+                r = np.sqrt(corner_cart[0]**2 + corner_cart[1]**2 + corner_cart[2]**2)
+                azi = np.arctan2(corner_cart[1], corner_cart[0]),
+                zen = np.arccos(corner_cart[2] / r)
+                corner_pix[i,j,0] = np.int32((r - x_offset) / x_res)
+                corner_pix[i,j,1] = np.int32((azi - y_offset) / y_res)
+        
+        print(corner_pix)
         
         
-        # bbox_corners_bin_idx = wp.empty(shape=bbox_corners.shape[0:2], dtype=wp.vec2ui)
-        # print(bbox_corners.shape)
-        aligned_bbox_corners_idx = wp.zeros(shape=(bbox_corners.shape[0], 4), dtype=wp.uint32)
-        # print(aligned_bbox_corners_idx)
-        wp.launch(kernel=bin_bbox_process,
-                    dim=bbox_corners.shape[0:2],
-                    inputs=[
-                        bbox_corners,
-                        self.min_range,
-                        self.min_azi,
-                        self.range_res,
-                        wp.radians(self.angular_res),
-                    ],
-                    outputs=[
-                        aligned_bbox_corners_idx
-                    ])
         
-        # wp.launch(kernel=align_bbox,
-        #           dim=bbox_corners.shape[0:2],
-        #           inputs=bbox_corners_bin_idx,
-        #           outputs=aligned_bbox_corners_idx)
-        # self.backend.schedule(write_np, f'3Dbbox_{self.id}.npy', data=bbox_corners_bin_idx)
-        # self.backend.schedule(write_np, f'bboxId_{self.id}.npy', data=self.scan_data['bbox_ids'])
+        # aligned_bbox_min = wp.empty(shape=(bbox_corners.shape[0], 2), dtype=wp.int32)
+        # aligned_bbox_max = wp.empty(shape=(bbox_corners.shape[0], 2), dtype=wp.int32)
+        # aligned_bbox_min.fill_(10000)
+        # aligned_bbox_max.fill_(0)
+        # wp.launch(kernel=bin_bbox_process,
+        #             dim=bbox_corners.shape[0:2],
+        #             inputs=[
+        #                 bbox_corners,
+        #                 self.min_range,
+        #                 self.min_azi,
+        #                 self.range_res,
+        #                 wp.radians(self.angular_res),
+        #             ],
+        #             outputs=[
+        #                 aligned_bbox_min,
+        #                 aligned_bbox_max
+        #             ])
+
+
+
         if binning_method == "mean":
             wp.launch(
                 kernel=average,
@@ -589,21 +604,22 @@ class ImagingSonarSensor(Camera):
         if self.writing:
             # self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
             # self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
-            self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
+            # self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
             print(f"[{self._name}] [{self.id}] Writing sonar data to {self.backend.output_dir}")
-        
+            # self.backend.schedule(write_image, f'sonar_{self.id}.png', data = self.sonar_semantics_image)        
+            # self.backend.schedule(write_np, f'bbox_max_{self.id}.npy', data = aligned_bbox_max)
+            # self.backend.schedule(write_np, f'bbox_min_{self.id}.npy', data = aligned_bbox_min)
         if self._viewport:
             # self.make_sonar_image()
+            self.make_semantics_image()            
+
+            # self.draw_bbox_on_image(aligned_bbox_min, aligned_bbox_max, self.sonar_image)
+
             # self._sonar_provider.set_bytes_data_from_gpu(self.sonar_image.ptr, 
             #                                         [self.sonar_map.shape[1], self.sonar_map.shape[0]])
-            # self.backend.schedule(write_image, f'sonar_{self.id}.png', data = self.make_sonar_image())        
-            self.make_semantics_image()            
-            bbox_color = wp.array(data=[255,255,255,255], dtype=wp.uint8)
-            
-            self.draw_bbox(100, 300, 100, 300, self.sonar_semantics_image, bbox_color)
             self._sonar_provider.set_bytes_data_from_gpu(self.sonar_semantics_image.ptr, 
                                                     [self.sonar_semantics_image.shape[1], self.sonar_semantics_image.shape[0]])
-
+            
         self.id += 1
     
 
@@ -647,25 +663,30 @@ class ImagingSonarSensor(Camera):
             ]
         )
 
-    
-    
-
-
     @staticmethod
-    def draw_bbox(x_min: int, x_max: int, y_min: int, y_max: int,
-                  image,
-                  color):
-        wp.launch(kernel=draw_bbox,
-                  dim=image.shape,
-                  inputs=[
-                      x_min,
-                      x_max,
-                      y_min,
-                      y_max,
-                      image,
-                      color
-                  ]
-                  )
+    def draw_bbox_on_image(bboxes_min : wp.array(ndim=2, dtype=wp.int32), 
+                  bboxes_max : wp.array(ndim=2, dtype=wp.int32),
+                  image : wp.array(ndim=3, dtype=wp.uint8), 
+                  colormap : str = 'viridis'):
+        num_bboxes = bboxes_min.shape[0]
+        cmap = plt.get_cmap(colormap)
+        colors = cmap(np.linspace(0, 1, num_bboxes)) * 255  # Get n colors from the colormap
+        bboxes_min_np = bboxes_min.numpy()
+        bboxes_max_np = bboxes_max.numpy()
+        for i in range(num_bboxes):  
+            wp.launch(
+                kernel = draw_bbox,
+                dim=(bboxes_max_np[i,0]-bboxes_min_np[i,0], 
+                        bboxes_max_np[i,1]-bboxes_min_np[i,1]),
+                inputs=[
+                    i,
+                    bboxes_min,
+                    bboxes_max,
+                    wp.array(data=colors, ndim=2, dtype=wp.uint8),
+                    image
+                ]
+            )
+
 
 
     def make_sonar_viewport(self):
