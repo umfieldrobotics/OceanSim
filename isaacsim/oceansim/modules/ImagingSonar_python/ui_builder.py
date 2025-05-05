@@ -200,10 +200,9 @@ class UIBuilder:
                                 )
         
         # add testing object
-        # cube_posit/ion =  [(-0.3, 0.3, 0.3), (-0.3, -0.3, 0.3), (0.3, -0.3, 0.3), (0.3, 0, 0.3)]
-        # sphere_pos/ition = [(-0.3, 0.3, 0.6), (0, 0, 0.3), (0.3, 0.3, 0.3)]
-        cube_position = []
-        sphere_position = [(0,0,0.3)]
+        cube_position =  [(-0.3, 0.3, 0.3), (-0.3, -0.3, 0.3), (0.3, -0.3, 0.3), (0.3, 0, 0.3)]
+        sphere_position = [(-0.3, 0.3, 0.6), (0, 0, 0.3), (0.3, 0.3, 0.3)]
+
 
         for i in range(len(cube_position)):
             cube_path = world_prim_path + f"/cube_{i}"
@@ -211,7 +210,7 @@ class UIBuilder:
                           position=cube_position[i],
                           scale=[0.1]*3)
             add_update_semantics(prim=get_prim_at_path(cube_path),
-                                 semantic_label="cube")
+                                 semantic_label=f"cube_{i}")
             PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(cube_path))
 
         for i in range(len(sphere_position)):
@@ -220,7 +219,7 @@ class UIBuilder:
                           position=sphere_position[i],
                           scale=[0.1]*3)
             add_update_semantics(prim=get_prim_at_path(sphere_path),
-                                 semantic_label="sphere")
+                                 semantic_label=f"sphere_{i}")
             PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(sphere_path))
     def _setup_scenario(self):
         """

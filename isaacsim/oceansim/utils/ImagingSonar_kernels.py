@@ -1,4 +1,14 @@
 import warp as wp
+from typing import Any
+
+@wp.struct
+class sonarGrid:
+    x_offset: float
+    y_offset: float
+    x_res: float
+    y_res: float
+    x_num: int
+    y_num: int
 
 
 @wp.func
@@ -56,10 +66,7 @@ def world2local(viewTransform: wp.mat44,
 def bin_process(pcl: wp.array(dtype=wp.vec3),
                   intensity: wp.array(dtype=wp.float32),
                   semantics: wp.array(dtype=wp.uint32),
-                  x_offset: wp.float32,
-                  y_offset: wp.float32,
-                  x_res: wp.float32,
-                  y_res: wp.float32,
+                  sonar_grid: sonarGrid,
                   bin_sum: wp.array(ndim=2, dtype=wp.float32),
                   bin_count: wp.array(ndim=2, dtype=wp.int32),
                   pcl_bin_idx: wp.array(dtype=wp.vec2ui),
@@ -70,10 +77,9 @@ def bin_process(pcl: wp.array(dtype=wp.vec3),
     # Get the range, azimuth of the point
     x = pcl[tid][0]
     y = pcl[tid][1]
-
     # Calculate the bin indices for range and azimuth
-    x_bin_idx = wp.uint32((x - x_offset) / x_res)
-    y_bin_idx = wp.uint32((y - y_offset) / y_res)
+    x_bin_idx = wp.uint32((x - sonar_grid.x_offset) / sonar_grid.x_res)
+    y_bin_idx = wp.uint32((y - sonar_grid.y_offset) / sonar_grid.y_res)
     wp.atomic_add(bin_sum, x_bin_idx, y_bin_idx, intensity[tid])
     wp.atomic_add(bin_count, x_bin_idx, y_bin_idx, 1)
     # Store the bin idx that corresponding to this pcl
@@ -95,7 +101,7 @@ def bin_semantics_process(pcl: wp.array(dtype=wp.vec3),
                           ):
     tid = wp.tid()
 
-    # Get the zenith of the this pcl
+    # Get the zenith of this pcl
     z = pcl[tid][2]
 
     # Get the index of the bin in which this pcl falls in
@@ -110,10 +116,7 @@ def bin_semantics_process(pcl: wp.array(dtype=wp.vec3),
 
 @wp.kernel
 def bin_bbox_process(bbox_corners: wp.array(ndim=3, dtype=wp.float32),
-                     x_offset: wp.float32,
-                     y_offset: wp.float32,
-                     x_res: wp.float32,
-                     y_res: wp.float32,
+                     sonar_grid: sonarGrid,
                      aligned_bbox_min: wp.array(ndim=2, dtype=wp.int32),
                      aligned_bbox_max: wp.array(ndim=2, dtype=wp.int32)
                     ):
@@ -121,10 +124,13 @@ def bin_bbox_process(bbox_corners: wp.array(ndim=3, dtype=wp.float32),
     # Convert 8 corners local frame carteisan to local frame spherical
     bbox_corner_spher = cartesian_to_spherical(wp.vec3(bbox_corners[i,j,0],
                                                        bbox_corners[i,j,1],
-                                                       bbox_corners[i,j,1]))
+                                                       bbox_corners[i,j,2]))
     # collapse 8 corners to the sonar grid
-    x_bin_idx = wp.int32((bbox_corner_spher[0] - x_offset) / x_res)
-    y_bin_idx = wp.int32((bbox_corner_spher[1] - y_offset) / y_res)
+    x_bin_idx = wp.int32((bbox_corner_spher[0] - sonar_grid.x_offset) / sonar_grid.x_res)
+    y_bin_idx = wp.int32((bbox_corner_spher[1] - sonar_grid.y_offset) / sonar_grid.y_res)
+
+    x_bin_idx = wp.clamp(x_bin_idx, 0, sonar_grid.x_num-1)
+    y_bin_idx = wp.clamp(y_bin_idx, 0, sonar_grid.y_num-1)
     # Compute an axis-aligned minimum-area bbox 
     # that contains all 8 corners of the 3d bbox
     # x_min
