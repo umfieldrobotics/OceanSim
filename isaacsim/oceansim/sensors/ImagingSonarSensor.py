@@ -81,7 +81,7 @@ class ImagingSonarSensor(Camera):
         self.range_res = range_res # m (datasheet is 0.008 m)
         self.hori_fov = hori_fov # degree (hori_fov is 130 degrees in datasheet)
         self.vert_fov = vert_fov # degree (vert_fov is 20 degrees in datasheet)
-        self.angular_res = angular_res # degree (datasheet is 2 deg)
+        self.angular_res = np.deg2rad(angular_res) # degree (datasheet is 2 deg)
         self.hori_res= hori_res
 
         # self.beam_separation = 0.5 # degree (Not USED FOR NOW)!!
@@ -92,7 +92,7 @@ class ImagingSonarSensor(Camera):
         # Generate sonar map's r and z meshgrid
         self.min_azi = np.deg2rad(90-self.hori_fov/2)
         r, azi = np.meshgrid(np.arange(self.min_range,self.max_range,self.range_res),
-                                       np.arange(np.deg2rad(90-self.hori_fov/2), np.deg2rad(90+self.hori_fov/2), np.deg2rad(self.angular_res)),
+                                       np.arange(np.deg2rad(90-self.hori_fov/2), np.deg2rad(90+self.hori_fov/2), self.angular_res),
                                        indexing='ij')
         self.r = wp.array(r, shape=r.shape, dtype=wp.float32)
         self.azi = wp.array(azi, shape=r.shape, dtype=wp.float32)
@@ -115,7 +115,7 @@ class ImagingSonarSensor(Camera):
         self.sonar_grid.x_offset = self.min_range
         self.sonar_grid.y_offset = self.min_azi
         self.sonar_grid.x_res = self.range_res
-        self.sonar_grid.y_res = np.radians(self.angular_res)
+        self.sonar_grid.y_res = self.angular_res
         self.sonar_grid.x_num = self.r.shape[0]
         self.sonar_grid.y_num = self.r.shape[1]
         
@@ -286,7 +286,7 @@ class ImagingSonarSensor(Camera):
         return indexToProp_array
     
     @staticmethod
-    def get_bbox_3d_corners(bbox_data, view_tf : np.ndarray):
+    def get_bbox_3d_corners(bbox_data):
         """Return transformed points in the following order: [LDB, RDB, LUB, RUB, LDF, RDF, LUF, RUF]
         where R=Right, L=Left, D=Down, U=Up, B=Back, F=Front and LR: x-axis, UD: y-axis, FB: z-axis.
 
@@ -295,11 +295,11 @@ class ImagingSonarSensor(Camera):
                 `x_max`, `y_max`, `transform`.
 
         Returns:
-            (numpy.ndarray): Transformed corner coordinates with shape `(N, 8, 3)`.
+            (numpy.ndarray): Transformed corner homogeneous coordinates at world frame with shape `(N, 8, 4)`.
+            N: number of bbox, 8: eight corners, 4: homogeneous coordinates [x,y,z,1]
         """
 
         # extend the demension of input data to fit the format of helper method parameter"""
-
         rdb = [bbox_data["x_max"], bbox_data["y_min"], bbox_data["z_min"]]
         ldb = [bbox_data["x_min"], bbox_data["y_min"], bbox_data["z_min"]]
         lub = [bbox_data["x_min"], bbox_data["y_max"], bbox_data["z_min"]]
@@ -314,17 +314,37 @@ class ImagingSonarSensor(Camera):
         corners_homo = np.pad(corners, ((0, 0), (0, 1), (0, 0)), constant_values=1.0)
         # local object frame to world frame
         corners_world = np.einsum("jki,ikl->ijl", corners_homo, tfs)
+       
+        return corners_world
+    
+    def process_bbox_corners(self, bbox_3d_corners):
+        N = bbox_3d_corners.shape[0]
         # world frame to camera frame
-        corners_local = np.einsum('ijk,lk->ijl', corners_world, view_tf)
+        corners_local = np.einsum('ijk,lk->ijl', bbox_3d_corners, self.scan_data['viewTransform'])
         # Rotate axis such that y axis pointing forward for sonar data plotting
         corners_local = np.einsum('ijk,lk->ijl', corners_local, np.array([[1,0,0,0],
                                                                           [0,0,-1,0],
                                                                           [0,1,0,0],
                                                                           [0,0,0,1]]))
-        # return corners_local
-        # return non homogeneous coordinates
-        return corners_local[..., :3]
-    
+        # collapse to 2d sonar grid
+        corners_min = np.zeros(shape=(N, 2), dtype=np.int32)
+        corners_max = np.zeros(shape=(N, 2), dtype=np.int32)
+        corners_local = corners_local[..., :3] # shape: [N,8,3] 
+        r = np.linalg.norm(corners_local, axis=-1) # shape: [N, 8]
+        azi = np.arctan2(corners_local[..., 1], corners_local[..., 0]) # shape: [N, 8]
+        x_pix = np.int32((r - self.min_range) / self.range_res) # shape: [N, 8]
+        y_pix = np.int32((azi - self.min_azi) / self.angular_res) # shape: [N, 8]
+        x_pix = np.clip(x_pix, 0, self.r.shape[0]-1)
+        y_pix = np.clip(y_pix, 0, self.r.shape[1]-1)
+        corners_min[..., 0] = np.min(x_pix, axis=1)
+        corners_min[..., 1] = np.min(y_pix, axis=1)
+        corners_max[..., 0] = np.max(x_pix, axis=1)
+        corners_max[..., 1] = np.max(y_pix, axis=1)
+
+        return corners_min, corners_max
+
+
+        
 
     def make_sonar_data(self, 
                         binning_method: str = "sum", 
@@ -368,11 +388,13 @@ class ImagingSonarSensor(Camera):
             pcl = self.scan_data['pcl']
             normals = self.scan_data['normals']
             semantics = self.scan_data['semantics']
-            # bbox_corners = wp.array(data=self.get_bbox_3d_corners(self.scan_data['bbox'], self.scan_data['viewTransform']),
-            #                         ndim=3, dtype=wp.float32)
-            bbox_corners = self.get_bbox_3d_corners(self.scan_data['bbox'], self.scan_data['viewTransform'])
         else:
             return
+
+        # Compute the privileged bbox
+        bbox_corners = self.get_bbox_3d_corners(self.scan_data['bbox'])
+        bbox_min, bbox_max = self.process_bbox_corners(bbox_corners)
+        # For non-privileged bbox, simply apply cv2.findCentroid on semantic image
 
         # Compute intensity for each ray query     
         intensity = wp.empty(shape=(num_points,), dtype=wp.float32)
@@ -442,39 +464,6 @@ class ImagingSonarSensor(Camera):
                   )
         
 
-        # print(bbox_corners)
-        # x_offset = self.min_range
-        # y_offset = self.min_azi
-        # x_res = self.range_res
-        # y_res = wp.radians(self.angular_res)
-        # corners_pix = np.zeros(shape=(bbox_corners.shape[0], 8, 2), dtype=np.int32)
-        # for i in range(bbox_corners.shape[0]):
-        #     for j in range(bbox_corners.shape[1]):
-        #         corner_cart = bbox_corners[i,j,:]
-        #         r = np.sqrt(corner_cart[0]**2 + corner_cart[1]**2 + corner_cart[2]**2)
-        #         azi = np.arctan2(corner_cart[1], corner_cart[0]),
-        #         zen = np.arccos(corner_cart[2] / r)
-        #         corners_pix[i,j,0] = np.int32((r - x_offset) / x_res)
-        #         corners_pix[i,j,1] = np.int32((azi - y_offset) / y_res)
-        
-        # print(corners_pix)
-        
-        
-        bbox_corners = wp.array(bbox_corners, ndim=3, dtype=wp.float32)
-        aligned_bbox_min = wp.empty(shape=(bbox_corners.shape[0], 2), dtype=wp.int32)
-        aligned_bbox_max = wp.empty(shape=(bbox_corners.shape[0], 2), dtype=wp.int32)
-        aligned_bbox_min.fill_(10000)
-        aligned_bbox_max.fill_(0)
-        wp.launch(kernel=bin_bbox_process,
-                    dim=bbox_corners.shape[0:2],
-                    inputs=[
-                        bbox_corners,
-                        self.sonar_grid,
-                    ],
-                    outputs=[
-                        aligned_bbox_min,
-                        aligned_bbox_max
-                    ])
 
 
 
@@ -614,15 +603,16 @@ class ImagingSonarSensor(Camera):
             # self.backend.schedule(write_np, f'bbox_min_{self.id}.npy', data = aligned_bbox_min)
             # self.backend.schedule(write_np, f"semantics_{self.id}.npy", data = self.bin_semantics)
         if self._viewport:
-            # self.make_sonar_image()
-            self.make_semantics_image()            
+            self.make_sonar_image()
+            # self.make_semantics_image()            
 
-            self.draw_bbox_on_image(aligned_bbox_min, aligned_bbox_max, self.sonar_semantics_image)
+            # self.draw_bbox_on_image(aligned_bbox_min, aligned_bbox_max, self.sonar_semantics_image)
+            # self.draw_bbox_on_image(bbox_min, bbox_max, self.sonar_image)
 
-            # self._sonar_provider.set_bytes_data_from_gpu(self.sonar_image.ptr, 
-            #                                         [self.sonar_map.shape[1], self.sonar_map.shape[0]])
-            self._sonar_provider.set_bytes_data_from_gpu(self.sonar_semantics_image.ptr, 
-                                                    [self.sonar_semantics_image.shape[1], self.sonar_semantics_image.shape[0]])
+            self._sonar_provider.set_bytes_data_from_gpu(self.sonar_image.ptr, 
+                                                    [self.sonar_map.shape[1], self.sonar_map.shape[0]])
+            # self._sonar_provider.set_bytes_data_from_gpu(self.sonar_semantics_image.ptr, 
+            #                                         [self.sonar_semantics_image.shape[1], self.sonar_semantics_image.shape[0]])
             
         self.id += 1
     
@@ -668,8 +658,8 @@ class ImagingSonarSensor(Camera):
         )
 
     @staticmethod
-    def draw_bbox_on_image(bboxes_min : wp.array(ndim=2, dtype=wp.int32), 
-                  bboxes_max : wp.array(ndim=2, dtype=wp.int32),
+    def draw_bbox_on_image(bboxes_min : np.ndarray, 
+                  bboxes_max : np.ndarray,
                   image : wp.array(ndim=3, dtype=wp.uint8), 
                   colormap : str = 'turbo'):
         num_bboxes = bboxes_min.shape[0]
@@ -678,16 +668,14 @@ class ImagingSonarSensor(Camera):
 
         
         for i in range(num_bboxes):  
-            bbox_min = bboxes_min.numpy()[i]
-            bbox_max = bboxes_max.numpy()[i]
             wp.launch(
                 kernel = draw_bbox,
-                dim=(bbox_max[0]-bbox_min[0], 
-                        bbox_max[1]-bbox_min[1]),
+                dim=(bboxes_max[i,0]-bboxes_min[i,0], 
+                    bboxes_max[i,1]-bboxes_min[i,1]),
                 inputs=[
                     i,
-                    bboxes_min,
-                    bboxes_max,
+                    wp.array(data=bboxes_min, ndim=2, dtype=wp.int32),
+                    wp.array(data=bboxes_max, ndim=2, dtype=wp.int32),
                     wp.array(data=colors, ndim=2, dtype=wp.uint8),
                     image
                 ]

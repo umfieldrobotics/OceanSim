@@ -14,6 +14,7 @@ import omni.ui as ui
 from omni.usd import StageEventType
 from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, PhysxSchema
 import omni.replicator.core as rep
+import Semantics
 
 # Isaac sim import
 from isaacsim.core.api.objects import DynamicCuboid, DynamicSphere
@@ -160,7 +161,28 @@ class UIBuilder:
         sphereLight.CreateIntensityAttr(100000)
         SingleXFormPrim(str(sphereLight.GetPath())).set_world_pose(position=np.array([6.5, 0, 12]))
        
+    @staticmethod
+    def _add_semantic_entry(prim, instance_name, new_type="", new_data=""):
+        import random
+        import string
+        def id_generator(size=4, chars=string.ascii_uppercase + string.digits + string.ascii_lowercase):
+            return "".join(random.choice(chars) for _ in range(size))
+        
 
+        sem = Semantics.SemanticsAPI.Apply(prim, instance_name + f"_{id_generator()}")
+
+        sem.CreateSemanticTypeAttr()
+        sem.CreateSemanticDataAttr()
+
+        typeAttr = sem.GetSemanticTypeAttr()
+        dataAttr = sem.GetSemanticDataAttr()
+        typeAttr.Set(new_type)
+        dataAttr.Set(new_data)
+
+        return sem
+
+
+    
     def _setup_scene(self):
         """
         This function is attached to the Load Button as the setup_scene_fn callback.
@@ -206,20 +228,33 @@ class UIBuilder:
 
         for i in range(len(cube_position)):
             cube_path = world_prim_path + f"/cube_{i}"
-            DynamicCuboid(prim_path=cube_path,
+            cube = DynamicCuboid(prim_path=cube_path,
                           position=cube_position[i],
                           scale=[0.1]*3)
-            add_update_semantics(prim=get_prim_at_path(cube_path),
-                                 semantic_label=f"cube_{i}")
+            self._add_semantic_entry(cube.prim,
+                                      "sonar_ref",
+                                      "reflectivity",
+                                      "2.2")
+            self._add_semantic_entry(cube.prim,
+                                      "semantics",
+                                      "class",
+                                      f"cube_{i}")
             PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(cube_path))
 
         for i in range(len(sphere_position)):
             sphere_path = world_prim_path + f"/sphere_{i}"
-            DynamicSphere(prim_path=sphere_path,
+            sphere = DynamicSphere(prim_path=sphere_path,
                           position=sphere_position[i],
                           scale=[0.1]*3)
-            add_update_semantics(prim=get_prim_at_path(sphere_path),
-                                 semantic_label=f"sphere_{i}")
+            self._add_semantic_entry(sphere.prim,
+                                      "sonar_ref",
+                                      "reflectivity",
+                                      "0.2")
+            self._add_semantic_entry(sphere.prim,
+                                      "semantics",
+                                      "class",
+                                      f"sphere_{i}")
+            
             PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(sphere_path))
     def _setup_scenario(self):
         """

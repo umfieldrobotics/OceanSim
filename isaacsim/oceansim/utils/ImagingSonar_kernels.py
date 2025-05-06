@@ -108,39 +108,8 @@ def bin_semantics_process(pcl: wp.array(dtype=wp.vec3),
     x_bin_idx = pcl_bin_idx[tid][0]
     y_bin_idx = pcl_bin_idx[tid][1]
     # This ensures the semantics of this cell only belongs to the pcl semantics with the smallest zenith value
-    if (z < bin_min_zenith[x_bin_idx, y_bin_idx]) or (z == bin_min_zenith[x_bin_idx, y_bin_idx]):
+    if (z <= bin_min_zenith[x_bin_idx, y_bin_idx]):
         bin_semantics[x_bin_idx, y_bin_idx] = semantics[tid]
-
-
-
-
-@wp.kernel
-def bin_bbox_process(bbox_corners: wp.array(ndim=3, dtype=wp.float32),
-                     sonar_grid: sonarGrid,
-                     aligned_bbox_min: wp.array(ndim=2, dtype=wp.int32),
-                     aligned_bbox_max: wp.array(ndim=2, dtype=wp.int32)
-                    ):
-    i, j = wp.tid()
-    # Convert 8 corners local frame carteisan to local frame spherical
-    bbox_corner_spher = cartesian_to_spherical(wp.vec3(bbox_corners[i,j,0],
-                                                       bbox_corners[i,j,1],
-                                                       bbox_corners[i,j,2]))
-    # collapse 8 corners to the sonar grid
-    x_bin_idx = wp.int32((bbox_corner_spher[0] - sonar_grid.x_offset) / sonar_grid.x_res)
-    y_bin_idx = wp.int32((bbox_corner_spher[1] - sonar_grid.y_offset) / sonar_grid.y_res)
-
-    x_bin_idx = wp.clamp(x_bin_idx, 0, sonar_grid.x_num-1)
-    y_bin_idx = wp.clamp(y_bin_idx, 0, sonar_grid.y_num-1)
-    # Compute an axis-aligned minimum-area bbox 
-    # that contains all 8 corners of the 3d bbox
-    # x_min
-    wp.atomic_min(aligned_bbox_min, i, 0, x_bin_idx)
-    # y_min
-    wp.atomic_min(aligned_bbox_min, i, 1, y_bin_idx)
-    # x_max
-    wp.atomic_max(aligned_bbox_max, i, 0, x_bin_idx)
-    # y_max
-    wp.atomic_max(aligned_bbox_max, i, 1, y_bin_idx)
 
 
 @wp.kernel
@@ -301,3 +270,54 @@ def make_semantics_image(bin_semantics: wp.array(ndim=2, dtype=wp.uint32),
     semantics_image[i,width-j,2] = semantics_color[bin_semantics[i,j], 2]
     semantics_image[i,width-j,3] = semantics_color[bin_semantics[i,j], 3]
 
+
+
+
+
+## THis kernel not used ##
+# ImagingSonarSensor.py
+#######################################
+# bbox_corners = wp.array(bbox_corners, ndim=3, dtype=wp.float32)
+# aligned_bbox_min = wp.empty(shape=(bbox_corners.shape[0], 2), dtype=wp.int32)
+# aligned_bbox_max = wp.empty(shape=(bbox_corners.shape[0], 2), dtype=wp.int32)
+# aligned_bbox_min.fill_(10000)
+# aligned_bbox_max.fill_(0)
+# wp.launch(kernel=bin_bbox_process,
+#             dim=bbox_corners.shape[0:2],
+#             inputs=[
+#                 bbox_corners,
+#                 self.sonar_grid,
+#             ],
+#             outputs=[
+#                 aligned_bbox_min,
+#                 aligned_bbox_max
+#             ])
+##########################################
+# @wp.kernel
+# def bin_bbox_process(bbox_corners: wp.array(ndim=3, dtype=wp.float32),
+#                      sonar_grid: sonarGrid,
+#                      aligned_bbox_min: wp.array(ndim=2, dtype=wp.int32),
+#                      aligned_bbox_max: wp.array(ndim=2, dtype=wp.int32)
+#                     ):
+#     i, j = wp.tid()
+#     # Convert 8 corners local frame carteisan to local frame spherical
+#     bbox_corner_spher = cartesian_to_spherical(wp.vec3(bbox_corners[i,j,0],
+#                                                        bbox_corners[i,j,1],
+#                                                        bbox_corners[i,j,2]))
+#     # collapse 8 corners to the sonar grid
+#     x_bin_idx = wp.int32((bbox_corner_spher[0] - sonar_grid.x_offset) / sonar_grid.x_res)
+#     y_bin_idx = wp.int32((bbox_corner_spher[1] - sonar_grid.y_offset) / sonar_grid.y_res)
+
+#     x_bin_idx = wp.clamp(x_bin_idx, 0, sonar_grid.x_num-1)
+#     y_bin_idx = wp.clamp(y_bin_idx, 0, sonar_grid.y_num-1)
+#     # Compute an axis-aligned minimum-area bbox 
+#     # that contains all 8 corners of the 3d bbox
+#     # x_min
+#     wp.atomic_min(aligned_bbox_min, i, 0, x_bin_idx)
+#     # y_min
+#     wp.atomic_min(aligned_bbox_min, i, 1, y_bin_idx)
+#     # x_max
+#     wp.atomic_max(aligned_bbox_max, i, 0, x_bin_idx)
+#     # y_max
+#     wp.atomic_max(aligned_bbox_max, i, 1, y_bin_idx)
+#########################################################
