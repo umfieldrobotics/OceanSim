@@ -48,7 +48,6 @@ def compute_intensity(pcl: wp.array(ndim=2, dtype=wp.float32),
 @wp.kernel
 def world2local(viewTransform: wp.mat44,
                 pcl_world: wp.array(ndim=2, dtype=wp.float32),
-                pcl_local: wp.array(dtype=wp.vec3),
                 pcl_local_spher: wp.array(dtype=wp.vec3)):
     tid = wp.tid()
     pcl_world_homogeneous = wp.vec4(pcl_world[tid,0],
@@ -58,8 +57,8 @@ def world2local(viewTransform: wp.mat44,
                           )
     pcl_local_homogeneous = viewTransform @ pcl_world_homogeneous
     # Rotate axis such that y axis pointing forward for sonar data plotting
-    pcl_local[tid] = wp.vec3(pcl_local_homogeneous[0], -pcl_local_homogeneous[2], pcl_local_homogeneous[1])
-    pcl_local_spher[tid] = cartesian_to_spherical(pcl_local[tid])
+    pcl_local = wp.vec3(pcl_local_homogeneous[0], -pcl_local_homogeneous[2], pcl_local_homogeneous[1])
+    pcl_local_spher[tid] = cartesian_to_spherical(pcl_local)
 
 
 @wp.kernel

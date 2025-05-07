@@ -8,8 +8,6 @@ import warp as wp
 from isaacsim.oceansim.utils.ImagingSonar_kernels import *
 
 
-# Future TODO
-# In future release, wrap this class around RTX lidar
 
 class ImagingSonarSensor(Camera):
     def __init__(self, 
@@ -167,8 +165,10 @@ class ImagingSonarSensor(Camera):
     # Can be set to False to gain performance if the data is 
     # expected to be used immediately within the writer. Defaults to True.
 
-    def sonar_initialize(self, output_dir : str = None, 
+    def sonar_initialize(self, 
+                         output_dir : str = None, 
                          viewport: bool = True, 
+                         privileged_bbox: bool = False,
                          include_unlabelled = False, 
                          if_array_copy: bool = True):
         """Initialize sonar data processing pipeline and annotators.
@@ -191,6 +191,7 @@ class ImagingSonarSensor(Camera):
         """
         self.writing = False
         self._viewport = viewport
+        self._privileged_bbox = privileged_bbox
         self._device = str(wp.get_preferred_device())
         self.scan_data = {}
         self.id = 0
@@ -215,10 +216,7 @@ class ImagingSonarSensor(Camera):
             device=self._device
         )
 
-        self.bbox_annot = rep.AnnotatorRegistry.get_annotator(
-            name='bounding_box_3d_fast',
-            do_array_copy=if_array_copy,
-        )
+
 
         print(f'[{self._name}] Using {self._device}' )
         print(f'[{self._name}] Render query res: {self.hori_res} x {self.vert_res}. Binning res: {self.r.shape[0]} x {self.r.shape[1]}')
@@ -226,16 +224,25 @@ class ImagingSonarSensor(Camera):
         self.pointcloud_annot.attach(self._render_product_path)
         self.cameraParams_annot.attach(self._render_product_path)
         self.semanticSeg_annot.attach(self._render_product_path)
-        self.bbox_annot.attach(self._render_product_path)
 
 
         if output_dir is not None:
             self.writing = True
             self.backend = rep.BackendDispatch({"paths": {"out_dir": output_dir}})
+        
+        print(f'[{self._name}] Initialized successfully. Data writing: {self.writing}')
+
         if self._viewport:
             self.make_sonar_viewport()
         
-        print(f'[{self._name}] Initialized successfully. Data writing: {self.writing}')
+        if self._privileged_bbox:
+            self.bbox_annot = rep.AnnotatorRegistry.get_annotator(
+                name='bounding_box_3d_fast',
+                do_array_copy=if_array_copy,
+            )
+            self.bbox_annot.attach(self._render_product_path)
+
+
 
 
         
@@ -261,8 +268,6 @@ class ImagingSonarSensor(Camera):
             self.scan_data['semantics'] = self.pointcloud_annot.get_data(device=self._device)['info']['pointSemantic'][0] # shape: (1, N) <class 'warp.types.array'>
             self.scan_data['viewTransform'] = self.cameraParams_annot.get_data()['cameraViewTransform'].reshape(4,4).T # 4 by 4 np.ndarray extrinsic matrix
             self.scan_data['idToLabels'] = self.semanticSeg_annot.get_data()['info']['idToLabels'] # dict 
-            self.scan_data['bbox'] = self.bbox_annot.get_data()['data']
-            self.scan_data['bbox_ids'] = self.bbox_annot.get_data()['info']['bboxIds']
             return True
         else:
             return False
@@ -285,64 +290,7 @@ class ImagingSonarSensor(Camera):
                     indexToProp_array[int(id)] = idToLabels.get(id).get(property)
         return indexToProp_array
     
-    @staticmethod
-    def get_bbox_3d_corners(bbox_data):
-        """Return transformed points in the following order: [LDB, RDB, LUB, RUB, LDF, RDF, LUF, RUF]
-        where R=Right, L=Left, D=Down, U=Up, B=Back, F=Front and LR: x-axis, UD: y-axis, FB: z-axis.
-
-        Args:
-            bbox_data (numpy.ndarray): A structured numpy array containing the fields: [`x_min`, `y_min`,
-                `x_max`, `y_max`, `transform`.
-
-        Returns:
-            (numpy.ndarray): Transformed corner homogeneous coordinates at world frame with shape `(N, 8, 4)`.
-            N: number of bbox, 8: eight corners, 4: homogeneous coordinates [x,y,z,1]
-        """
-
-        # extend the demension of input data to fit the format of helper method parameter"""
-        rdb = [bbox_data["x_max"], bbox_data["y_min"], bbox_data["z_min"]]
-        ldb = [bbox_data["x_min"], bbox_data["y_min"], bbox_data["z_min"]]
-        lub = [bbox_data["x_min"], bbox_data["y_max"], bbox_data["z_min"]]
-        rub = [bbox_data["x_max"], bbox_data["y_max"], bbox_data["z_min"]]
-        ldf = [bbox_data["x_min"], bbox_data["y_min"], bbox_data["z_max"]]
-        rdf = [bbox_data["x_max"], bbox_data["y_min"], bbox_data["z_max"]]
-        luf = [bbox_data["x_min"], bbox_data["y_max"], bbox_data["z_max"]]
-        ruf = [bbox_data["x_max"], bbox_data["y_max"], bbox_data["z_max"]]
-        tfs = bbox_data["transform"]
-        corners = np.stack((ldb, rdb, lub, rub, ldf, rdf, luf, ruf), 0)
-        # Homogenize the coordinate
-        corners_homo = np.pad(corners, ((0, 0), (0, 1), (0, 0)), constant_values=1.0)
-        # local object frame to world frame
-        corners_world = np.einsum("jki,ikl->ijl", corners_homo, tfs)
-       
-        return corners_world
     
-    def process_bbox_corners(self, bbox_3d_corners):
-        N = bbox_3d_corners.shape[0]
-        # world frame to camera frame
-        corners_local = np.einsum('ijk,lk->ijl', bbox_3d_corners, self.scan_data['viewTransform'])
-        # Rotate axis such that y axis pointing forward for sonar data plotting
-        corners_local = np.einsum('ijk,lk->ijl', corners_local, np.array([[1,0,0,0],
-                                                                          [0,0,-1,0],
-                                                                          [0,1,0,0],
-                                                                          [0,0,0,1]]))
-        # collapse to 2d sonar grid
-        corners_min = np.zeros(shape=(N, 2), dtype=np.int32)
-        corners_max = np.zeros(shape=(N, 2), dtype=np.int32)
-        corners_local = corners_local[..., :3] # shape: [N,8,3] 
-        r = np.linalg.norm(corners_local, axis=-1) # shape: [N, 8]
-        azi = np.arctan2(corners_local[..., 1], corners_local[..., 0]) # shape: [N, 8]
-        x_pix = np.int32((r - self.min_range) / self.range_res) # shape: [N, 8]
-        y_pix = np.int32((azi - self.min_azi) / self.angular_res) # shape: [N, 8]
-        x_pix = np.clip(x_pix, 0, self.r.shape[0]-1)
-        y_pix = np.clip(y_pix, 0, self.r.shape[1]-1)
-        corners_min[..., 0] = np.min(x_pix, axis=1)
-        corners_min[..., 1] = np.min(y_pix, axis=1)
-        corners_max[..., 0] = np.max(x_pix, axis=1)
-        corners_max[..., 1] = np.max(y_pix, axis=1)
-
-        return corners_min, corners_max
-
 
         
 
@@ -377,34 +325,27 @@ class ImagingSonarSensor(Camera):
     
         """
 
-        if self.scan():
-            num_points = self.scan_data['pcl'].shape[0]
-            # Load these small numpy arrays to cuda
-            indexToRefl = wp.array(self.make_indexToProp_array(idToLabels=self.scan_data['idToLabels'],
-                                                         query_property=query_prop),
-                                                         dtype=wp.float32)
-            viewTransform=wp.mat44(self.scan_data['viewTransform'])
-            # directly use warp array loaded on cuda
-            pcl = self.scan_data['pcl']
-            normals = self.scan_data['normals']
-            semantics = self.scan_data['semantics']
-        else:
+        if not self.scan():
             return
 
-        # Compute the privileged bbox
-        bbox_corners = self.get_bbox_3d_corners(self.scan_data['bbox'])
-        bbox_min, bbox_max = self.process_bbox_corners(bbox_corners)
-        # For non-privileged bbox, simply apply cv2.findCentroid on semantic image
+        num_points = self.scan_data['pcl'].shape[0]
+        # Load these small numpy arrays to cuda
+        indexToRefl_np = self.make_indexToProp_array(idToLabels=self.scan_data['idToLabels'],
+                                                        query_property=query_prop)
+        indexToRefl = wp.array(data=indexToRefl_np, dtype=wp.float32)
+        viewTransform = wp.mat44(self.scan_data['viewTransform'])
 
+
+        
         # Compute intensity for each ray query     
         intensity = wp.empty(shape=(num_points,), dtype=wp.float32)
         wp.launch(kernel=compute_intensity,
                   dim=num_points,
                   inputs=[
-                      pcl,
-                      normals,
+                      self.scan_data['pcl'],
+                      self.scan_data['normals'],
                       viewTransform,
-                      semantics,
+                      self.scan_data['semantics'],
                       indexToRefl,
                       attenuation,
                   ],
@@ -413,19 +354,17 @@ class ImagingSonarSensor(Camera):
                   ]
                 )
                 
-        # Transform pointcloud from world cooridates to sonar local
+        # Transform pointcloud from world cooridates to sonar local and convert to spherical coord
         pcl_bin_idx = wp.empty(shape=(num_points, ), dtype=wp.vec2ui)
-        pcl_local =wp.empty(shape=(num_points,), dtype=wp.vec3) # FUTURE: get rid of this, intermdediate debug use. wasting memory
-        pcl_spher = wp.empty(shape=(num_points,), dtype=wp.vec3) # FUTURE: get rid of this, intermdediate debug use. wasting memory
+        pcl_local_spher = wp.empty(shape=(num_points,), dtype=wp.vec3) # FUTURE: get rid of this, intermdediate debug use. wasting memory
         wp.launch(kernel=world2local,
                   dim=num_points,
                   inputs=[
                       viewTransform,
-                      pcl
+                      self.scan_data['pcl']
                   ],
                     outputs=[
-                      pcl_local,
-                      pcl_spher
+                      pcl_local_spher
                     ]
                 )
         # Collapse three dimensional intensity data to 2D
@@ -437,9 +376,9 @@ class ImagingSonarSensor(Camera):
         wp.launch(kernel=bin_process,
                   dim=num_points,
                   inputs=[
-                      pcl_spher,
+                      pcl_local_spher,
                       intensity,
-                      semantics,
+                      self.scan_data['semantics'],
                       self.sonar_grid
                   ],
                   outputs=[
@@ -453,8 +392,8 @@ class ImagingSonarSensor(Camera):
         wp.launch(kernel=bin_semantics_process,
                   dim=num_points,
                   inputs=[
-                      pcl_spher,
-                      semantics,
+                      pcl_local_spher,
+                      self.scan_data['semantics'],
                       pcl_bin_idx,
                       self.bin_min_zenith
                   ],
@@ -483,10 +422,6 @@ class ImagingSonarSensor(Camera):
         if binning_method == "sum":
             self.binned_intensity = self.bin_sum
 
-
-        self.range_dependent_ray_noise.zero_()
-        self.gau_noise.zero_()
-        self.sonar_map.zero_()
 
         # Calculate multiplicative gaussian noise
         
@@ -604,15 +539,15 @@ class ImagingSonarSensor(Camera):
             # self.backend.schedule(write_np, f"semantics_{self.id}.npy", data = self.bin_semantics)
         if self._viewport:
             self.make_sonar_image()
-            # self.make_semantics_image()            
+            self.make_semantics_image()            
 
             # self.draw_bbox_on_image(aligned_bbox_min, aligned_bbox_max, self.sonar_semantics_image)
             # self.draw_bbox_on_image(bbox_min, bbox_max, self.sonar_image)
 
             self._sonar_provider.set_bytes_data_from_gpu(self.sonar_image.ptr, 
                                                     [self.sonar_map.shape[1], self.sonar_map.shape[0]])
-            # self._sonar_provider.set_bytes_data_from_gpu(self.sonar_semantics_image.ptr, 
-            #                                         [self.sonar_semantics_image.shape[1], self.sonar_semantics_image.shape[0]])
+            self._sonar_segmentation_provider.set_bytes_data_from_gpu(self.sonar_semantics_image.ptr, 
+                                                    [self.sonar_semantics_image.shape[1], self.sonar_semantics_image.shape[0]])
             
         self.id += 1
     
@@ -656,7 +591,80 @@ class ImagingSonarSensor(Camera):
                 self.sonar_semantics_image
             ]
         )
+    @staticmethod
+    def get_bbox_3d_corners(bbox_data):
+        """Return transformed points in the following order: [LDB, RDB, LUB, RUB, LDF, RDF, LUF, RUF]
+        where R=Right, L=Left, D=Down, U=Up, B=Back, F=Front and LR: x-axis, UD: y-axis, FB: z-axis.
 
+        Args:
+            bbox_data (numpy.ndarray): A structured numpy array containing the fields: [`x_min`, `y_min`,
+                `x_max`, `y_max`, `transform`.
+
+        Returns:
+            (numpy.ndarray): Transformed corner homogeneous coordinates at world frame with shape `(N, 8, 4)`.
+            N: number of bbox, 8: eight corners, 4: homogeneous coordinates [x,y,z,1]
+        """
+
+        # extend the demension of input data to fit the format of helper method parameter"""
+        rdb = [bbox_data["x_max"], bbox_data["y_min"], bbox_data["z_min"]]
+        ldb = [bbox_data["x_min"], bbox_data["y_min"], bbox_data["z_min"]]
+        lub = [bbox_data["x_min"], bbox_data["y_max"], bbox_data["z_min"]]
+        rub = [bbox_data["x_max"], bbox_data["y_max"], bbox_data["z_min"]]
+        ldf = [bbox_data["x_min"], bbox_data["y_min"], bbox_data["z_max"]]
+        rdf = [bbox_data["x_max"], bbox_data["y_min"], bbox_data["z_max"]]
+        luf = [bbox_data["x_min"], bbox_data["y_max"], bbox_data["z_max"]]
+        ruf = [bbox_data["x_max"], bbox_data["y_max"], bbox_data["z_max"]]
+        tfs = bbox_data["transform"]
+        corners = np.stack((ldb, rdb, lub, rub, ldf, rdf, luf, ruf), 0)
+        # Homogenize the coordinate
+        corners_homo = np.pad(corners, ((0, 0), (0, 1), (0, 0)), constant_values=1.0)
+        # local object frame to world frame
+        corners_world = np.einsum("jki,ikl->ijl", corners_homo, tfs)
+       
+        return corners_world
+    
+    def process_bbox_corners(self, bbox_3d_corners):
+        N = bbox_3d_corners.shape[0]
+        # world frame to camera frame
+        corners_local = np.einsum('ijk,lk->ijl', bbox_3d_corners, self.scan_data['viewTransform'])
+        # Rotate axis such that y axis pointing forward for sonar data plotting
+        corners_local = np.einsum('ijk,lk->ijl', corners_local, np.array([[1,0,0,0],
+                                                                          [0,0,-1,0],
+                                                                          [0,1,0,0],
+                                                                          [0,0,0,1]]))
+        # collapse to 2d sonar grid
+        corners_min = np.zeros(shape=(N, 2), dtype=np.int32)
+        corners_max = np.zeros(shape=(N, 2), dtype=np.int32)
+        corners_local = corners_local[..., :3] # shape: [N,8,3] 
+        r = np.linalg.norm(corners_local, axis=-1) # shape: [N, 8]
+        azi = np.arctan2(corners_local[..., 1], corners_local[..., 0]) # shape: [N, 8]
+        x_pix = np.int32((r - self.min_range) / self.range_res) # shape: [N, 8]
+        y_pix = np.int32((azi - self.min_azi) / self.angular_res) # shape: [N, 8]
+        x_pix = np.clip(x_pix, 0, self.r.shape[0]-1)
+        y_pix = np.clip(y_pix, 0, self.r.shape[1]-1)
+        corners_min[..., 0] = np.min(x_pix, axis=1)
+        corners_min[..., 1] = np.min(y_pix, axis=1)
+        corners_max[..., 0] = np.max(x_pix, axis=1)
+        corners_max[..., 1] = np.max(y_pix, axis=1)
+
+        return corners_min, corners_max
+
+    def make_priviledged_bbox(self):
+        
+        if self._privileged_bbox and len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
+            self.scan_data['bbox'] = self.bbox_annot.get_data()['data']
+            self.scan_data['bbox_ids'] = self.bbox_annot.get_data()['info']['bboxIds']
+            # Compute the privileged bbox
+            bbox_corners = self.get_bbox_3d_corners(self.scan_data['bbox'])
+            bbox_min, bbox_max = self.process_bbox_corners(bbox_corners)
+            # For non-privileged bbox, simply apply cv2.findCentroid on semantic image
+            return self.scan_data['bbox_ids'], bbox_min, bbox_max
+        else:
+            print(f'[{self._name}] Initialize with priviledged_bbox to true before calling this.')
+            return 
+    
+    
+    
     @staticmethod
     def draw_bbox_on_image(bboxes_min : np.ndarray, 
                   bboxes_max : np.ndarray,
@@ -699,19 +707,26 @@ class ImagingSonarSensor(Camera):
         azi_tick_num = 10
         azi_tick = np.round(np.linspace(90-self.hori_fov/2, 90+self.hori_fov/2, azi_tick_num))
         self._sonar_provider = ui.ByteImageProvider()
-        self._window = ui.Window(self._name, width=800, height=800, visible=True)
+        self._sonar_segmentation_provider = ui.ByteImageProvider()
+        self._window = ui.Window(self._name, width=1440, height=720+40, visible=True)
         
         with self._window.frame:
-            with ui.ZStack(height=720, width = 720):
+            with ui.ZStack(height=720, width = 1440):
                 ui.Rectangle(widthstyle={"background_color": 0xFF000000})
                 ui.Label('Run the scenario for image to be received',
                          style={'font_size': 55,'alignment': ui.Alignment.CENTER},
                          word_wrap=True)
-                sonar_image_provider = ui.ImageWithProvider(self._sonar_provider, 
-                                    style={"width": 720, 
-                                        "height": 720, 
-                                        "fill_policy" : ui.FillPolicy.STRETCH,
-                                        'alignment': ui.Alignment.CENTER})
+                with ui.HStack(height=720, width = 1440):
+                    sonar_image_provider = ui.ImageWithProvider(self._sonar_provider, 
+                                        style={"width": 720, 
+                                            "height": 720, 
+                                            "fill_policy" : ui.FillPolicy.STRETCH,
+                                            'alignment': ui.Alignment.CENTER})
+                    segmentation_image_provider = ui.ImageWithProvider(self._sonar_segmentation_provider,
+                                                                       style={"width": 720, 
+                                                                       "height": 720, 
+                                                                       "fill_policy" : ui.FillPolicy.STRETCH,
+                                                                       'alignment': ui.Alignment.CENTER})
                 
                 # ui.Line(alignment=ui.Alignment.LEFT,
                 #         style={'border_width': 2,
@@ -729,7 +744,9 @@ class ImagingSonarSensor(Camera):
                 # ui.Label(str(range_tick[-1]) +" m", style={'font_size': 15, "alignment":ui.Alignment.LEFT_BOTTOM, 'margin':2})
         
         self.wrapped_ui_elements.append(sonar_image_provider)
+        self.wrapped_ui_elements.append(segmentation_image_provider)
         self.wrapped_ui_elements.append(self._sonar_provider)
+        self.wrapped_ui_elements.append(self._sonar_segmentation_provider)
         self.wrapped_ui_elements.append(self._window)
 
     def get_range(self) -> list[float]:
@@ -765,11 +782,15 @@ class ImagingSonarSensor(Camera):
         rep.AnnotatorCache.clear(self.cameraParams_annot)
         rep.AnnotatorCache.clear(self.semanticSeg_annot)
 
-
         print(f'[{self._name}] Annotator detached. AnnotatorCache cleaned.')
 
         if self._viewport:
             self.ui_destroy()
+
+        if self._privileged_bbox:
+            self.bbox_annot.detach(self._render_product_path)
+            rep.AnnotatorCache.clearn(self.bbox_annot)
+
 
 
     def ui_destroy(self):
