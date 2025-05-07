@@ -101,8 +101,7 @@ class ImagingSonarSensor(Camera):
         self.bin_sum = wp.empty(shape=self.r.shape, dtype=wp.float32)
         self.bin_count = wp.empty(shape=self.r.shape, dtype=wp.int32)
         self.bin_min_zenith = wp.full(shape=self.r.shape, value=wp.PI, dtype=wp.float32)
-        self.bin_semantics = wp.zeros(shape=self.r.shape, dtype=wp.uint32)
-        self.binned_intensity = wp.empty(shape=self.r.shape, dtype=wp.float32)
+        self.bin_semantics = wp.empty(shape=self.r.shape, dtype=wp.uint32)
         self.sonar_map = wp.empty(shape=self.r.shape, dtype=wp.vec3)
         self.sonar_image = wp.empty(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
         self.sonar_semantics_image = wp.empty(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
@@ -141,7 +140,7 @@ class ImagingSonarSensor(Camera):
         # This is a bug. Needs to call initialize() before changing aperture
         # https://forums.developer.nvidia.com/t/error-when-setting-a-cameras-vertical-horizontal-aperture/271314
         # This line initialize the camera
-        self.initialize(physics_sim_view)
+        super().initialize(physics_sim_view)
 
         # Assume the default focal length to compute the desired horizontal aperture
         # The reason why we are doing this is because Isaac sim will fix vertical aperture
@@ -243,8 +242,9 @@ class ImagingSonarSensor(Camera):
             self.bbox_annot.attach(self._render_product_path)
 
 
-
-
+        ################################################
+        ####### Lines below define the GPU graph #######
+        ################################################
         
 
     def scan(self):
@@ -295,7 +295,6 @@ class ImagingSonarSensor(Camera):
         
 
     def make_sonar_data(self, 
-                        binning_method: str = "sum", 
                         normalizing_method: str = "range",
                         query_prop: str ='reflectivity', # Do not modify this if not developing the sensor.
                         attenuation: float = 0.1, # Control the attentuation along distance when computing attenuation
@@ -356,7 +355,7 @@ class ImagingSonarSensor(Camera):
                 
         # Transform pointcloud from world cooridates to sonar local and convert to spherical coord
         pcl_bin_idx = wp.empty(shape=(num_points, ), dtype=wp.vec2ui)
-        pcl_local_spher = wp.empty(shape=(num_points,), dtype=wp.vec3) # FUTURE: get rid of this, intermdediate debug use. wasting memory
+        pcl_local_spher = wp.empty(shape=(num_points,), dtype=wp.vec3) 
         wp.launch(kernel=world2local,
                   dim=num_points,
                   inputs=[
@@ -370,7 +369,7 @@ class ImagingSonarSensor(Camera):
         # Collapse three dimensional intensity data to 2D
         # Simply sum intensity return and compute number of return that falls into the same bin
         # Zero out intensity in each bin (do not omit this, this is necessary)
-        self.binned_intensity.zero_()
+        self.bin_sum.zero_()
         self.bin_min_zenith.fill_(wp.PI)
         self.bin_semantics.zero_()
         wp.launch(kernel=bin_process,
@@ -403,24 +402,7 @@ class ImagingSonarSensor(Camera):
                   )
         
 
-
-
-
-        if binning_method == "mean":
-            wp.launch(
-                kernel=average,
-                dim=self.bin_sum.shape,
-                inputs=[
-                    self.bin_sum,
-                    self.bin_count
-                ],
-                outputs=[
-                    self.binned_intensity,
-                ]
-                )
         
-        if binning_method == "sum":
-            self.binned_intensity = self.bin_sum
 
 
         # Calculate multiplicative gaussian noise
@@ -468,7 +450,7 @@ class ImagingSonarSensor(Camera):
                 dim=self.bin_sum.shape,
                 kernel=all_max,
                 inputs=[
-                    self.binned_intensity,
+                    self.bin_sum,
                 ],
                 outputs=[
                     maximum # wp.array of shape (1,), max value is stored at maximum[0]
@@ -482,7 +464,7 @@ class ImagingSonarSensor(Camera):
                   inputs=[
                       self.r,
                       self.azi,
-                      self.binned_intensity,
+                      self.bin_sum,
                       maximum,
                       self.gau_noise,
                       self.range_dependent_ray_noise,
@@ -501,7 +483,7 @@ class ImagingSonarSensor(Camera):
                 dim=self.bin_sum.shape,
                 kernel=range_max,
                 inputs=[
-                    self.binned_intensity,
+                    self.bin_sum,
                 ],
                 outputs=[
                     maximum      # wp.array of shape (number of range bins, )
@@ -514,7 +496,7 @@ class ImagingSonarSensor(Camera):
                   inputs=[
                       self.r,
                       self.azi, 
-                      self.binned_intensity,
+                      self.bin_sum,
                       maximum,
                       self.gau_noise,
                       self.range_dependent_ray_noise,
