@@ -83,6 +83,7 @@ class UW_Camera(Camera):
         self._id = 0
         self._viewport = viewport
         self._device = wp.get_preferred_device()
+        self._uw_image = wp.empty(shape=(self._resolution[1], self._resolution[0], 4), dtype=wp.uint8)
         super().initialize(physics_sim_view)
 
         if UW_yaml_path is not None:
@@ -121,34 +122,30 @@ class UW_Camera(Camera):
     
     def render(self):
         """Process and display a single frame with underwater effects.
-    
         Note:
             - Updates viewport display if enabled
             - Saves image to disk if writing_dir was specified
         """
-        raw_rgba = self._rgba_annot.get_data()
-        depth = self._depth_annot.get_data()
-        if raw_rgba.size !=0:
-            uw_image = wp.zeros_like(raw_rgba)
+        if self._rgba_annot.get_data().size !=0:
             wp.launch(
                 dim=np.flip(self.get_resolution()),
                 kernel=UW_render,
                 inputs=[
-                    raw_rgba,
-                    depth,
+                    self._rgba_annot.get_data(),
+                    self._depth_annot.get_data(),
                     self._backscatter_value,
                     self._atten_coeff,
                     self._backscatter_coeff
                 ],
                 outputs=[
-                    uw_image
+                    self._uw_image
                 ]
             )  
             
             if self._viewport:
-                self._provider.set_bytes_data_from_gpu(uw_image.ptr, self.get_resolution())
+                self._provider.set_bytes_data_from_gpu(self._uw_image.ptr, self.get_resolution())
             if self._writing:
-                self._writing_backend.schedule(write_image, path=f'UW_image_{self._id}.png', data=uw_image)
+                self._writing_backend.schedule(write_image, path=f'UW_image_{self._id}.png', data=self._uw_image)
                 print(f'[{self._name}] [{self._id}] Rendered image saved to {self._writing_backend.output_dir}')
 
             self._id += 1
