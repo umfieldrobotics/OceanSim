@@ -22,6 +22,7 @@ class ImagingSonarScenario():
         self._sonar = sonar     
         self._sonar.sonar_initialize(include_unlabelled=True, 
                                     #  output_dir=self._output_dir
+                                    normalizing_method="range"
                                      )
    
         self._running_scenario = True

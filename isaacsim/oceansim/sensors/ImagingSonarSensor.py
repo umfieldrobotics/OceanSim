@@ -165,6 +165,7 @@ class ImagingSonarSensor(Camera):
     # expected to be used immediately within the writer. Defaults to True.
 
     def sonar_initialize(self, 
+                         normalizing_method: str = "range",
                          output_dir : str = None, 
                          viewport: bool = True, 
                          privileged_bbox: bool = False,
@@ -241,11 +242,15 @@ class ImagingSonarSensor(Camera):
             )
             self.bbox_annot.attach(self._render_product_path)
 
+        if normalizing_method == "all":
+            self._max_intensity = wp.zeros(shape=(1,), dtype=wp.float32)
+            self._compute_max_intensity = compute_max_intensity_all
+            self._make_sonar_map = make_sonar_map_all
+        elif normalizing_method == "range":
+            self._max_intensity = wp.zeros(shape=(self.r.shape[0],), dtype=wp.float32)
+            self._compute_max_intensity = compute_max_intensity_range
+            self._make_sonar_map = make_sonar_map_range
 
-        ################################################
-        ####### Lines below define the GPU graph #######
-        ################################################
-        
 
     def scan(self):
 
@@ -295,7 +300,6 @@ class ImagingSonarSensor(Camera):
         
 
     def make_sonar_data(self, 
-                        normalizing_method: str = "range",
                         query_prop: str ='reflectivity', # Do not modify this if not developing the sensor.
                         attenuation: float = 0.1, # Control the attentuation along distance when computing attenuation
                         gau_noise_param: float = 0.2, # multiplicative noise coefficient 
@@ -333,73 +337,76 @@ class ImagingSonarSensor(Camera):
                                                         query_property=query_prop)
         indexToRefl = wp.array(data=indexToRefl_np, dtype=wp.float32)
         viewTransform = wp.mat44(self.scan_data['viewTransform'])
-
-
+        
+        
+        
         
         # Compute intensity for each ray query     
         intensity = wp.empty(shape=(num_points,), dtype=wp.float32)
         wp.launch(kernel=compute_intensity,
-                  dim=num_points,
-                  inputs=[
-                      self.scan_data['pcl'],
-                      self.scan_data['normals'],
-                      viewTransform,
-                      self.scan_data['semantics'],
-                      indexToRefl,
-                      attenuation,
-                  ],
-                  outputs=[
-                      intensity
-                  ]
+                dim=num_points,
+                inputs=[
+                    self.scan_data['pcl'],
+                    self.scan_data['normals'],
+                    viewTransform,
+                    self.scan_data['semantics'],
+                    indexToRefl,
+                    attenuation,
+                ],
+                outputs=[
+                    intensity
+                ]
                 )
                 
         # Transform pointcloud from world cooridates to sonar local and convert to spherical coord
         pcl_bin_idx = wp.empty(shape=(num_points, ), dtype=wp.vec2ui)
         pcl_local_spher = wp.empty(shape=(num_points,), dtype=wp.vec3) 
         wp.launch(kernel=world2local,
-                  dim=num_points,
-                  inputs=[
-                      viewTransform,
-                      self.scan_data['pcl']
-                  ],
+                dim=num_points,
+                inputs=[
+                    viewTransform,
+                    self.scan_data['pcl']
+                ],
                     outputs=[
-                      pcl_local_spher
+                    pcl_local_spher
                     ]
                 )
         # Collapse three dimensional intensity data to 2D
         # Simply sum intensity return and compute number of return that falls into the same bin
         # Zero out intensity in each bin (do not omit this, this is necessary)
         self.bin_sum.zero_()
+        self.bin_count.zero_()
+
         self.bin_min_zenith.fill_(wp.PI)
         self.bin_semantics.zero_()
         wp.launch(kernel=bin_process,
-                  dim=num_points,
-                  inputs=[
-                      pcl_local_spher,
-                      intensity,
-                      self.scan_data['semantics'],
-                      self.sonar_grid
-                  ],
-                  outputs=[
-                      self.bin_sum,
-                      self.bin_count,
-                      pcl_bin_idx,
-                      self.bin_min_zenith
-                  ]
-                  )
+                dim=num_points,
+                inputs=[
+                    pcl_local_spher,
+                    intensity,
+                    self.scan_data['semantics'],
+                    self.sonar_grid
+                ],
+                outputs=[
+                    self.bin_sum,
+                    self.bin_count,
+                    pcl_bin_idx,
+                    self.bin_min_zenith
+                ]
+                )
         
         wp.launch(kernel=bin_semantics_process,
-                  dim=num_points,
-                  inputs=[
-                      pcl_local_spher,
-                      self.scan_data['semantics'],
-                      pcl_bin_idx,
-                      self.bin_min_zenith
-                  ],
-                  outputs=[
-                      self.bin_semantics
-                  ]
-                  )
+                dim=num_points,
+                inputs=[
+                    pcl_local_spher,
+                    self.scan_data['semantics'],
+                    pcl_bin_idx,
+                    self.bin_min_zenith
+                ],
+                outputs=[
+                    self.bin_semantics
+                ]
+                )
         
 
         
@@ -441,72 +448,38 @@ class ImagingSonarSensor(Camera):
         )
 
         
-        
+        self._max_intensity.fill_(-wp.inf)
         # Normalizing intensity at each bin either by global maximum or rangewise maximum
-        # Compute global maximum
-        if normalizing_method == "all":
-            maximum = wp.zeros(shape=(1,), dtype=wp.float32)
-            wp.launch(
-                dim=self.bin_sum.shape,
-                kernel=all_max,
-                inputs=[
-                    self.bin_sum,
-                ],
-                outputs=[
-                    maximum # wp.array of shape (1,), max value is stored at maximum[0]
-                ]
+        wp.launch(
+            dim=self.bin_sum.shape,
+            kernel=self._compute_max_intensity,
+            inputs=[
+                self.bin_sum,
+            ],
+            outputs=[
+                self._max_intensity 
+            ]
+        )
+
+        # Apply noise, normalize, and convert (r, azi) to (x,y) for plotting
+        wp.launch(
+            kernel=self._make_sonar_map,
+            dim=self.sonar_map.shape,
+            inputs=[
+                self.r,
+                self.azi,
+                self.bin_sum,
+                self._max_intensity,
+                self.gau_noise,
+                self.range_dependent_ray_noise,
+                intensity_offset,
+                intensity_gain
+            ],
+            outputs=[
+                self.sonar_map
+            ]
             )
-            
-            # Apply noise, normalize by global maximum, and convert (r, azi) to (x,y) for plotting
-            wp.launch(
-                  kernel=make_sonar_map_all,
-                  dim=self.sonar_map.shape,
-                  inputs=[
-                      self.r,
-                      self.azi,
-                      self.bin_sum,
-                      maximum,
-                      self.gau_noise,
-                      self.range_dependent_ray_noise,
-                      intensity_offset,
-                      intensity_gain
-                  ],
-                  outputs=[
-                      self.sonar_map
-                  ]
-                  )
-            
-        if normalizing_method == "range":
-            # Compute rangewise maximum
-            maximum = wp.zeros(shape=(self.r.shape[0],), dtype=wp.float32)
-            wp.launch(
-                dim=self.bin_sum.shape,
-                kernel=range_max,
-                inputs=[
-                    self.bin_sum,
-                ],
-                outputs=[
-                    maximum      # wp.array of shape (number of range bins, )
-                ]
-            )
-            # Apply noise, normalize by range maximum, and convert (r, azi) to (x,y) for plotting
-            wp.launch(
-                  kernel=make_sonar_map_range,
-                  dim=self.sonar_map.shape,
-                  inputs=[
-                      self.r,
-                      self.azi, 
-                      self.bin_sum,
-                      maximum,
-                      self.gau_noise,
-                      self.range_dependent_ray_noise,
-                      intensity_offset,
-                      intensity_gain
-                  ],
-                  outputs=[
-                      self.sonar_map
-                  ]
-                  )
+        
         
         
         # Write data to the dir
@@ -519,11 +492,12 @@ class ImagingSonarSensor(Camera):
             # self.backend.schedule(write_np, f'bbox_max_{self.id}.npy', data = aligned_bbox_max)
             # self.backend.schedule(write_np, f'bbox_min_{self.id}.npy', data = aligned_bbox_min)
             # self.backend.schedule(write_np, f"semantics_{self.id}.npy", data = self.bin_semantics)
+        
         if self._viewport:
             self.make_sonar_image()
             self.make_semantics_image()            
 
-            # self.draw_bbox_on_image(aligned_bbox_min, aligned_bbox_max, self.sonar_semantics_image)
+            # self.draw_bbox_on_image(bbox_min, bbox_max, self.sonar_semantics_image)
             # self.draw_bbox_on_image(bbox_min, bbox_max, self.sonar_image)
 
             self._sonar_provider.set_bytes_data_from_gpu(self.sonar_image.ptr, 
@@ -544,7 +518,6 @@ class ImagingSonarSensor(Camera):
             - Used internally for viewport display
             - Image dimensions match the sonar's polar binning resolution
         """
-        self.sonar_image.zero_()
         wp.launch(
             dim=self.sonar_map.shape,
             kernel=make_sonar_image,
@@ -556,6 +529,9 @@ class ImagingSonarSensor(Camera):
             ]
         )
     
+    
+    
+
     def make_semantics_image(self, colormap : str ='jet'):
         
         num_semantics = len(self.scan_data['idToLabels'])
@@ -573,6 +549,11 @@ class ImagingSonarSensor(Camera):
                 self.sonar_semantics_image
             ]
         )
+    
+    
+    
+    
+    
     @staticmethod
     def get_bbox_3d_corners(bbox_data):
         """Return transformed points in the following order: [LDB, RDB, LUB, RUB, LDF, RDF, LUF, RUF]
@@ -631,6 +612,8 @@ class ImagingSonarSensor(Camera):
 
         return corners_min, corners_max
 
+    
+    
     def make_priviledged_bbox(self):
         
         if self._privileged_bbox and len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
@@ -652,6 +635,7 @@ class ImagingSonarSensor(Camera):
                   bboxes_max : np.ndarray,
                   image : wp.array(ndim=3, dtype=wp.uint8), 
                   colormap : str = 'turbo'):
+        
         num_bboxes = bboxes_min.shape[0]
         cmap = plt.get_cmap(colormap)
         colors = cmap(np.linspace(0, 1, num_bboxes)) * 255  # Get n colors from the colormap
@@ -679,15 +663,10 @@ class ImagingSonarSensor(Camera):
         Note:
             - Displays live sonar images when simulation is running
             - Includes range and azimuth tick marks
-            - Window size is fixed at 800x800 pixels
+            - Window size is fixed at 1440x760 pixels
         """
         self.wrapped_ui_elements = []
 
-        range_tick_num = 10
-        range_tick = np.round(np.linspace(self.min_range, self.max_range, range_tick_num), 2)
-
-        azi_tick_num = 10
-        azi_tick = np.round(np.linspace(90-self.hori_fov/2, 90+self.hori_fov/2, azi_tick_num))
         self._sonar_provider = ui.ByteImageProvider()
         self._sonar_segmentation_provider = ui.ByteImageProvider()
         self._window = ui.Window(self._name, width=1440, height=720+40, visible=True)
@@ -709,21 +688,6 @@ class ImagingSonarSensor(Camera):
                                                                        "height": 720, 
                                                                        "fill_policy" : ui.FillPolicy.STRETCH,
                                                                        'alignment': ui.Alignment.CENTER})
-                
-                # ui.Line(alignment=ui.Alignment.LEFT,
-                #         style={'border_width': 2,
-                #                 'color':ui.color.white })
-                # with ui.VGrid(row_height = 720/(range_tick_num-1)):
-                #     for i in range(range_tick_num-1):
-                #         with ui.ZStack():
-                #             ui.Rectangle(style={'border_color': ui.color.white, 'background_color': ui.color.transparent,'border_width': 0.05, 'margin': 0})
-                #             ui.Label(str(range_tick[i]) + ' m',style={'font_size': 15,'alignment': ui.Alignment.LEFT, 'margin':2})
-                # with ui.HGrid(column_width = 720/(azi_tick_num-1), direction=ui.Direction.RIGHT_TO_LEFT):
-                #     for i in range(azi_tick_num-1):
-                #         with ui.ZStack():
-                #             ui.Rectangle(style={'border_color': ui.color.white, 'background_color': ui.color.transparent,'border_width': 0.05, 'margin': 0})
-                #             ui.Label(str(azi_tick[i]) + "°",style={'font_size': 15,'alignment': ui.Alignment.RIGHT, 'margin':2})                           
-                # ui.Label(str(range_tick[-1]) +" m", style={'font_size': 15, "alignment":ui.Alignment.LEFT_BOTTOM, 'margin':2})
         
         self.wrapped_ui_elements.append(sonar_image_provider)
         self.wrapped_ui_elements.append(segmentation_image_provider)

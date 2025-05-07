@@ -133,7 +133,7 @@ def draw_bbox(n : int,
         image[x_min, width - (y_min + j), c] = bbox_colors[n, c]
         image[x_max, width - (y_min + j), c] = bbox_colors[n, c]
 
-
+## This kernel is not used
 @wp.kernel 
 def average(sum: wp.array(ndim=2, dtype=wp.float32),
             count: wp.array(ndim=2, dtype=wp.int32),
@@ -143,14 +143,16 @@ def average(sum: wp.array(ndim=2, dtype=wp.float32),
         avg[i, j] = sum[i, j] / wp.float32(count[i, j])
 
 
+
+
 @wp.kernel
-def all_max(array: wp.array(ndim=2, dtype=wp.float32), 
-              max_value: wp.array(dtype=wp.float32)):
+def compute_max_intensity_all(array: wp.array(ndim=2, dtype=wp.float32), 
+              max_value: wp.array(shape=(1,), dtype=wp.float32)):
     i,j = wp.tid()  
     wp.atomic_max(max_value, 0, array[i, j])
 
 @wp.kernel
-def range_max(array: wp.array(ndim=2, dtype=wp.float32), 
+def compute_max_intensity_range(array: wp.array(ndim=2, dtype=wp.float32), 
               max_value: wp.array(dtype=wp.float32)):
     i, j = wp.tid()
     wp.atomic_max(max_value, i, array[i,j])
@@ -196,34 +198,33 @@ def range_dependent_rayleigh_2d(seed: int,
 
 
 
-
-@wp.kernel 
+@wp.kernel
 def make_sonar_map_all(r: wp.array(ndim=2, dtype=wp.float32),
                        azi: wp.array(ndim=2, dtype=wp.float32),
-                       intensity: wp.array(ndim=2, dtype=wp.float32),
-                       max_intensity: wp.array(ndim=1, dtype=wp.float32),
+                       intensity: wp.array(ndim=2, dtype=wp.float32), 
+                       max_intensity: wp.array(shape=(1,), dtype=wp.float32), 
                        gau_noise: wp.array(ndim=2, dtype=wp.float32),
                        range_ray_noise: wp.array(ndim=2, dtype=wp.float32),
                        offset: wp.float32,
                        gain: wp.float32,
                        result: wp.array(ndim=2, dtype=wp.vec3)):
     i, j = wp.tid()
-    intensity[i,j] = intensity[i,j]/max_intensity[0]
-    intensity[i,j] += offset
-    intensity[i,j] *= gain
+    intensity[i,j] = intensity[i,j] / (max_intensity[0] + 1e-10)
     intensity[i,j] *= (0.5 + gau_noise[i,j])
     intensity[i,j] += range_ray_noise[i,j]
+    intensity[i,j] += offset
+    intensity[i,j] *= gain
     intensity[i,j] = wp.clamp(intensity[i,j], wp.float32(0.0), wp.float32(1.0))
 
     result[i,j] = wp.vec3(r[i,j] * wp.cos(azi[i,j]),
                           r[i,j] * wp.sin(azi[i,j]),
                           intensity[i,j])
 
-@wp.kernel 
+@wp.kernel
 def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
                        azi: wp.array(ndim=2, dtype=wp.float32),
                        intensity: wp.array(ndim=2, dtype=wp.float32),
-                       max_intensity: wp.array(ndim=1, dtype=wp.float32),
+                       max_intensity: wp.array(dtype=wp.float32), 
                        gau_noise: wp.array(ndim=2, dtype=wp.float32),
                        range_ray_noise: wp.array(ndim=2, dtype=wp.float32),
                        offset: wp.float32,
@@ -231,9 +232,7 @@ def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
                        result: wp.array(ndim=2, dtype=wp.vec3)):
     i, j = wp.tid()
 
-    if max_intensity[i] !=0:
-        intensity[i,j] = intensity[i,j]/max_intensity[i]
-
+    intensity[i,j] = intensity[i,j] / (max_intensity[i] + 1e-10)
     intensity[i,j] *= (0.5 + gau_noise[i,j])
     intensity[i,j] += range_ray_noise[i,j]
     intensity[i,j] += offset
@@ -244,6 +243,7 @@ def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
                           r[i,j] * wp.sin(azi[i,j]),
                           intensity[i,j])
     
+
 @wp.kernel
 def make_sonar_image(sonar_data: wp.array(ndim=2, dtype=wp.vec3),
                      sonar_image: wp.array(ndim=3, dtype=wp.uint8)):
