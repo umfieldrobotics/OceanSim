@@ -260,7 +260,6 @@ def make_sonar_image(sonar_data: wp.array(ndim=2, dtype=wp.vec3),
 def make_semantics_image(bin_semantics: wp.array(ndim=2, dtype=wp.uint32),
                          semantics_color: wp.array(ndim=2, dtype=wp.uint8),
                          semantics_image: wp.array(ndim=3, dtype=wp.uint8),
-
                          ):
     i, j = wp.tid()
     width = bin_semantics.shape[1]

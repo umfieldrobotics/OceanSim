@@ -216,8 +216,8 @@ class UIBuilder:
         self._sonar = ImagingSonarSensor(prim_path=robot_prim_path + '/sonar',
                                 translation=self._sensor_location,
                                 orientation=euler_angles_to_quat(np.array([0.0, 45, 0.0]),  degrees=True),
-                                range_res=0.005,
-                                angular_res=0.2,
+                                # range_res=0.005,
+                                # angular_res=0.2,
                                 hori_res=3000,
                                 )
         

@@ -102,7 +102,7 @@ class ImagingSonarSensor(Camera):
         self.bin_count = wp.empty(shape=self.r.shape, dtype=wp.int32)
         self.bin_min_zenith = wp.full(shape=self.r.shape, value=wp.PI, dtype=wp.float32)
         self.bin_semantics = wp.empty(shape=self.r.shape, dtype=wp.uint32)
-        self.sonar_map = wp.empty(shape=self.r.shape, dtype=wp.vec3)
+        self.sonar_data = wp.empty(shape=self.r.shape, dtype=wp.vec3)
         self.sonar_image = wp.empty(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
         self.sonar_semantics_image = wp.empty(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
         self.gau_noise = wp.empty(shape=self.r.shape, dtype=wp.float32)
@@ -166,7 +166,6 @@ class ImagingSonarSensor(Camera):
 
     def sonar_initialize(self, 
                          normalizing_method: str = "range",
-                         output_dir : str = None, 
                          viewport: bool = True, 
                          privileged_bbox: bool = False,
                          include_unlabelled = False, 
@@ -174,8 +173,6 @@ class ImagingSonarSensor(Camera):
         """Initialize sonar data processing pipeline and annotators.
     
         Args:
-            output_dir (str, optional): Directory to save sonar data. Defaults to None.
-                                        If set to None, sonar will not write data.
             viewport (bool, optional): Enable viewport visualization. Defaults to True.
                                         Set to False for Sonar running without visualization.
             include_unlabelled (bool, optional): Include unlabelled objects to be scanned into sonar view. Defaults to False.
@@ -189,7 +186,6 @@ class ImagingSonarSensor(Camera):
             - Sets up Warp arrays for sonar image processing
             - Can optionally write data to disk if output_dir specified
         """
-        self.writing = False
         self._viewport = viewport
         self._privileged_bbox = privileged_bbox
         self._device = str(wp.get_preferred_device())
@@ -225,12 +221,8 @@ class ImagingSonarSensor(Camera):
         self.cameraParams_annot.attach(self._render_product_path)
         self.semanticSeg_annot.attach(self._render_product_path)
 
-
-        if output_dir is not None:
-            self.writing = True
-            self.backend = rep.BackendDispatch({"paths": {"out_dir": output_dir}})
         
-        print(f'[{self._name}] Initialized successfully. Data writing: {self.writing}')
+        print(f'[{self._name}] Initialized successfully.')
 
         if self._viewport:
             self.make_sonar_viewport()
@@ -279,7 +271,7 @@ class ImagingSonarSensor(Camera):
         
 
     @staticmethod
-    def make_indexToProp_array(idToLabels: dict, query_property: str):
+    def make_indexToProp_array(idToLabels: dict, query_property: str) -> np.ndarray:
         """ A utility function helps to convert idToLabels into indexToProp array
         This manipulation facilitates warp computation framework
         indexToProp is an 1-dim array where the values associated with the query property 
@@ -464,7 +456,7 @@ class ImagingSonarSensor(Camera):
         # Apply noise, normalize, and convert (r, azi) to (x,y) for plotting
         wp.launch(
             kernel=self._make_sonar_map,
-            dim=self.sonar_map.shape,
+            dim=self.sonar_data.shape,
             inputs=[
                 self.r,
                 self.azi,
@@ -476,39 +468,30 @@ class ImagingSonarSensor(Camera):
                 intensity_gain
             ],
             outputs=[
-                self.sonar_map
+                self.sonar_data
             ]
             )
         
         
         
-        # Write data to the dir
-        if self.writing:
-            # self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
-            # self.backend.schedule(write_np, f'pcl_local_{self.id}.npy', data=pcl_local)
-            # self.backend.schedule(write_np, f'sonar_data_{self.id}.npy', data=self.sonar_map)
-            print(f"[{self._name}] [{self.id}] Writing sonar data to {self.backend.output_dir}")
-            # self.backend.schedule(write_image, f'sonar_{self.id}.png', data = self.sonar_semantics_image)        
-            # self.backend.schedule(write_np, f'bbox_max_{self.id}.npy', data = aligned_bbox_max)
-            # self.backend.schedule(write_np, f'bbox_min_{self.id}.npy', data = aligned_bbox_min)
-            # self.backend.schedule(write_np, f"semantics_{self.id}.npy", data = self.bin_semantics)
-        
         if self._viewport:
-            self.make_sonar_image()
-            self.make_semantics_image()            
+            self.get_sonar_image()
+            self.get_semantics_image()            
 
             # self.draw_bbox_on_image(bbox_min, bbox_max, self.sonar_semantics_image)
             # self.draw_bbox_on_image(bbox_min, bbox_max, self.sonar_image)
 
             self._sonar_provider.set_bytes_data_from_gpu(self.sonar_image.ptr, 
-                                                    [self.sonar_map.shape[1], self.sonar_map.shape[0]])
+                                                    [self.sonar_image.shape[1], self.sonar_image.shape[0]])
             self._sonar_segmentation_provider.set_bytes_data_from_gpu(self.sonar_semantics_image.ptr, 
                                                     [self.sonar_semantics_image.shape[1], self.sonar_semantics_image.shape[0]])
             
         self.id += 1
     
-
-    def make_sonar_image(self):
+    def get_sonar_data(self) -> wp.array(dtype=wp.vec3):
+        return self.sonar_data
+    
+    def get_sonar_image(self) -> wp.array(dtype=wp.uint8):
         """Convert processed sonar data to a viewable grayscale image.
     
         Returns:
@@ -519,25 +502,26 @@ class ImagingSonarSensor(Camera):
             - Image dimensions match the sonar's polar binning resolution
         """
         wp.launch(
-            dim=self.sonar_map.shape,
+            dim=self.sonar_data.shape,
             kernel=make_sonar_image,
             inputs=[
-                self.sonar_map
+                self.sonar_data
             ],
             outputs=[
                 self.sonar_image
             ]
         )
-    
-    
-    
+        return self.sonar_image
 
-    def make_semantics_image(self, colormap : str ='jet'):
-        
+
+
+    def get_semantics_image(self, colormap : str ='jet'):
+
         num_semantics = len(self.scan_data['idToLabels'])
         cmap = plt.get_cmap(colormap)
         colors = cmap(np.linspace(0, 1, num_semantics)) * 255  # Get n colors from the colormap
 
+        np.save(file=f'/home/haoyu/Desktop/viz/semantics_{self.id}.npy', arr=self.bin_semantics.numpy())
         wp.launch(
             dim=self.bin_semantics.shape,
             kernel=make_semantics_image,
@@ -549,6 +533,8 @@ class ImagingSonarSensor(Camera):
                 self.sonar_semantics_image
             ]
         )
+
+        return self.sonar_semantics_image
     
     
     
@@ -614,7 +600,7 @@ class ImagingSonarSensor(Camera):
 
     
     
-    def make_priviledged_bbox(self):
+    def get_priviledged_bbox(self):
         
         if self._privileged_bbox and len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
             self.scan_data['bbox'] = self.bbox_annot.get_data()['data']
