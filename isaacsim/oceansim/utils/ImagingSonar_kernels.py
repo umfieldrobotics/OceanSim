@@ -273,6 +273,7 @@ def make_semantics_image(bin_semantics: wp.array(ndim=2, dtype=wp.uint32),
 
 
 ## THis kernel not used ##
+
 # ImagingSonarSensor.py
 #######################################
 # bbox_corners = wp.array(bbox_corners, ndim=3, dtype=wp.float32)
@@ -290,6 +291,8 @@ def make_semantics_image(bin_semantics: wp.array(ndim=2, dtype=wp.uint32),
 #                 aligned_bbox_min,
 #                 aligned_bbox_max
 #             ])
+
+# ImagingSonar_kernels.py
 ##########################################
 # @wp.kernel
 # def bin_bbox_process(bbox_corners: wp.array(ndim=3, dtype=wp.float32),
@@ -318,4 +321,3 @@ def make_semantics_image(bin_semantics: wp.array(ndim=2, dtype=wp.uint32),
 #     wp.atomic_max(aligned_bbox_max, i, 0, x_bin_idx)
 #     # y_max
 #     wp.atomic_max(aligned_bbox_max, i, 1, y_bin_idx)
-#########################################################

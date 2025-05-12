@@ -38,9 +38,10 @@ class ImagingSonarSensor(Camera):
             name (str, optional): shortname to be used as a key by Scene class.
                                     Note: needs to be unique if the object is added to the Scene.
                                     Defaults to "ImagingSonar".
-            frequency (Optional[int], optional): Frequency of the sensor (i.e: how often is the data frame updated).
-                                                Defaults to None.
-            dt (Optional[str], optional): dt of the sensor (i.e: period at which a the data frame updated). Defaults to None.
+            frequency (Optional[int], optional): Frequency of the sensor. This argument does not contribute to sonar rendering.
+                                                    Placeholder purpose. Defaults to None.
+            dt (Optional[str], optional): dt of the sensor This argument does not contribute to sonar rendering.
+                                                    Placeholder purpose. Defaults to None.
             resolution (Optional[Tuple[int, int]], optional): resolution of the camera (width, height). Defaults to None.
             position (Optional[Sequence[float]], optional): position in the world frame of the prim. shape is (3, ).
                                                         Defaults to None, which means left unchanged.
@@ -82,9 +83,10 @@ class ImagingSonarSensor(Camera):
         self.angular_res = np.deg2rad(angular_res) # degree (datasheet is 2 deg)
         self.hori_res= hori_res
 
-        # self.beam_separation = 0.5 # degree (Not USED FOR NOW)!!
-        # self.num_beams = 256 # (max number of beams) (NOT USED FOR NOW)!!
-        # self.update_rate = 40 # Hz (max update rate) (NOT USED FOR NOW)!!
+        # Below are sonar's physical parameters not used: 
+        # self.beam_separation = 0.5 # degree 
+        # self.num_beams = 256 # (max number of beams) 
+        # self.update_rate = 40 # Hz (max update rate) 
 
 
         # Generate sonar map's r and z meshgrid
@@ -173,6 +175,7 @@ class ImagingSonarSensor(Camera):
         """Initialize sonar data processing pipeline and annotators.
     
         Args:
+            normalizing_method (str, optional): Choose between "range" for normalization per range (r) or "all" for the normalization from the whole map
             viewport (bool, optional): Enable viewport visualization. Defaults to True.
                                         Set to False for Sonar running without visualization.
             include_unlabelled (bool, optional): Include unlabelled objects to be scanned into sonar view. Defaults to False.
@@ -304,10 +307,6 @@ class ImagingSonarSensor(Camera):
         """Process raw scan data into a sonar image with configurable parameters.
 
         Args:
-            binning_method (str): "sum" or "mean" for intensity accumulation
-                                Remember to adjust your noise scale accordingly after changing this.
-            normalizing_method (str): "all" (global max) or "range" (per-range max)
-                                Remember to adjust your noise scale accordingly after changing this.
             query_prop (str): Material property to query (default 'reflectivity')
                             Don't modify this if not for development.
             attenuation (float): Distance attenuation coefficient (0-1)
@@ -472,8 +471,6 @@ class ImagingSonarSensor(Camera):
             ]
             )
         
-        
-        
         if self._viewport:
             self.get_sonar_image()
             self.get_semantics_image()            
@@ -488,14 +485,20 @@ class ImagingSonarSensor(Camera):
             
         self.id += 1
     
-    def get_sonar_data(self) -> wp.array(dtype=wp.vec3):
+    def get_sonar_data(self) -> wp.array:
+        """Get GPU array of sonar data 
+
+        Returns: 
+            sonar_data (wp.array(dtype=wp.vec3)): shaped (num_r_bin, num_azi_bin), with each entry a wp.vec3 containing [x, y, bin_intensity]
+        with (x, y) are cartesian coordinates of the (r, azi) of the bin.
+        """
         return self.sonar_data
     
-    def get_sonar_image(self) -> wp.array(dtype=wp.uint8):
+    def get_sonar_image(self) -> wp.array:
         """Convert processed sonar data to a viewable grayscale image.
     
         Returns:
-            wp.array: GPU array containing the sonar image (RGBA format)
+            sonar_image (wp.array(dtype=wp.uint8)): GPU array containing the sonar image (RGBA format) 
     
         Note:
             - Used internally for viewport display
@@ -515,8 +518,14 @@ class ImagingSonarSensor(Camera):
 
 
 
-    def get_semantics_image(self, colormap : str ='jet'):
-
+    def get_semantics_image(self, colormap : str ='jet') -> wp.array:
+        """Convert semantic data to a viewable semantic image
+        Returns:
+            semantic_image (wp.array(dtype=wp.uint8)) : GPU array containing the semantic image (RGBA) 
+        
+        Known bug: 
+            Color mask will sometimes flash but the semantic data is correct.
+        """
         num_semantics = len(self.scan_data['idToLabels'])
         cmap = plt.get_cmap(colormap)
         colors = cmap(np.linspace(0, 1, num_semantics)) * 255  # Get n colors from the colormap
@@ -550,7 +559,7 @@ class ImagingSonarSensor(Camera):
                 `x_max`, `y_max`, `transform`.
 
         Returns:
-            (numpy.ndarray): Transformed corner homogeneous coordinates at world frame with shape `(N, 8, 4)`.
+            corners_world (numpy.ndarray): Transformed corner homogeneous coordinates at world frame with shape `(N, 8, 4)`.
             N: number of bbox, 8: eight corners, 4: homogeneous coordinates [x,y,z,1]
         """
 
@@ -573,6 +582,12 @@ class ImagingSonarSensor(Camera):
         return corners_world
     
     def process_bbox_corners(self, bbox_3d_corners):
+        """Process the bbox3d data directly from annotator
+        Returns:
+            corners_min, corners_max : np.ndarray((N,2)), np.ndarray((N,2))
+            corners_min is the [(x_min, y_min), ...] that defines all the detected bboxes in the image frame
+            corners_max is the [(x_max, y_max), ...] that defines all the detected bboxes in the image frame
+        """
         N = bbox_3d_corners.shape[0]
         # world frame to camera frame
         corners_local = np.einsum('ijk,lk->ijl', bbox_3d_corners, self.scan_data['viewTransform'])
@@ -601,14 +616,20 @@ class ImagingSonarSensor(Camera):
     
     
     def get_priviledged_bbox(self):
-        
+        """Priviledged bbox means the bbox computed from the scene, not from the sensor view. It's called priviledged because observer 
+        itself won't be able to access this information. For regular bbox, simply use cv2.findCentroid() on semantics information. 
+
+        Returns:
+            bbox_id: bbox's id
+            bbox_min: is the [(x_min, y_min), ...] that defines all the detected bboxes in the image frame
+            bbox_max: is the [(x_max, y_max), ...] that defines all the detected bboxes in the image frame
+        """
         if self._privileged_bbox and len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
             self.scan_data['bbox'] = self.bbox_annot.get_data()['data']
             self.scan_data['bbox_ids'] = self.bbox_annot.get_data()['info']['bboxIds']
             # Compute the privileged bbox
             bbox_corners = self.get_bbox_3d_corners(self.scan_data['bbox'])
             bbox_min, bbox_max = self.process_bbox_corners(bbox_corners)
-            # For non-privileged bbox, simply apply cv2.findCentroid on semantic image
             return self.scan_data['bbox_ids'], bbox_min, bbox_max
         else:
             print(f'[{self._name}] Initialize with priviledged_bbox to true before calling this.')
@@ -619,8 +640,15 @@ class ImagingSonarSensor(Camera):
     @staticmethod
     def draw_bbox_on_image(bboxes_min : np.ndarray, 
                   bboxes_max : np.ndarray,
-                  image : wp.array(ndim=3, dtype=wp.uint8), 
+                  image : wp.array, 
                   colormap : str = 'turbo'):
+        """
+        Args:
+            bbox_min: is the [(x_min, y_min), ...] that defines all the detected bboxes in the image frame
+            bbox_max: is the [(x_max, y_max), ...] that defines all the detected bboxes in the image frame          
+            image: GPU array containing the image (RGBA) wp.array(dtype=wp.uint8)
+            colormap: (str) following plt's cmap standard
+        """
         
         num_bboxes = bboxes_min.shape[0]
         cmap = plt.get_cmap(colormap)

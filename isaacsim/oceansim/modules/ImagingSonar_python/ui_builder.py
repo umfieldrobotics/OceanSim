@@ -234,7 +234,7 @@ class UIBuilder:
             self._add_semantic_entry(cube.prim,
                                       "sonar_ref",
                                       "reflectivity",
-                                      "2.2")
+                                      "1.5")
             self._add_semantic_entry(cube.prim,
                                       "semantics",
                                       "class",
@@ -249,7 +249,7 @@ class UIBuilder:
             self._add_semantic_entry(sphere.prim,
                                       "sonar_ref",
                                       "reflectivity",
-                                      "0.2")
+                                      "1.0")
             self._add_semantic_entry(sphere.prim,
                                       "semantics",
                                       "class",
