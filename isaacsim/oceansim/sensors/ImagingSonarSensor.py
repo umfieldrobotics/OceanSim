@@ -530,7 +530,6 @@ class ImagingSonarSensor(Camera):
         cmap = plt.get_cmap(colormap)
         colors = cmap(np.linspace(0, 1, num_semantics)) * 255  # Get n colors from the colormap
 
-        np.save(file=f'/home/haoyu/Desktop/viz/semantics_{self.id}.npy', arr=self.bin_semantics.numpy())
         wp.launch(
             dim=self.bin_semantics.shape,
             kernel=make_semantics_image,
