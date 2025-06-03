@@ -107,6 +107,12 @@ class FLS_KittiWriter(Writer):
         - **Supported:** bounding box extents, semantic labels
         - **Partial Support:** occluded (occlusion is estimated from the area ratio of tight / loose bounding boxes)
         - **Unsupported:** alpha, dimensions, location, rotation_y, truncated (all set to default values of ``0.0``)
+    
+    .. my note::
+        - occlusion in sonar image can not be achieved now 
+        (future: maybe initialize a larger chunck of memory at each pixel when processing semantic information from every rayquery? )
+        - dimensions and locations of the object should be possible. (though this is priviledged information for sonar, but useful for sensor fusion)
+        By Transferring 3D bbox information to local frame 
     """
 
     def __init__(
