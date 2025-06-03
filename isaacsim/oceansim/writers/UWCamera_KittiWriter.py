@@ -68,7 +68,7 @@ KITTI_LABELS = {
 __version__ = "0.0.1"
 
 
-class FLS_KittiWriter(Writer):
+class UWCamera_KittiWriter(Writer):
     """Writer outputting data in the ``KITTI`` annotation format:
     http://www.cvlibs.net/datasets/kitti/
 
@@ -133,7 +133,6 @@ class FLS_KittiWriter(Writer):
         mapping_path: str = None,
         mapping_dict: dict = None,
         colorize_instance_segmentation: bool = False,
-        include_unlabelled: bool = False,
         semantic_filter_predicate: str = None,
         use_kitti_dir_names: bool = False,
     ):
@@ -158,7 +157,6 @@ class FLS_KittiWriter(Writer):
         self._render_product_idxs = renderproduct_idxs
         self._use_kitti_dir_names = use_kitti_dir_names
         self.colorize_instance_segmentation = colorize_instance_segmentation
-        self.include_unlabelled = include_unlabelled
 
         if mapping_path and mapping_dict:
             raise ValueError("Cannot have both mapping_path and mapping_dict specified")
@@ -187,24 +185,17 @@ class FLS_KittiWriter(Writer):
             SyntheticData.Get().set_instance_mapping_semantic_filter(semantic_filter_predicate)
 
         self.annotators = [
-            # We don't need these three annotators for they are for camera rendering 
-            # "rgb",
-            # "bounding_box_2d_tight_fast",
-            # "bounding_box_2d_loose_fast",
-            
-            # We need pointcloud data as the result of rayquest
-            AnnotatorRegistry.get_annotator(
-                "pointcloud", init_params={"includeUnlabelled": include_unlabelled}
-            ),
+            "rgb",
+            "bounding_box_2d_tight_fast",
+            "bounding_box_2d_loose_fast",
             AnnotatorRegistry.get_annotator(
                 "semantic_segmentation", init_params={"mapping": self._get_anno_semantic_mapping()}
             ),
             AnnotatorRegistry.get_annotator(
                 "instance_segmentation_fast", init_params={"colorize": colorize_instance_segmentation}
             ),
-            # "distance_to_camera",
+            "distance_to_camera",
             "camera_params",
-            "bounding_box_3d_fast"
         ]
 
     def _get_anno_semantic_mapping(self):
