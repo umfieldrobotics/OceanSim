@@ -22,6 +22,9 @@ from omni.replicator.core import AnnotatorRegistry
 from omni.replicator.core import BackendDispatch
 from omni.replicator.core.scripts.writers import Writer
 
+# Import sonart rendering kernel
+from isaacsim.oceansim.utils.ImagingSonar_kernels import *
+
 EPS = 1e-5
 # Procuring standard KITTI Labels for objects annotated in the KITTI-format
 # The dictionary is ordered where label idx corresponds to semantic ID
@@ -121,6 +124,23 @@ class FLS_KittiWriter(Writer):
     def __init__(
         self,
         output_dir: str,
+        # configuration of sonar renderings
+        sonar_param: dict = {"max_range": 3, 
+                             "min_range": 0.2,
+                             "hori_fov": 130, # Notice: on camera end, hori_fov and vert_fov is required to 
+                             "vert_fov": 20,  # compute camera AR and vert_res given arbitrary hori_res
+                             "range_res": 0.005, 
+                             "angular_res": 0.25,
+                             "normalizing_method": "range",
+                             "query_prop": "reflectivity", # bit wanky, leave this for now
+                             "attenuation": 0.1,
+                             "gau_noise_param": 0.2,
+                             "ray_noise_param": 0.05,
+                             "intensity_offset": 0.0,
+                             "intensity_gain": 1.0,
+                             "central_peak": 2,
+                             "central_std": 0.001},
+        # extra config for data writing
         s3_bucket: str = None,
         s3_region: str = None,
         s3_endpoint: str = None,
@@ -206,6 +226,83 @@ class FLS_KittiWriter(Writer):
             "camera_params",
             "bounding_box_3d_fast"
         ]
+    def _initialize_sonar_renderer(self, sonar_param:dict):
+        '''Takes in sonar parameters to allocate memory on cuda and load up kernels.
+        Must call this function before rendering sonar images.
+        Args:
+            sonar_param (dict) : Sonar parameters
+        '''
+        # Boilerplate to intake params
+        # Below params are used to define the sonar grid
+        self.max_range = sonar_param['max_range']
+        self.min_range = sonar_param['min_range']
+        self.range_res = sonar_param['range_res']
+        self.hori_fov = sonar_param['hori_fov']
+        self.vert_fov = sonar_param['vert_fov']
+        self.angular_res = np.deg2rad(sonar_param['angular_res'])
+        # Below params are used to define sonar noise and rendering method
+        self.query_prop = sonar_param['query_prop']
+        self.attenuation = sonar_param['attenuation']
+        self.gau_noise_param = sonar_param['gau_noise_param']
+        self.ray_noise_param = sonar_param['ray_noise_param']
+        self.intensity_offset = sonar_param['intensity_offset']
+        self.intensity_gain = sonar_param['intensity_gain']
+        self.central_peak = sonar_param['central_peak']
+        self.central_std = sonar_param['central_std']
+
+        # Allocate memeory on cuda
+        
+        # Generate sonar grid  r and azi meshgrid
+        self.min_azi = np.deg2rad(90-self.hori_fov/2)
+        r, azi = np.meshgrid(np.arange(self.min_range,self.max_range,self.range_res),
+                                       np.arange(np.deg2rad(90-self.hori_fov/2), np.deg2rad(90+self.hori_fov/2), self.angular_res),
+                                       indexing='ij')
+        self.r = wp.array(r, shape=r.shape, dtype=wp.float32)
+        self.azi = wp.array(azi, shape=r.shape, dtype=wp.float32)
+       
+        # Accumulated intensity per bin
+        self.bin_sum = wp.empty(shape=self.r.shape, dtype=wp.float32)
+        # Accumulated ray count per bin
+        self.bin_count = wp.empty(shape=self.r.shape, dtype=wp.int32)
+        # Minimum zenith bookkeeper to only keep the highest ray semantics
+        self.bin_min_zenith = wp.full(shape=self.r.shape, value=wp.PI, dtype=wp.float32)
+        # semantics per bin (only support 1 semantics per bin, no occlusion)
+        self.bin_semantics = wp.empty(shape=self.r.shape, dtype=wp.uint32)
+        # Resulted sonar data per bin (cartesian_x of bin in local frame, cartesian_y, normalized intensity value)
+        self.sonar_data = wp.empty(shape=self.r.shape, dtype=wp.vec3)
+        # Rendered sonar image
+        self.sonar_image = wp.empty(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
+        # Rendered sonar semantics
+        self.sonar_semantics_image = wp.empty(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
+        # Corresponding kernel for different method to nomalize 
+        if sonar_param['normalizing_method'] == "all":
+            self._max_intensity = wp.zeros(shape=(1,), dtype=wp.float32)
+            self._compute_max_intensity = compute_max_intensity_all
+            self._make_sonar_map = make_sonar_map_all
+        elif sonar_param['normalizing_method'] == "range":
+            self._max_intensity = wp.zeros(shape=(self.r.shape[0],), dtype=wp.float32)
+            self._compute_max_intensity = compute_max_intensity_range
+            self._make_sonar_map = make_sonar_map_range      
+        
+        # Sonar noise
+        self.gau_noise = wp.empty(shape=self.r.shape, dtype=wp.float32)
+        self.range_dependent_ray_noise = wp.empty(shape=self.r.shape, dtype=wp.float32)
+        
+        # Sonar grid information
+        self.sonar_grid = sonarGrid()
+        self.sonar_grid.x_offset = self.min_range
+        self.sonar_grid.y_offset = self.min_azi
+        self.sonar_grid.x_res = self.range_res
+        self.sonar_grid.y_res = self.angular_res
+        self.sonar_grid.x_num = self.r.shape[0]
+        self.sonar_grid.y_num = self.r.shape[1]
+        
+
+    
+    def _render_sonar(self, data):
+        # TODO start sonar rendering process
+
+
 
     def _get_anno_semantic_mapping(self):
         anno_semantic_mapping = {}
