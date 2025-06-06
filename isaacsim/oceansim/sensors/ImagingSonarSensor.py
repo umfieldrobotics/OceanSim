@@ -262,6 +262,7 @@ class ImagingSonarSensor(Camera):
         # Due to the time to load annotator to cuda, the first few simulation tick gives no annotation in memory.
         # This would also reult error when no mesh within the sonar fov
         # Ignore scan that gives empty data stream
+        # TODO maybe we don't need this if. Empty data is caused by include_unlabelled=False
         if len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
             self.scan_data['pcl'] = self.pointcloud_annot.get_data(device=self._device)['data'][0]  # shape :(1,N,3) <class 'warp.types.array'>
             self.scan_data['normals'] = self.pointcloud_annot.get_data(device=self._device)['info']['pointNormals'][0] # shape :(1,N,4) <class 'warp.types.array'>

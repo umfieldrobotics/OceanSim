@@ -20,6 +20,7 @@ icon = "data/icon.png"
 "omni.kit.uiapp" = {}
 "omni.isaac.ui" = {}
 "omni.isaac.core" = {}
+"isaacsim.examples.extension" = {}
 
 
 [[python.module]]
