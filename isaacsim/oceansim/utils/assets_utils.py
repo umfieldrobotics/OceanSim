@@ -1,6 +1,6 @@
 import os
 
-OCEANSIM_ROOT = os.path.normpath(
+OCEANSIM_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, os.pardir)
 )
 ASSETS_PATH = os.path.join(OCEANSIM_ROOT, 'Assets')
