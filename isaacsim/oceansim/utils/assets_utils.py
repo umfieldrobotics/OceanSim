@@ -6,4 +6,4 @@ OCEANSIM_ROOT = os.path.normpath(
 ASSETS_PATH = os.path.join(OCEANSIM_ROOT, 'Assets')
 
 def get_oceansim_assets_path() -> str:
-    return ASSETS_PATH
+    return os.environ.get('OCEANSIM_ASSET_PATH', DEFAULT_ASSETS_PATH)
