@@ -1,3 +1,5 @@
+# ./python.sh /isaac-sim/palletjack_sdg/standalone_palletjack_sdg.py --headless True --height 544 --width 960 --num_frames 1000 --distractors None --data_dir /isaac-sim/palletjack_sdg/palletjack_data/no_distractors
+
 # Copyright (c) 2022-2025, NVIDIA CORPORATION.  All rights reserved.
 #
 #  SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
@@ -369,14 +371,13 @@ class FLS_KittiWriter(Writer):
                       pointcloud_annot: str, 
                       cameraParams_annot: str, 
                       semantic_seg_annot: str):
-        # while len(data[semantic_seg_annot]["info"]["idToLabels"]) == 0:
-        #     pass
+
         pcl = data[pointcloud_annot]["data"][0]  # shape :(1,N,3) <class 'warp.types.array'>
-        print(pcl.shape)
         normals = data[pointcloud_annot]['info']['pointNormals'][0] # shape :(1,N,4) <class 'warp.types.array'>
         semantics = data[pointcloud_annot]['info']['pointSemantic'][0] # shape: (1, N) <class 'warp.types.array'>
         viewTransform = data[cameraParams_annot]['cameraViewTransform'].reshape(4,4).T # 4 by 4 np.ndarray extrinsic matrix
         idToLabels = data[semantic_seg_annot]["info"]["idToLabels"] # dict 
+        print(pcl.shape)
         def make_indexToProp_array(idToLabels: dict, query_property: str) -> np.ndarray:
             """ A utility function helps to convert idToLabels into indexToProp array
             This manipulation facilitates warp computation framework
@@ -1060,7 +1061,7 @@ def main():
                     "central_peak": 2,
                     "central_std": 0.001}
     
-    hori_res = 500
+    hori_res = 5000
     AR = sonar_param['hori_fov'] / sonar_param['vert_fov']
     vert_res = int(hori_res / AR)
     # By doing this, I am assuming the vertical beam separation
@@ -1074,14 +1075,14 @@ def main():
     # given aspect ratio for mandating square pixles
     # https://forums.developer.nvidia.com/t/how-to-modify-the-cameras-field-of-view/278427/5
 
-    focal_length = 24 # This is default when create a camera in Isaac Sim
+    focal_length = 24.0 # This is default when create a camera in Isaac Sim
     horizontal_aper = 2 * focal_length * np.tan(np.deg2rad(sonar_param['hori_fov']) / 2)
     # Create camera with Replicator API for gathering data
     cam = rep.create.camera(clipping_range=(sonar_param['min_range'], sonar_param['max_range']),
                             horizontal_aperture=horizontal_aper)
 
     # trigger replicator pipeline
-    with rep.trigger.on_frame(num_frames=CONFIG["num_frames"]):
+    with rep.trigger.on_frame(max_execs=CONFIG["num_frames"]):
 
         # Move the camera around in the scene, focus on the center of warehouse
         with cam:
@@ -1161,8 +1162,8 @@ def main():
         omit_semantic_type=True,
     )
 
-    # attach camera render products to wrieter so that data is outputted
-    RESOLUTION = (CONFIG["width"], CONFIG["height"])
+    # attach camera render products to writer so that data is outputted
+    RESOLUTION = (hori_res, vert_res)
     render_product = rep.create.render_product(cam, RESOLUTION)
     writer.attach(render_product)
 
