@@ -37,6 +37,8 @@ def get_oceansim_assets_path() -> str:
     OCEANSIM_ASSET_PATH = asset_path
     return asset_path
 
+# Run once to validate on import
+get_oceansim_assets_path()
 
 if __name__ == "__main__":
     print("OceanSim Assets are configured at", get_oceansim_assets_path())
