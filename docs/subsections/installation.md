@@ -19,10 +19,11 @@ git clone https://github.com/umfieldrobotics/OceanSim.git
 
 Download `OceanSim_assets` from [Google Drive](https://drive.google.com/drive/folders/1qg4-Y_GMiybnLc1BFjx0DsWfR0AgeZzA?usp=sharing) which contains USD assets of robot and environment.
 
-And change function `get_oceansim_assets_path()` in [~/isaacsim/extsUser/OceanSim/isaacsim/oceansim/utils/assets_utils.py](../../isaacsim/oceansim/utils/assets_utils.py) to return the path to the installed assets folder.
+Then, run the following to configure OceanSim to point to your asset path:
+
 ```bash
-def get_oceansim_assets_path() -> str:
-    return "/path/to/downloaded/assets/OceanSim_assets"
+cd /path/to/OceanSim
+python3 config/register_asset_path.py /path/to/OceanSim_assets
 ```
 
 Launch Isaac Sim following this [guide](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_workstation.html#isaac-sim-short-app-selector).
