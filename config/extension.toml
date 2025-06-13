@@ -18,8 +18,7 @@ icon = "data/icon.png"
 
 [dependencies]
 "omni.kit.uiapp" = {}
-"omni.isaac.ui" = {}
-"omni.isaac.core" = {}
+"isaacsim.gui.components" = {}
 "isaacsim.examples.extension" = {}
 
 

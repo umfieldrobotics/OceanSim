@@ -1,28 +1,17 @@
-# Copyright (c) 2022-2023, NVIDIA CORPORATION. All rights reserved.
-#
-# NVIDIA CORPORATION and its licensors retain all intellectual property
-# and proprietary rights in and to this software, related documentation
-# and any modifications thereto. Any use, reproduction, disclosure or
-# distribution of this software and related documentation without an express
-# license agreement from NVIDIA CORPORATION is strictly prohibited.
-#
-
 import asyncio
 import gc
 import weakref
 
 
 import omni
-import omni.kit.commands
 import omni.physx as _physx
 import omni.timeline
 import omni.ui as ui
 import omni.usd
-from omni.isaac.ui.element_wrappers import ScrollingWindow
-from omni.isaac.ui.menu import MenuItemDescription, make_menu_item_description
+from isaacsim.gui.components.element_wrappers import ScrollingWindow
+from isaacsim.gui.components.menu import MenuItemDescription, make_menu_item_description
 from omni.kit.menu.utils import add_menu_items, remove_menu_items
 from omni.usd import StageEventType
-
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE
 from .ui_builder import UIBuilder
 

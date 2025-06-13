@@ -1,6 +1,4 @@
 import numpy as np
-from omni.replicator.core.scripts.functional import write_np
-import omni.replicator.core as rep
 from pxr import Gf, PhysxSchema
 
 from isaacsim.oceansim.utils.keyboard_cmd import keyboard_cmd

@@ -31,7 +31,8 @@ config = {
         "rgb":True,
         'distance_to_image_plane': True,
         "camera_params": True,
-        'colorize_depth': True
+        'colorize_depth': True,
+        'normals': True
     },
 }
 
