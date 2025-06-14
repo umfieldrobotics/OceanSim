@@ -1,0 +1,24 @@
+// exported by: omni.mdl.usd_converter [1.0.24]
+// --/exts/omni.mdl.usd_converter/enableNewDemangling=True
+// --/exts/omni.mdl.usd_converter/allowRelativeExports=True
+// --/exts/omni.mdl.usd_converter/allowRelativeExportUpwardLevels=-1
+
+mdl 1.8;
+
+import ::state::normal;
+import ::ZDDhttps_3A_2F::Z59omniverse_2Dcontent_2Dproduction_2Es3_2Eus_2Dwest_2D2_2Eamazonaws_2Ecom::Materials::Z64_32023_5F1::Base::Natural::Water::Water;
+import ::tex::gamma_mode;
+
+export material Water(*)
+ = ZDDhttps_3A_2F::Z59omniverse_2Dcontent_2Dproduction_2Es3_2Eus_2Dwest_2D2_2Eamazonaws_2Ecom::Materials::Z64_32023_5F1::Base::Natural::Water::Water(
+    thin_walled: false,
+    transmission_color: color(0.6119999886f, 0.7139999866f, 0.746999979f),
+    roughness_texture: texture_2d(),
+    ior: 1.800000072f,
+    transmission_color_texture: texture_2d(),
+    roughness_texture_influence: 0.f,
+    roughness: 0.f,
+    reflection_color_texture: texture_2d(),
+    reflection_color: color(1.f, 1.f, 1.f),
+    depth: 9.999999747e-05f,
+    normal_map_texture: texture_2d("./Water_Water_Normal.png", ::tex::gamma_linear, ""));

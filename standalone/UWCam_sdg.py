@@ -67,11 +67,11 @@ simulation_app = SimulationApp(launch_config=launch_config)
 import isaacsim.core.utils.extensions as extensions_utils
 value = extensions_utils.enable_extension(extension_name='isaacsim.oceansim')
 if value:
-    print("OceanSim loaded successfully")
+    print("[SDG] OceanSim loaded successfully")
 else:
     simulation_app.update()
     simulation_app.close()
-    sys.exit("OceanSim loaded failed. SDG Stopped...")
+    sys.exit("[SDG] OceanSim loaded failed. SDG Stopped...")
 
 ############################################
 #### Here goes implementation of writer #### 
