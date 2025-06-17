@@ -33,3 +33,6 @@ name = "isaacsim.oceansim.modules.ImagingSonar_python"
 
 [[python.module]]
 name = "isaacsim.oceansim.modules.ocean_python"
+
+[[python.module]]
+name = "isaacsim.oceansim"

@@ -9,4 +9,4 @@
 
 EXTENSION_TITLE = "Ocean_test"
 EXTENSION_DESCRIPTION = 'Ocean_test'
-EXTENSION_DESCRIPTION = "Ocean_test"
+EXTENSION_LINK = "Ocean_test"

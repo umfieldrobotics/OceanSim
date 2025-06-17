@@ -195,6 +195,22 @@ def ocean_deform_launch_kernel(
         waterDepth : float = 50.0,
         windSpeed : float = 10.0         
         ):
+    """
+    Deforms a set of input points to simulate ocean surface displacement based on wave parameters.
+    Args:
+        in_points (np.ndarray): Input array of 3D points (shape: [N, 3]) to be deformed.
+        time (float): Simulation time, used to animate the ocean surface.
+        amplitude (float, optional): Wave amplitude scaling factor. Default is 1.0.
+        cameraPos (np.ndarray, optional): 3D position of the camera, used for relative calculations. Default is np.array([0.0, 0.0, 0.0]).
+        clipmapCellSize (float, optional): Size of the clipmap cell for spatial scaling. Default is 1.0.
+        direction (float, optional): Main wave direction in radians. Default is 0.0.
+        directionality (float, optional): Degree of wave directionality (0.0 to 1.0). Default is 0.0.
+        scale (float, optional): Spatial scale of the ocean surface. Default is 1.0.
+        waterDepth (float, optional): Depth of the water in meters. Default is 50.0.
+        windSpeed (float, optional): Wind speed in meters per second, affecting wave generation. Default is 10.0.
+    Returns:
+        np.ndarray: Deformed array of 3D points representing the ocean surface at the given time.
+    """
     
 
     profile = wp.zeros(PROFILE_RES, dtype=wp.vec3, device='cuda:0')

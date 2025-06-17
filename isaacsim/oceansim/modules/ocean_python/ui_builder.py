@@ -13,16 +13,24 @@ from isaacsim.core.api.objects import DynamicCuboid, DynamicSphere
 from isaacsim.core.utils.prims import get_prim_at_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage, open_stage
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, setup_ui_headers
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 import isaacsim.core.utils.prims as prims_utils
-
+import os
+from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
+from isaacsim.core.utils.extensions import get_extension_path
 
 # Custom import
 from .scenario import OceanScenario
 
 class UIBuilder:
     def __init__(self):
+        self._ext_id = omni.kit.app.get_app().get_extension_manager().get_extension_id_by_module(__name__)
+        self._file_path = os.path.abspath(__file__)
+        self._title = EXTENSION_TITLE
+        self._doc_link =  EXTENSION_LINK
+        self._overview = EXTENSION_DESCRIPTION
+        self._extension_path = get_extension_path(self._ext_id)
         # Frames are sub-windows that can contain multiple UI elements
         self.frames = []
         # UI elements created using a UIElementWrapper instance
@@ -33,6 +41,7 @@ class UIBuilder:
 
         # Run initialization for the provided example
         self._on_init()
+
 
     ###################################################################################
     #           The Functions Below Are Called Automatically By extension.py
@@ -91,6 +100,14 @@ class UIBuilder:
         Build a custom UI tool to run your extension.
         This function will be called any time the UI window is closed and reopened.
         """
+        setup_ui_headers(
+            ext_id=self._ext_id,
+            file_path=self._file_path,
+            title=self._title,
+            doc_link=self._doc_link,
+            overview=self._overview,
+            info_collapsed=False
+        )
         world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
 
         with world_controls_frame:
@@ -139,10 +156,10 @@ class UIBuilder:
         A new stage does not have a light by default.  This function creates a spherical light
         """
         sphereLight = UsdLux.SphereLight.Define(get_current_stage(), Sdf.Path("/World/SphereLight"))
-        sphereLight.CreateRadiusAttr(2)
+        sphereLight.CreateRadiusAttr(0.2)
         sphereLight.CreateIntensityAttr(100000)
+        sphereLight.GetPrim().CreateAttribute("light:enableCaustics", Sdf.ValueTypeNames.Bool).Set(True)
 
-       
 
 
     
@@ -158,62 +175,15 @@ class UIBuilder:
         and avoid loading anything if they are.  In this case, the user would still need to add
         their assets to the World (which has low overhead).  See commented code section in this function.
         """
-        # you can create a new stage. Or comment out this line to load on current stage
-
-    #     Caustics:
-    # - ``/rtx/raytracing/caustics/photonCountMultiplier`` (int): Factor multiplied by 1024 to compute the total number of photons to generate from each light.
-    # - ``/rtx/raytracing/caustics/photonMaxBounces`` (int): Maximum number of bounces to compute for each light/photon path.
-    # - ``/rtx/raytracing/caustics/positionPhi`` (float): Position Phi
-    # - ``/rtx/raytracing/caustics/normalPhi`` (float): Normal Phi
-    # - ``/rtx/raytracing/caustics/eawFilteringSteps`` (int): Number of iterations for the denoiser applied to the results of the caustics tracing pass.
 
         create_new_stage()
-        world_prim_path = '/World'
-        prims_utils.create_prim(prim_path=world_prim_path, prim_type="Xform")
-
-        add_reference_to_stage(usd_path='/home/haoyu/isaacsim/extsUser/isaacsim.oceansim/isaacsim/oceansim/modules/ocean_python/test.usd',
-                               prim_path= world_prim_path + '/room')
-        stage = get_current_stage()
-        self._add_light_to_stage()
-
-        # Create ocean surface grid
-        ocean_xform_path = world_prim_path + '/ocean'
-        prims_utils.create_prim(prim_path=ocean_xform_path, prim_type="Xform", position=[0,0,2])
-
-        oceanSurf_prim_path = ocean_xform_path + '/ocean_surface'
-
-        size = [10, 10]
-        dims = [100, 100]
-
-        from isaacsim.oceansim.utils.create_grid import create_grid
-        points, face_vertex_indices, face_vertex_counts, normals, uvs = create_grid(dims, size)
-        meshGeom = UsdGeom.Mesh.Define(stage, oceanSurf_prim_path)
-        
-        self._grid = points
-        meshGeom.CreatePointsAttr(points)
-        meshGeom.CreateNormalsAttr(normals)
-        meshGeom.CreateFaceVertexIndicesAttr(face_vertex_indices)
-        meshGeom.CreateFaceVertexCountsAttr(face_vertex_counts)
-
-        
-        meshGeom.GetPrim().CreateAttribute("primvars:st", Sdf.ValueTypeNames.TexCoord2fArray, False).Set(uvs)
-
-        meshGeom.AddRotateXYZOp().Set((90, 0, 0))
-        meshGeom.GetPrim().CreateAttribute("primvars:doNotCastShadows", Sdf.ValueTypeNames.Bool).Set(True)
-        meshGeom.GetPrim().CreateAttribute("primvars:enableShadowTerminatorFix", Sdf.ValueTypeNames.Bool).Set(False)
-        
-        self.ocean_surface_prim = meshGeom.GetPrim()
-
-        material_prim_path = ocean_xform_path + '/water'
-        omni.kit.commands.execute("CreateMdlMaterialPrim", 
-                                  mtl_url="/home/haoyu/isaacsim/extsUser/isaacsim.oceansim/isaacsim/oceansim/modules/ocean_python/Water.mdl", 
-                                  mtl_name="Water", 
-                                  mtl_path=material_prim_path
-                )
-        mat = UsdShade.Material.Get(stage, material_prim_path)
-        binding_api = UsdShade.MaterialBindingAPI.Apply(self.ocean_surface_prim)
-        binding_api.Bind(mat)
-
+        test_scene_usd_path =  self._extension_path + "/demo/demo_caustics.usd"
+        world_prim_path = "/World"
+        add_reference_to_stage(usd_path=test_scene_usd_path,
+                               prim_path= world_prim_path)
+        ocean_prim_path = world_prim_path + '/ocean'
+        from isaacsim.oceansim.caustics import WaterSurface
+        self.water = WaterSurface(ocean_prim_path)
 
 
 
@@ -233,7 +203,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self.ocean_surface_prim, self._grid)
+        self._scenario.setup_scenario(self.water)
 
     def _on_post_reset_btn(self):
         """
