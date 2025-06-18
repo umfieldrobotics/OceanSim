@@ -7,7 +7,7 @@ from omni.kit.viewport.utility import get_active_viewport
 
 # Custom import
 from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
-
+from isaacsim.oceansim.caustics import WaterSurface
 class Colorpicker_Scenario():
     def __init__(self):
 
@@ -22,13 +22,13 @@ class Colorpicker_Scenario():
         self._viewport_rgba_annot = None
         self._viewport_depth_annot = None
     
+        self._water = None
 
-
-    def setup_scenario(self):
+    def setup_scenario(self, water:WaterSurface):
 
 
         self._running_scenario = True
-        
+        self._water = water
         self._viewport = get_active_viewport()
         self._viewport_rgba_annot = rep.AnnotatorRegistry.get_annotator(name='LdrColor', device=str(self._device))
         self._viewport_depth_annot = rep.AnnotatorRegistry.get_annotator(name="distance_to_camera", device=str(self._device))
@@ -50,12 +50,15 @@ class Colorpicker_Scenario():
             rep.AnnotatorCache.clear(self._viewport_depth_annot)
             self.ui_destroy()
         
+        if self._water is not None:
+            self._water = None
+        
         self._viewport = None
         self._viewport_rgba_annot = None
         self._viewport_depth_annot = None
 
 
-    def update_scenario(self, step: float, render_param: np.ndarray):
+    def update_scenario(self, step: float, render_param: np.ndarray, water_surface_param: np.ndarray):
 
         
         if not self._running_scenario:
@@ -67,7 +70,17 @@ class Colorpicker_Scenario():
         self.depth_image = self._viewport_depth_annot.get_data()        
         
         self.update_render(render_param)
-
+        
+        if self._water is not None:
+            self._water.deform(time = self._time,
+                               amplitude=water_surface_param[0],
+                               clipmapCellSize=water_surface_param[1],
+                               direction=water_surface_param[2],
+                               directionality=water_surface_param[3],
+                               scale=water_surface_param[4],
+                               waterDepth=water_surface_param[5],
+                               windSpeed=water_surface_param[6])
+        
         self._id += 1
 
        

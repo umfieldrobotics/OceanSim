@@ -10,12 +10,11 @@ from isaacsim.core.prims import SingleGeometryPrim, SingleRigidPrim
 from isaacsim.core.utils.prims import get_prim_at_path, is_prim_path_valid
 from isaacsim.core.utils.stage import get_current_stage
 from isaacsim.core.utils.string import find_unique_string_name
-from pxr import Gf, UsdGeom
 from isaacsim.core.utils.extensions import get_extension_path
 from .create_grid import create_grid
-import warp as wp
 from .ocean_deform_kernels import update_profile, update_points
-
+import carb
+import warp as wp
 
 #  Internal parameters
 PROFILE_EXTENT = 410.0
@@ -85,12 +84,15 @@ class WaterSurface(SingleGeometryPrim):
         dim: Optional[Sequence[int]] = [100, 100],
         visible: Optional[bool] = True,
         visual_material: Optional[VisualMaterial] = None,
-    ) -> None:
+        enable_caustics: bool = False,
+        cast_shadows: bool = False
+    ) -> None :
         self._device = str(wp.get_cuda_device())
-
+        self._caustics_enabled = False
+        self._cast_shadows = False
         if is_prim_path_valid(prim_path):
             prim = get_prim_at_path(prim_path)
-            if not prim.IsA(UsdGeom.M):
+            if not prim.IsA(UsdGeom.Mesh):
                 raise Exception("The prim at path {} cannot be parsed as a water surface object".format(prim_path))
             self.waterSurfGeom = UsdGeom.Mesh(prim)
         else:
@@ -117,8 +119,7 @@ class WaterSurface(SingleGeometryPrim):
         self.waterSurfGeom.CreateFaceVertexCountsAttr(face_vertex_counts) 
         self.waterSurfGeom.GetPrim().CreateAttribute("primvars:st", Sdf.ValueTypeNames.TexCoord2fArray, False).Set(uvs)
         self.waterSurfGeom.AddRotateXYZOp().Set((90, 0, 0))
-        self.waterSurfGeom.GetPrim().CreateAttribute("primvars:doNotCastShadows", Sdf.ValueTypeNames.Bool).Set(True)
-        self.waterSurfGeom.GetPrim().CreateAttribute("primvars:enableShadowTerminatorFix", Sdf.ValueTypeNames.Bool).Set(False)
+
         SingleGeometryPrim.__init__(
             self,
             prim_path=prim_path,
@@ -137,6 +138,11 @@ class WaterSurface(SingleGeometryPrim):
         self.profile = wp.zeros(PROFILE_RES, dtype=wp.vec3)
         self.grid = wp.from_numpy(points, dtype=wp.vec3f)
         self.deformed_points = wp.empty_like(self.grid)
+
+        self.set_cast_shadows(cast_shadows)
+        if enable_caustics:
+            self.set_caustics()
+            self._caustics_enabled = True
         return
     
     def deform(self, 
@@ -197,8 +203,42 @@ class WaterSurface(SingleGeometryPrim):
         )
 
         self.pointsAttr.Set(Vt.Vec3fArray(self.deformed_points.numpy()))
-        
-        
+    
+
+    def set_caustics(self, 
+                     photonCountMultiplier: int = 500,
+                     photonMaxBounces: int = 4,
+                     positionPhi: float = 2.0,
+                     normalPhi: float = 0.8,
+                     eawFilteringSteps: int = 5):
+        settings = carb.settings.get_settings()
+        if not self._caustics_enabled:
+            settings.set("/rtx/caustics/enabled", True)
+            self._caustics_enabled = True
+
+        photonCountMultiplier = np.clip(photonCountMultiplier, 1, 5000)
+        photonMaxBounces = np.clip(photonMaxBounces, 1, 20)
+        positionPhi = np.clip(positionPhi, 0.1, 50)
+        normalPhi = np.clip(normalPhi, 0.3, 1)
+        eawFilteringSteps = np.clip(eawFilteringSteps, 0, 10)
+
+        settings.set("/rtx/raytracing/caustics/photonMaxBounces", photonMaxBounces)
+        settings.set("/rtx/raytracing/caustics/positionPhi", positionPhi)
+        settings.set("/rtx/raytracing/caustics/normalPhi", normalPhi)
+        settings.set("/rtx/raytracing/caustics/eawFilteringSteps", eawFilteringSteps)
+        settings.set("/rtx/raytracing/caustics/photonCountMultiplier", int(photonCountMultiplier)) # This is the craziest bug I have seen.
+
+
+    def set_cast_shadows(self, cast_shadows: bool):
+        if cast_shadows:
+            self.waterSurfGeom.GetPrim().CreateAttribute("primvars:doNotCastShadows", Sdf.ValueTypeNames.Bool).Set(False)
+            self.waterSurfGeom.GetPrim().CreateAttribute("primvars:enableShadowTerminatorFix", Sdf.ValueTypeNames.Bool).Set(True)
+            self._cast_shadows = True
+        else:
+            self.waterSurfGeom.GetPrim().CreateAttribute("primvars:doNotCastShadows", Sdf.ValueTypeNames.Bool).Set(True)
+            self.waterSurfGeom.GetPrim().CreateAttribute("primvars:enableShadowTerminatorFix", Sdf.ValueTypeNames.Bool).Set(False)
+            self._cast_shadows = False
+
 
 # class FixedCapsule(VisualCapsule):
 #     """High level wrapper to create/encapsulate a fixed capsule

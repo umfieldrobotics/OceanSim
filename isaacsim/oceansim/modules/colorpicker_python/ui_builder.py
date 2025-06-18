@@ -11,15 +11,17 @@ import os
 # Isaac sim import
 
 from isaacsim.core.utils.stage import open_stage
-from isaacsim.gui.components import CollapsableFrame, StateButton, get_style, combo_floatfield_slider_builder, Button, StringField, setup_ui_headers, str_builder
+from isaacsim.gui.components import CollapsableFrame, StateButton, IntField, get_style, combo_floatfield_slider_builder, Button, StringField, setup_ui_headers, str_builder, CheckBox
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.core.utils.extensions import get_extension_path
 
-
+from isaacsim.gui.property.array_widget import CustomMultiIntField
 # Custom import
 from .scenario import Colorpicker_Scenario
 from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
+from isaacsim.oceansim.caustics import WaterSurface
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
+import isaacsim.core.utils.prims as prims_utils
 
 
 class UIBuilder:
@@ -136,6 +138,29 @@ class UIBuilder:
                     folder_button_title='Select USD',
                     folder_dialog_title='Select USD scene to import'
                 )
+                water_surface_checkbox = CheckBox(
+                    "Water Surface",
+                    default_value=False,
+                    tooltip=" Click this checkbox to import a water surface",
+                    on_click_fn=self._on_water_surface_checkbox_click_fn,
+                )
+                self._water_surface = False
+                self.wrapped_ui_elements.append(water_surface_checkbox)
+
+                with ui.HStack(style = get_style(), spacing=10, height=0):
+                    self.size_x_field = IntField(label=f"Size X", tooltip="Set water surface x dimention", lower_limit=1, default_value=10)
+                    self.size_y_field = IntField(label=f"Size Y", tooltip="Set water surface Y dimention", lower_limit=1, default_value=10)
+                self.size_x_field.set_on_value_changed_fn(lambda x: print("Reset or reload the scene for changes to take effect."))
+                self.size_y_field.set_on_value_changed_fn(lambda x: print("Reset or reload the scene for changes to take effect."))
+                self.wrapped_ui_elements.append(self.size_x_field)
+                self.wrapped_ui_elements.append(self.size_y_field)
+                with ui.HStack(style = get_style(), spacing=10):
+                    self.dim_x_field = IntField(label=f"Dim X", tooltip="Set water surface x resolution",lower_limit=1, default_value=100)
+                    self.dim_y_field = IntField(label=f"Dim Y", tooltip="Set water surface y resolution",lower_limit=1, default_value=100)                
+                self.dim_x_field.set_on_value_changed_fn(lambda x: print("Reset or reload the scene for changes to take effect."))
+                self.dim_y_field.set_on_value_changed_fn(lambda x: print("Reset or reload the scene for changes to take effect."))
+                self.wrapped_ui_elements.append(self.dim_x_field)
+                self.wrapped_ui_elements.append(self.dim_y_field)
 
                 self._load_btn = LoadButton(
                     "Load Button", "LOAD", setup_scene_fn=self._setup_scene, setup_post_load_fn=self._setup_scenario
@@ -224,7 +249,9 @@ class UIBuilder:
                     tooltip="Click this button to capture the current raw/rendered/depth image from viewport",
                     on_click_fn=self._on_save_viewport
                 )
-                
+        self.water_surface_param_frame = CollapsableFrame("Water Surface Parameters", collapsed=False)
+        self.frames.append(self.water_surface_param_frame)
+
         self.wrapped_ui_elements.append(self.file_name_field)
         self.wrapped_ui_elements.append(save_button)
         self.wrapped_ui_elements.append(save_viewport_button)
@@ -236,7 +263,7 @@ class UIBuilder:
     def _on_init(self):
 
         # Robot parameters
-
+        self._water = None
         self._scenario = Colorpicker_Scenario()
 
 
@@ -251,8 +278,21 @@ class UIBuilder:
             print('USD scene is loaded.')
         except:
             print('Path is not valid or scene can not be opened. Default to current stage')
-
-
+        
+        if self._water_surface:
+            from isaacsim.oceansim.caustics import WaterSurface
+            self._water = WaterSurface(prim_path="/World/Water",
+                                       size=[self.size_x_field.get_value(), self.size_y_field.get_value()],
+                                        dim=[self.dim_x_field.get_value(), self.dim_y_field.get_value()],
+                                       position=[0,0,1], 
+                                       enable_caustics=True)
+        else:
+            if self._water is not None:
+                prims_utils.delete_prim(prim_path="/World/Water")
+                print("Water surface deleted.")
+                self._water = None
+                
+                
 
     def _setup_scenario(self):
         """
@@ -261,6 +301,7 @@ class UIBuilder:
         their objects are properly initialized, and that the timeline is paused on timestep 0.
         """
         self._reset_scenario()
+        self._add_extra_ui()
 
         # UI management
         self._scenario_state_btn.reset()
@@ -269,7 +310,18 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario()
+        if self._water is not None and not self._water_surface:
+            prims_utils.delete_prim(prim_path="/World/Water")
+            print("Water surface deleted.")
+            self._water = None
+        elif self._water:
+            prims_utils.delete_prim(prim_path="/World/Water")
+            self._water = WaterSurface(prim_path="/World/Water",
+                                       size=[self.size_x_field.get_value(), self.size_y_field.get_value()],
+                                        dim=[self.dim_x_field.get_value(), self.dim_y_field.get_value()],
+                                       position=[0,0,1], 
+                                       enable_caustics=True)
+        self._scenario.setup_scenario(self._water)
 
     def _on_post_reset_btn(self):
         """
@@ -294,7 +346,7 @@ class UIBuilder:
         Args:
             step (float): The dt of the current physics step
         """
-        self._scenario.update_scenario(step, self._param)
+        self._scenario.update_scenario(step, self._param, self._water_surface_param)
 
     def _on_run_scenario_a_text(self):
         """
@@ -406,3 +458,61 @@ class UIBuilder:
 
         else:
             print('Load a scenario first.')
+
+    
+    
+    def _on_water_surface_checkbox_click_fn(self, model):
+        self._water_surface = model
+        print('Reload the scene for changed to take effect.')
+
+
+    def _add_extra_ui(self):
+        self._water_surface_param_models = []
+        water_surface_params_labels = [                        
+            "Amplitude", 
+            "Clipmap Cell Size",
+            "Direction",
+            "Directionality", 
+            "Scale", 
+            "Water Depth",
+            "Wind Speed",
+        ]
+        water_surface_params_types = [
+            'float', 'float', 'float',
+            'float', 'float', 'float',
+            'float', 
+        ]
+        water_surface_params_default = [
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 50.0,
+            10.0, 
+        ]
+        water_surface_params_min = [
+            0.0001, 0.001, -10.0, 0.0, 0.001, 1.0, 0.0,   
+        ]
+        water_surface_params_max = [
+            1000.0, 1000, 10.0, 1.0, 10000.0, 1000.0, 30.0,
+        ]
+        self._water_surface_param = water_surface_params_default
+        with self.water_surface_param_frame:
+            with ui.VStack(spacing=5, height=0):                
+                if self._water_surface:
+                    for i in range(7):
+                        param_model, param_slider = combo_floatfield_slider_builder(
+                            label=water_surface_params_labels[i],
+                            type=water_surface_params_types[i],
+                            default_val=water_surface_params_default[i],
+                            min=water_surface_params_min[i],
+                            max=water_surface_params_max[i])
+                        self._water_surface_param_models.append(param_model)
+                        param_model.add_value_changed_fn(self._on_water_surface_param_changes)
+                        self._on_water_surface_param_changes(param_model)                    
+                    self.water_surface_param_frame.visible = True
+                if not self._water_surface:
+                    self.water_surface_param_frame.visible = False 
+    
+
+        
+    def _on_water_surface_param_changes(self, model):
+        for i, param_model in zip(range(7), self._water_surface_param_models):
+            self._water_surface_param[i] = param_model.get_value_as_float()    

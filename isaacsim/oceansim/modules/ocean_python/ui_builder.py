@@ -159,8 +159,9 @@ class UIBuilder:
         sphereLight.CreateRadiusAttr(0.2)
         sphereLight.CreateIntensityAttr(100000)
         sphereLight.GetPrim().CreateAttribute("light:enableCaustics", Sdf.ValueTypeNames.Bool).Set(True)
-
-
+        # lightXform = UsdGeom.Xform(sphereLight.GetPrim())
+        sphereLight.AddTranslateOp().Set(Gf.Vec3d(0,0,5))
+        
 
     
     def _setup_scene(self):
@@ -177,14 +178,14 @@ class UIBuilder:
         """
 
         create_new_stage()
+        self._add_light_to_stage()
         test_scene_usd_path =  self._extension_path + "/demo/demo_caustics.usd"
         world_prim_path = "/World"
         add_reference_to_stage(usd_path=test_scene_usd_path,
                                prim_path= world_prim_path)
         ocean_prim_path = world_prim_path + '/ocean'
         from isaacsim.oceansim.caustics import WaterSurface
-        self.water = WaterSurface(ocean_prim_path)
-
+        self.water = WaterSurface(ocean_prim_path, translation=[0,0,3], enable_caustics=True)
 
 
 
