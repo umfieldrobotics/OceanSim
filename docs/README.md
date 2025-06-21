@@ -68,7 +68,7 @@ OceanSim is an open-source project initiated by the [Field Robotics Group](https
 
 
 ## Citation
-If you find OceanSim useful for your research, we would appreciate that you cite our paper:
+**If you find OceanSim useful for your research, we would appreciate that you cite our paper:**
 ```
 @misc{song2025oceansim,
       title={OceanSim: A GPU-Accelerated Underwater Robot Perception Simulation Framework}, 
