@@ -1,27 +1,28 @@
 # Omniverse import
-import carb.settings
 import numpy as np
 import omni.timeline
 import omni.ui as ui
 from omni.usd import StageEventType
-from pxr import Sdf, UsdLux, Gf, Usd, UsdGeom, UsdPhysics, UsdShade, PhysxSchema, Vt
-import omni.kit.commands
+import warp as wp
+import yaml
+from PIL import Image
 import carb
-
-# Isaac sim import
-from isaacsim.core.api.objects import DynamicCuboid, DynamicSphere
-from isaacsim.core.utils.prims import get_prim_at_path
-from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage, open_stage
-from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, setup_ui_headers
-from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
-import isaacsim.core.utils.prims as prims_utils
 import os
-from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
+# Isaac sim import
+
+from isaacsim.core.utils.stage import open_stage
+from isaacsim.gui.components import CollapsableFrame, StateButton, IntField, get_style, combo_floatfield_slider_builder, Button, StringField, setup_ui_headers, str_builder, CheckBox
+from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.core.utils.extensions import get_extension_path
 
+from isaacsim.gui.property.array_widget import CustomMultiIntField
 # Custom import
-from .scenario import OceanScenario
+from .scenario import Colorpicker_Scenario
+from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
+from isaacsim.oceansim.caustics import WaterSurface
+from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
+import isaacsim.core.utils.prims as prims_utils
+
 
 class UIBuilder:
     def __init__(self):
@@ -31,17 +32,18 @@ class UIBuilder:
         self._doc_link =  EXTENSION_LINK
         self._overview = EXTENSION_DESCRIPTION
         self._extension_path = get_extension_path(self._ext_id)
-        # Frames are sub-windows that can contain multiple UI elements
+
+        # UI frames created
         self.frames = []
         # UI elements created using a UIElementWrapper instance
         self.wrapped_ui_elements = []
 
         # Get access to the timeline to control stop/pause/play programmatically
         self._timeline = omni.timeline.get_timeline_interface()
+        # A flag indicating if the scenario is loaded at least once (helpful for UI module to see if scenario variables are created)
 
         # Run initialization for the provided example
         self._on_init()
-
 
     ###################################################################################
     #           The Functions Below Are Called Automatically By extension.py
@@ -94,6 +96,8 @@ class UIBuilder:
         """
         for ui_elem in self.wrapped_ui_elements:
             ui_elem.cleanup()
+        for frame in self.frames:
+            frame.cleanup()
 
     def build_ui(self):
         """
@@ -108,10 +112,21 @@ class UIBuilder:
             overview=self._overview,
             info_collapsed=False
         )
-        world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
 
+        
+        world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
+        self.frames.append(world_controls_frame)
         with world_controls_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
+                self.scene_path_field = str_builder(
+                    label='Path to USD',
+                    tooltip='Input the path to your USD scene file',
+                    default_val="",
+                    use_folder_picker=True,
+                    folder_button_title='Select USD',
+                    folder_dialog_title='Select USD scene to import'
+                )
+                
                 self._load_btn = LoadButton(
                     "Load Button", "LOAD", setup_scene_fn=self._setup_scene, setup_post_load_fn=self._setup_scenario
                 )
@@ -125,7 +140,7 @@ class UIBuilder:
                 self.wrapped_ui_elements.append(self._reset_btn)
 
         run_scenario_frame = CollapsableFrame("Run Scenario", collapsed=False)
-
+        self.frames.append(run_scenario_frame)
         with run_scenario_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
                 self._scenario_state_btn = StateButton(
@@ -139,101 +154,75 @@ class UIBuilder:
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
 
-        self._outputs_frame = CollapsableFrame("Outputs", collapsed=False)
 
+        recording_frame = CollapsableFrame('Recording', collapsed=False)
+        self.frames.append(recording_frame)
+        
+        with recording_frame:
+            with ui.VStack(spacing=10):
+                self.freq_field = IntField(
+                    label='Recording Offset (sim tick)',
+                    tooltip='This is the value that the viewport way points are recorded per number of simulation tick. 0: sync with simulation frequency.',
+                    lower_limit=0,
+                    upper_limit=120,
+                    default_value=30,
+                )
 
-
+                self.recorded_size_display = IntField(
+                    label='# Points',
+                    tooltip="lala",
+                    default_value=0,
+                )
+                self.save_dir_field = StringField(
+                    label='NPY saving Path',
+                    tooltip='lala',
+                    use_folder_picker=True
+                )
+                
+                self.file_name_field = StringField(
+                    label='File name',
+                    tooltip='Label your npy file',
+                    default_value='scene_0'
+                )
+                save_button = Button(
+                    text="Save recorded points",
+                    label='Save Traj',
+                    tooltip='Click this button to save the current trajectories',
+                    on_click_fn=self._on_save_traj
+                    )
+                
+        self.wrapped_ui_elements.append(self.freq_field)
+        self.wrapped_ui_elements.append(self.recorded_size_display)
+        self.wrapped_ui_elements.append(self.save_dir_field)
+        self.wrapped_ui_elements.append(self.file_name_field)
+        self.wrapped_ui_elements.append(save_button)
+                
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
     ######################################################################################
 
     def _on_init(self):
-        self.ocean_surface_prim = None
-        self._scenario = OceanScenario()
 
-    def _add_light_to_stage(self):
-        """
-        A new stage does not have a light by default.  This function creates a spherical light
-        """
-        sphereLight = UsdLux.SphereLight.Define(get_current_stage(), Sdf.Path("/World/SphereLight"))
-        sphereLight.CreateRadiusAttr(0.2)
-        sphereLight.CreateIntensityAttr(100000)
-        sphereLight.GetPrim().CreateAttribute("light:enableCaustics", Sdf.ValueTypeNames.Bool).Set(True)
-        # lightXform = UsdGeom.Xform(sphereLight.GetPrim())
-        sphereLight.AddTranslateOp().Set(Gf.Vec3d(0,0,5))
-        
+        # Robot parameters
+        self._water = None
+        self._scenario = Colorpicker_Scenario()
 
-    
+
     def _setup_scene(self):
         """
         This function is attached to the Load Button as the setup_scene_fn callback.
         On pressing the Load Button, a new instance of World() is created and then this function is called.
         The user should now load their assets onto the stage and add them to the World Scene.
-
-        In this example, a new stage is loaded explicitly, and all assets are reloaded.
-        If the user is relying on hot-reloading and does not want to reload assets every time,
-        they may perform a check here to see if their desired assets are already on the stage,
-        and avoid loading anything if they are.  In this case, the user would still need to add
-        their assets to the World (which has low overhead).  See commented code section in this function.
         """
-
-        create_new_stage()
-        self._add_light_to_stage()
-
-        # test_scene_usd_path =  self._extension_path + "/demo/demo_caustics.usd"
-        test_scene_usd_path = "/home/haoyu/Desktop/StereoAssets/rocky_2/photoscanned_patch_of_ground.usd"
-        world_prim_path = "/World"
-        # add_reference_to_stage(usd_path=test_scene_usd_path,
-        #                        prim_path= world_prim_path)
-
-        stage = get_current_stage()
-
-        defaultPrimPath = '/World'
-        x_span = [-25, 25]
-        y_span = [-25, 25]
-        num_instances = [13, 13]
-        x_pos = np.linspace(x_span[0], y_span[1], num_instances[0])
-        y_pos = np.linspace(y_span[0], y_span[1], num_instances[1])
-        z = 1.0
-        xs, ys = np.meshgrid(x_pos, y_pos)
-        geomPointInstancerPath = defaultPrimPath + "/pointinstancer"
-        mMeshIndices = []
-        mPositions = []
-        mOrientations = []
-        mLinearVelocities = []
-        mAngularVelocities = []
-        for i in range(num_instances[1]):
-            for j in range(num_instances[0]):
-                mMeshIndices.append(0)
-                mPositions.append(Gf.Vec3f(xs[i][j], ys[i][j], z))
-                mOrientations.append(Gf.Quath(1.0, 0.0, 0.0, 0.0))
-                mLinearVelocities.append(Gf.Vec3f(0.0))
-                mAngularVelocities.append(Gf.Vec3f(0.0))
+        try: 
+            open_stage(self.scene_path_field.get_value_as_string())
+            print('USD scene is loaded.')
+        except:
+            print('Path is not valid or scene can not be opened. Default to current stage')
         
-        # Box instanced
-        MeshActorPath = geomPointInstancerPath + "/MeshActor"
-        add_reference_to_stage(usd_path=test_scene_usd_path,
-                               prim_path=MeshActorPath)
-        # from isaacsim.core.prims import SingleGeometryPrim
-        # SingleGeometryPrim(prim_path=MeshActorPath, collision=True)
         
-
-
-
-        # Create point instancer
-        shapeList = UsdGeom.PointInstancer.Define(stage, Sdf.Path(geomPointInstancerPath))
-        meshList = shapeList.GetPrototypesRel()
-        # add mesh reference to point instancer
-        meshList.AddTarget(Sdf.Path(MeshActorPath))
-
-        shapeList.GetProtoIndicesAttr().Set(mMeshIndices)
-        shapeList.GetPositionsAttr().Set(mPositions)
-        shapeList.GetOrientationsAttr().Set(mOrientations)
-        shapeList.GetVelocitiesAttr().Set(mLinearVelocities)
-        shapeList.GetAngularVelocitiesAttr().Set(mAngularVelocities)
-
-
-
+                
+                
 
     def _setup_scenario(self):
         """
@@ -250,7 +239,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario()
+        self._scenario.setup_scenario(self.freq_field.get_value())
 
     def _on_post_reset_btn(self):
         """
@@ -275,7 +264,7 @@ class UIBuilder:
         Args:
             step (float): The dt of the current physics step
         """
-        self._scenario.update_scenario(step)
+        self._scenario.update_scenario(step, self.recorded_size_display)
 
     def _on_run_scenario_a_text(self):
         """
@@ -303,6 +292,7 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
+        # self._scenario.save()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().
@@ -315,3 +305,23 @@ class UIBuilder:
         self._scenario_state_btn.reset()
         self._scenario_state_btn.enabled = False
         self._reset_btn.enabled = False
+
+
+
+    
+    
+    
+    def _on_save_traj(self):
+        if self.save_dir_field.get_value() != "":
+            save_dir = self.save_dir_field.get_value()
+            npy_path = save_dir + f"{self.file_name_field.get_value()}.npy"
+
+            try:
+                np.save(arr = self._scenario.recorded_position, file=npy_path)
+                print(f"Recorded Trajectories written to {npy_path}")
+            except yaml.YAMLError as e:
+                print(f"Error writing npy file: {e}")
+        else:
+            carb.log_error('Saving directory is empty.')
+
+

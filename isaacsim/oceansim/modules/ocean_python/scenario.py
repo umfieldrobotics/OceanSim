@@ -4,9 +4,8 @@ class OceanScenario():
         self._running_scenario = False
         self._time = 0.0
         
-    def setup_scenario(self, water):
+    def setup_scenario(self):
         self._running_scenario = True
-        self.water = water
         
     def teardown_scenario(self):
 
@@ -21,6 +20,6 @@ class OceanScenario():
         if not self._running_scenario:
             return
         self._time += step
-        self.water.deform(self._time)
 
+    
 
