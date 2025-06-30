@@ -6,6 +6,15 @@ from pxr import Gf, PhysxSchema
 from isaacsim.core.prims import SingleRigidPrim
 from isaacsim.core.utils.prims import get_prim_path
 
+# ROS Control import
+try:
+    from isaacsim.oceansim.utils.ros2_control import ROS2ControlReceiver
+    ROS2_CONTROL_AVAILABLE = True
+    print("[Scenario] Simple ROS2 Control receiver found")
+except ImportError as e:
+    ROS2_CONTROL_AVAILABLE = False
+    print(f"[Scenario] Simple ROS2 Control not available: {e}")
+    print("[Scenario] ROS2 Control functionality will be disabled")
 
 class MHL_Sensor_Example_Scenario():
     def __init__(self):
@@ -19,6 +28,11 @@ class MHL_Sensor_Example_Scenario():
 
         self._running_scenario = False
         self._time = 0.0
+
+        # ROS2 Control
+        self._ros2_control_receiver = None
+        self._enable_ros2_control = True
+        self._ros2_control_mode = "velocity control"
 
     def setup_scenario(self, rob, sonar, cam, DVL, baro, ctrl_mode):
         self._rob = rob
@@ -72,8 +86,37 @@ class MHL_Sensor_Example_Scenario():
                                         # row command (negative)
                                         "RIGHT": [10.0, 0.0, 0.0],
                                       })
+        elif ctrl_mode == "ROS control":
+            self._rob_forceAPI = PhysxSchema.PhysxForceAPI.Apply(self._rob)
+
+            # initialize ROS2ControlReceiver
+            self._setup_ros2_control()
             
         self._running_scenario = True
+
+    def _setup_ros2_control(self):
+        """setup ROS2 control receiver"""
+        if not ROS2_CONTROL_AVAILABLE:
+            return
+        
+        try:
+            self._ros2_control_receiver = ROS2ControlReceiver(self._rob, "ROS2ControlReceiver")
+            
+            if hasattr(self, '_rob_forceAPI') and self._rob_forceAPI is not None:
+                self._ros2_control_receiver.set_scenario_force_api(self._rob_forceAPI)
+
+            self._ros2_control_receiver.initialize(
+                enable_ros2=True
+            )
+
+            self._ros2_control_receiver._setup_ros2_control_mode(
+                self._ros2_control_mode
+            )
+                
+        except Exception as e:
+            print(f"[Scenario] setup ros2 control receiver failed: {e}")
+            self._ros2_control_receiver = None
+
     # This function will only be called if ctrl_mode==waypoints and waypoints files are changed
     def setup_waypoints(self, waypoint_path, default_waypoint_path):
         def read_data_from_file(file_path):
@@ -117,6 +160,10 @@ class MHL_Sensor_Example_Scenario():
             self._force_cmd.cleanup()
             self._torque_cmd.cleanup()
 
+        # clear the ROS2 control receiver
+        if self._ros2_control_receiver is not None:
+            self._ros2_control_receiver.close()
+
         self._rob = None
         self._sonar = None
         self._cam = None
@@ -158,6 +205,11 @@ class MHL_Sensor_Example_Scenario():
                 print('Waypoints finished')                
         elif self._ctrl_mode=="Straight line":
             SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([0.5,0,0])) 
+        elif self._ctrl_mode=="ROS control":
+            if self._ros2_control_receiver is not None:
+                self._ros2_control_receiver.update_control()
+            else:
+                print("[Scenario] ROS2 Control receiver is not initialized, skipping update.")
 
 
 

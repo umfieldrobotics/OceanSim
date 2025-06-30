@@ -174,7 +174,7 @@ class UIBuilder():
                 self._ctrl_mode_model = dropdown_builder(
                     label='Control Mode',
                     default_val=3,
-                    items=['No control', 'Straight line', 'Waypoints', 'Manual control'],
+                    items=['No control', 'Straight line', 'Waypoints', 'Manual control', 'ROS control'],
                     tooltip='Select preferred control mode',
                     on_clicked_fn=self._on_ctrl_mode_dropdown_clicked
                 )
@@ -210,6 +210,8 @@ class UIBuilder():
         self.frames.append(self.sensor_reading_frame)
         self.waypoints_frame = CollapsableFrame('Waypoints',collapsed=False, visible=False)
         self.frames.append(self.waypoints_frame)
+        self.ros2_control_frame = CollapsableFrame('ROS2 Control Mode Setting', collapsed=False, visible=False)
+        self.frames.append(self.ros2_control_frame)
 
 
 
@@ -463,7 +465,33 @@ class UIBuilder():
                 self.waypoints_frame.visible = True
             else:
                 self.waypoints_frame.visible = False
+        with self.ros2_control_frame:
+            if self._ctrl_mode == 'ROS control':
+                # Build the ROS2 control UI
+                self._build_ros2_control_ui()
+                self.ros2_control_frame.visible = True
+            else:
+                self.ros2_control_frame.visible = False
 
+    def _build_ros2_control_ui(self):
+        """Build the ROS2 control UI elements"""
+        with self.ros2_control_frame:
+            with ui.VStack(style=get_style(), spacing=5, height=0):
+                # ROS2 control mode dropdown
+                self._ros2_control_mode_model = dropdown_builder(
+                    label='ROS2 Control Mode',
+                    default_val=0,
+                    items=['velocity control', 'force control'],
+                    tooltip='Select preferred ROS2 control mode',
+                    on_clicked_fn=self._on_ros2_control_mode_dropdown_clicked
+                )
+
+    def _on_ros2_control_mode_dropdown_clicked(self, mode):
+        self._scenario._ros2_control_mode = mode
+        self._scenario._ros2_control_receiver._setup_ros2_control_mode(
+                self._scenario._ros2_control_mode
+            )
+        print(f'ROS control mode switch to: {self._scenario._ros2_control_mode}.')
 
     def _build_waypoints_filepicker(self):
         self._waypoints_path_field = str_builder(
