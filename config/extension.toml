@@ -29,15 +29,6 @@ name = "isaacsim.oceansim.modules.SensorExample_python"
 name = "isaacsim.oceansim.modules.colorpicker_python"
 
 [[python.module]]
-name = "isaacsim.oceansim.modules.ImagingSonar_python"
-
-[[python.module]]
-name = "isaacsim.oceansim.modules.nav_python"
-
-[[python.module]]
-name = "isaacsim.oceansim.modules.nav_infer_python"
-
-[[python.module]]
 name = "isaacsim.oceansim.modules.trajRecorder_python"
 
 [[python.module]]
