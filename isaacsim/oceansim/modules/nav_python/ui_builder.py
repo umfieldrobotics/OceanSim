@@ -9,19 +9,26 @@ import omni.kit.commands
 import carb
 
 # Isaac sim import
+from isaacsim.core.prims import SingleRigidPrim, SingleGeometryPrim
+from isaacsim.core.utils.rotations import euler_angles_to_quat
+from isaacsim.sensors.camera import Camera
 from isaacsim.core.api.objects import DynamicCuboid, DynamicSphere
 from isaacsim.core.utils.prims import get_prim_at_path
 from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage, open_stage
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, setup_ui_headers
+from isaacsim.gui.components import CollapsableFrame, Frame, StateButton, get_style, setup_ui_headers, StringField
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 import isaacsim.core.utils.prims as prims_utils
 import os
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
 from isaacsim.core.utils.extensions import get_extension_path
+from isaacsim.oceansim.utils.assets_utils import get_oceansim_assets_path
+import isaacsim.core.utils.viewports as viewports_utils
+from omni.kit.viewport.utility import get_active_viewport
 
-# Custom import
-from .scenario import OceanScenario
+
+from .scenario import NavScenario
+
 
 class UIBuilder:
     def __init__(self):
@@ -143,24 +150,21 @@ class UIBuilder:
 
 
 
+
+
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
     ######################################################################################
 
     def _on_init(self):
-        self.ocean_surface_prim = None
-        self._scenario = OceanScenario()
+        # Custom import
+        self._scenario = NavScenario()
+        # Robot parameters
+        self._rob_mass = 5.0 # kg
+        self._rob_angular_damping = 10.0
+        self._rob_linear_damping = 10.0
 
-    def _add_light_to_stage(self):
-        """
-        A new stage does not have a light by default.  This function creates a spherical light
-        """
-        sphereLight = UsdLux.SphereLight.Define(get_current_stage(), Sdf.Path("/World/SphereLight"))
-        sphereLight.CreateRadiusAttr(0.2)
-        sphereLight.CreateIntensityAttr(100000)
-        sphereLight.GetPrim().CreateAttribute("light:enableCaustics", Sdf.ValueTypeNames.Bool).Set(True)
-        # lightXform = UsdGeom.Xform(sphereLight.GetPrim())
-        sphereLight.AddTranslateOp().Set(Gf.Vec3d(0,0,5))
+
         
 
     
@@ -178,61 +182,39 @@ class UIBuilder:
         """
 
         create_new_stage()
-        self._add_light_to_stage()
+        add_reference_to_stage(prim_path="/Env", usd_path="https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5/Isaac/Environments/Simple_Warehouse/full_warehouse.usd")
+    
 
-        # test_scene_usd_path =  self._extension_path + "/demo/demo_caustics.usd"
-        test_scene_usd_path = "/home/haoyu/Desktop/StereoAssets/rocky_2/photoscanned_patch_of_ground.usd"
-        world_prim_path = "/World"
-        # add_reference_to_stage(usd_path=test_scene_usd_path,
-        #                        prim_path= world_prim_path)
+        robot_prim_path = "/rob"
+        robot_usd_path = get_oceansim_assets_path() + "/Bluerov/BROV_low.usd"
+        self._rob = add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
+        # Toggle rigid body and collider preset for robot, and set zero gravity to mimic underwater environment
+        rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(robot_prim_path))
+        rob_rigidBody_API.CreateDisableGravityAttr(True)
+        # Set damping of the robot
+        rob_rigidBody_API.GetLinearDampingAttr().Set(self._rob_linear_damping)
+        rob_rigidBody_API.GetAngularDampingAttr().Set(self._rob_angular_damping)
+        # Set the mass for the robot to suppress a warning from inertia autocomputation
+        yaw = np.random.uniform(low = -180, high = 180)
+        rob_collider_prim = SingleGeometryPrim(prim_path=robot_prim_path,
+                                               position=[-8.0, 10.0, 0.25],
+                                               orientation=euler_angles_to_quat(np.array([0.0, 0.0, yaw]), degrees=True, extrinsic=False),
+                                               collision=True)
+        rob_collider_prim.set_collision_approximation('boundingCube')
+        SingleRigidPrim(prim_path=robot_prim_path,
+                        mass=self._rob_mass,
+                        )
+        camera_prim_path = robot_prim_path + "/cam"
+        self._cam = Camera(prim_path=camera_prim_path,
+                           translation=[0.2, 0.0, 0.15],
+                           resolution=(96, 96), # default nomad image size
+                           )
+        self._cam.set_clipping_range(near_distance=0.01)
+        self._cam.set_projection_type("fisheyeKannalaBrandtK3")
 
-        stage = get_current_stage()
-
-        defaultPrimPath = '/World'
-        x_span = [-25, 25]
-        y_span = [-25, 25]
-        num_instances = [13, 13]
-        x_pos = np.linspace(x_span[0], y_span[1], num_instances[0])
-        y_pos = np.linspace(y_span[0], y_span[1], num_instances[1])
-        z = 1.0
-        xs, ys = np.meshgrid(x_pos, y_pos)
-        geomPointInstancerPath = defaultPrimPath + "/pointinstancer"
-        mMeshIndices = []
-        mPositions = []
-        mOrientations = []
-        mLinearVelocities = []
-        mAngularVelocities = []
-        for i in range(num_instances[1]):
-            for j in range(num_instances[0]):
-                mMeshIndices.append(0)
-                mPositions.append(Gf.Vec3f(xs[i][j], ys[i][j], z))
-                mOrientations.append(Gf.Quath(1.0, 0.0, 0.0, 0.0))
-                mLinearVelocities.append(Gf.Vec3f(0.0))
-                mAngularVelocities.append(Gf.Vec3f(0.0))
-        
-        # Box instanced
-        MeshActorPath = geomPointInstancerPath + "/MeshActor"
-        add_reference_to_stage(usd_path=test_scene_usd_path,
-                               prim_path=MeshActorPath)
-        # from isaacsim.core.prims import SingleGeometryPrim
-        # SingleGeometryPrim(prim_path=MeshActorPath, collision=True)
-        
-
-
-
-        # Create point instancer
-        shapeList = UsdGeom.PointInstancer.Define(stage, Sdf.Path(geomPointInstancerPath))
-        meshList = shapeList.GetPrototypesRel()
-        # add mesh reference to point instancer
-        meshList.AddTarget(Sdf.Path(MeshActorPath))
-
-        shapeList.GetProtoIndicesAttr().Set(mMeshIndices)
-        shapeList.GetPositionsAttr().Set(mPositions)
-        shapeList.GetOrientationsAttr().Set(mOrientations)
-        shapeList.GetVelocitiesAttr().Set(mLinearVelocities)
-        shapeList.GetAngularVelocitiesAttr().Set(mAngularVelocities)
-
-
+        viewport_api = get_active_viewport()
+        viewport_api.set_active_camera(camera_path=camera_prim_path)
+        # set_camera_view(eye=np.array([-10, 12, 1]), target=rob_collider_prim.get_world_pose()[0])
 
 
     def _setup_scenario(self):
@@ -250,7 +232,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario()
+        self._scenario.setup_scenario(self._rob, self._cam)
 
     def _on_post_reset_btn(self):
         """
@@ -303,6 +285,7 @@ class UIBuilder:
         this example prettier, but if curious, the user should observe what happens when this line is removed.
         """
         self._timeline.pause()
+        self._scenario.save_log()
 
     def _reset_extension(self):
         """This is called when the user opens a new stage from self.on_stage_event().

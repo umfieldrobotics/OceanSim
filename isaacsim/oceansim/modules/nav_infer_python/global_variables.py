@@ -7,6 +7,6 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
-EXTENSION_TITLE = "Ocean_test"
-EXTENSION_DESCRIPTION = 'Ocean_test'
-EXTENSION_LINK = "Ocean_test"
+EXTENSION_TITLE = "Nav_infer"
+EXTENSION_DESCRIPTION = 'Nav_infer'
+EXTENSION_LINK = "Nav_infer"
