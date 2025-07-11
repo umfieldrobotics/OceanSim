@@ -19,7 +19,7 @@ from isaacsim.gui.property.array_widget import CustomMultiIntField
 # Custom import
 from .scenario import Colorpicker_Scenario
 from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
-from isaacsim.oceansim.caustics import WaterSurface
+from isaacsim.oceansim.watersurface import WaterSurface
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
 import isaacsim.core.utils.prims as prims_utils
 
@@ -280,7 +280,7 @@ class UIBuilder:
             print('Path is not valid or scene can not be opened. Default to current stage')
         
         if self._water_surface:
-            from isaacsim.oceansim.caustics import WaterSurface
+            from isaacsim.oceansim.watersurface import WaterSurface
             self._water = WaterSurface(prim_path="/World/Water",
                                        size=[self.size_x_field.get_value(), self.size_y_field.get_value()],
                                         dim=[self.dim_x_field.get_value(), self.dim_y_field.get_value()],

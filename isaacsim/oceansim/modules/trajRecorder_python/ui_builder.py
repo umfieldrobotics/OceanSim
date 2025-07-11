@@ -19,7 +19,7 @@ from isaacsim.gui.property.array_widget import CustomMultiIntField
 # Custom import
 from .scenario import Colorpicker_Scenario
 from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
-from isaacsim.oceansim.caustics import WaterSurface
+from isaacsim.oceansim.watersurface import WaterSurface
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
 import isaacsim.core.utils.prims as prims_utils
 

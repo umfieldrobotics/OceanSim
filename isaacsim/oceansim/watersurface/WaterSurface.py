@@ -85,7 +85,7 @@ class WaterSurface(SingleGeometryPrim):
         visible: Optional[bool] = True,
         visual_material: Optional[VisualMaterial] = None,
         enable_caustics: bool = False,
-        cast_shadows: bool = False
+        cast_shadows: bool = True
     ) -> None :
         self._device = str(wp.get_cuda_device())
         self._caustics_enabled = False
