@@ -10,17 +10,21 @@ import yaml
 from isaacsim import SimulationApp
 import carb
 
-
 # Default config dict, can be updated/replaced using json/yaml config files ('--config' cli argument)
 config = {
     "launch_config": {
         "renderer": "RaytracedLighting",
         "headless": False,
-        "extra_args": ["--/persistent/renderer/rtpt/enabled=True"]
+        "extra_args": [
+            "--/persistent/renderer/rtpt/enabled=True",              # This enables RTX realtime preview renderer
+            "--/log/level=error",
+            ]
     },
+    "num_cameras" : 1,
+    "camera_collider_radius": 0.2,
     "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
     "rt_subframes": 4,
-    "num_frames": 2,
+    "num_frames": 10,
     # "distractors": "warehouse",
     "simulation_duration_between_captures": 0.05,
     "resolution": (1920, 1080),
@@ -33,7 +37,9 @@ config = {
     "writer_type": "UWCam_KittiWriter",
     "writer_kwargs": {
         "output_dir": "/home/haoyu/Desktop/viz/",
-        "colorize_instance_segmentation": True
+        "colorize_instance_segmentation": True,
+        "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml"
+
     },
     "obj_workspace": {
         "min" : (-1.5, -2.3, 1.25),
@@ -45,7 +51,6 @@ config = {
     },
     # "Renderer": "Real-Time 2.0 (Preview)",
     # "UW_param": [0.0, 0.31, 0.24, 0.05, 0.05, 0.2, 0.05, 0.05, 0.05 ]
-    "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth_0.yaml"
 }
 
 
@@ -242,7 +247,8 @@ class UWCam_KittiWriter(Writer):
                     carb.log_error(f"Fallback to default: {self._UW_param}")
         else:
             self._UW_param = UW_param
-
+            print(f"Using render param {self._UW_param}")
+        
         self._device = str(wp.get_preferred_device())
         self.colorize_instance_segmentation = colorize_instance_segmentation
 
@@ -322,8 +328,8 @@ class UWCam_KittiWriter(Writer):
                     data[rgb_annotator],
                     data[dist_to_cam_annotator],
                     wp.vec3f(*UW_param[0:3]),
-                    wp.vec3f(*UW_param[6:9]),
-                    wp.vec3f(*UW_param[3:6])
+                    wp.vec3f(*UW_param[3:6]),
+                    wp.vec3f(*UW_param[6:9])
                 ],
                 outputs=[
                     uw_image
@@ -617,23 +623,47 @@ physx_scene.GetTimeStepsPerSecondAttr().Set(60)
 rep.orchestrator.set_capture_on_play(False)
 
 # Create the camera prims and their properties
-cam = rep.create.camera()
-cam_prim = prims_utils.get_prim_at_path('/Replicator/Camera_Xform/Camera')
+cameras = []
+num_cameras = config.get("num_cameras", 1)
 camera_properties_kwargs = config.get("camera_properties_kwargs", {})
-# TODO bug here, cam_prim is actaully its xform, not the actual camera
-for key, value in camera_properties_kwargs.items():
-    if cam_prim.HasAttribute(key):
-        cam_prim.GetAttribute(key).Set(value)
-    else:
-        print(f"Unknown camera attribute with {key}:{value}")
+for i in range(num_cameras):
+    # Create camera and add its properties (focal length, focus distance, f-stop, clipping range, etc.)
+    cam_prim = stage.DefinePrim(f"/World/Cameras/cam_{i}", "Camera")
+    for key, value in camera_properties_kwargs.items():
+        if cam_prim.HasAttribute(key):
+            cam_prim.GetAttribute(key).Set(value)
+        else:
+            print(f"Unknown camera attribute with {key}:{value}")
+    cameras.append(cam_prim)
 
+# Add collision spheres (disabled by default) to cameras to avoid objects overlaping with the camera view
+# camera_colliders = []
+# camera_collider_radius = config.get("camera_collider_radius", 0)
+# if camera_collider_radius > 0:
+#     for cam in cameras:
+#         cam_path = cam.GetPath()
+#         cam_collider = stage.DefinePrim(f"{cam_path}/CollisionSphere", "Sphere")
+#         cam_collider.GetAttribute("radius").Set(camera_collider_radius)
+#         add_colliders(cam_collider)
+#         collision_api = UsdPhysics.CollisionAPI(cam_collider)
+#         collision_api.GetCollisionEnabledAttr().Set(False)
+#         UsdGeom.Imageable(cam_collider).MakeInvisible()
+#         camera_colliders.append(cam_collider)
+
+# Wait an app update to ensure the prim changes are applied
+simulation_app.update()
 
 # Wait an app update to ensure the prim changes are applied
 simulation_app.update()
 
 # Create render products using the cameras
 resolution = config.get("resolution", (640, 480))
-rp = rep.create.render_product(cam_prim.GetPath(), resolution)
+for cam in cameras:
+    rp = rep.create.render_product(cam.GetPath(), resolution)
+
+# Create a camera replicator group 
+cams_rep = [rep.get.camera(cam.GetPath().pathString) for cam in cameras]
+camera_groups = rep.create.group(cams_rep)
 # Create the writer and attach the render products
 writer_type = config.get("writer_type", "BasicWriter")
 writer_kwargs = config.get("writer_kwargs", {})
@@ -644,6 +674,7 @@ if out_dir := writer_kwargs.get("output_dir"):
         writer_kwargs["output_dir"] = out_dir
     print(f"[SDG] Writing data to: {out_dir}")
 
+# Since there is only one camera, attach one writer to the only rp for now.
 if writer_type is not None:
     writer = rep.writers.get(writer_type)
     writer.initialize(**writer_kwargs)
@@ -671,7 +702,7 @@ for _ in range(5):
     simulation_app.update()
 
 # Set up objects in the scene
-object_group = add_distractors()
+object_group, objs_path = add_objects(physics=True)
 # distractor_group = add_distractors()
 
 # Set the timeline parameters (start, end, no looping) and start the timeline
@@ -699,16 +730,24 @@ for i in range(num_frames):
         rep.modify.pose(
             position=rep.distribution.uniform(obj_ws.get("min"), obj_ws.get("max")),
             rotation=rep.distribution.uniform((0, 0, 0), (0, 0, 360)),
-            scale=rep.distribution.uniform((0.01, 0.01, 0.01), (0.1, 0.1, 0.1)),
+            scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
         )
-
+    # Run few seconds for objects to fall on the ground
+    run_simulation_loop(duration=3, simulation_app=simulation_app)
     # Move the camera around in the workspace, focus on one of the object in the scene
-    with cam:
+    with camera_groups:
         rep.modify.pose(
             position=rep.distribution.uniform(cam_ws.get("min"), cam_ws.get("max")),
             look_at=rep.distribution.choice(object_group),
+
+            
         )
-        
+    
+
+    # if camera_colliders:
+    #     simulate_camera_collision(simulation_app, camera_colliders,  num_frames=4)
+
+    # capture_pathtracing(spp=512)
     capture_raytracing2(rt_subframes=rt_subframes)
     # Capture the current frame
     print(f"[SDG] Capturing frame {i}/{num_frames}, at simulation time: {timeline.get_current_time():.2f}")
