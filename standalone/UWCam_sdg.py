@@ -24,7 +24,7 @@ config = {
     "camera_collider_radius": 0.2,
     "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
     "rt_subframes": 4,
-    "num_frames": 10,
+    "num_frames": 2,
     # "distractors": "warehouse",
     "simulation_duration_between_captures": 0.05,
     "resolution": (1920, 1080),
@@ -200,7 +200,7 @@ class UWCam_KittiWriter(Writer):
         s3_region: str = None,
         s3_endpoint: str = None,
         semantic_types: List[str] = None,
-        omit_semantic_type: bool = False,
+        omit_semantic_type: bool = True,
         bbox_height_threshold: int = 25,
         partly_occluded_threshold: float = 0.5,
         fully_visible_threshold: float = 0.95,
@@ -210,7 +210,8 @@ class UWCam_KittiWriter(Writer):
         colorize_instance_segmentation: bool = False,
         semantic_filter_predicate: str = None,
         use_kitti_dir_names: bool = False,
-        UW_param:Union[list, str] = [0.0, 0.31, 0.24, 0.05, 0.05, 0.2, 0.05, 0.05, 0.05 ]
+        UW_param:Union[list, str] = [0.0, 0.31, 0.24, 0.05, 0.05, 0.2, 0.05, 0.05, 0.05 ],
+        cuboid_keypoints_order: list = ["Center", "LDB", "LDF", "LUB", "LUF", "RDB", "RDF", "RUB", "RUF"],
     ):
         self.version = __version__
         self._frame_id = 0
@@ -231,6 +232,7 @@ class UWCam_KittiWriter(Writer):
         self._fully_visible_threshold = fully_visible_threshold
         self._render_product_idxs = renderproduct_idxs
         self._use_kitti_dir_names = use_kitti_dir_names
+        self._cuboid_keypoints_order = cuboid_keypoints_order
         if isinstance(UW_param, str):
             with open(UW_param, 'r') as file:
                 try:
@@ -293,6 +295,7 @@ class UWCam_KittiWriter(Writer):
             AnnotatorRegistry.get_annotator(
                 "distance_to_camera", device=self._device
             ),
+            "bounding_box_3d_fast", 
             "camera_params",
         ]
 
@@ -344,6 +347,8 @@ class UWCam_KittiWriter(Writer):
         render_product_annotator: str,
         bbox_2d_tight_annotator: str,
         bbox_2d_loose_annotator: str,
+        bbox_3d_annotator: str,
+        camera_param_annotator: str,
     ):
         r"""
         Saves the labels for the object detection data in Kitti format.
@@ -368,16 +373,29 @@ class UWCam_KittiWriter(Writer):
 
         bbox_tight = data[bbox_2d_tight_annotator]["data"]
         bbox_loose = data[bbox_2d_loose_annotator]["data"]
+        bbox_3d = data[bbox_3d_annotator]["data"]
 
         bbox_tight_bbox_ids = data[bbox_2d_tight_annotator]["info"]["bboxIds"]
         bbox_loose_bbox_ids = data[bbox_2d_loose_annotator]["info"]["bboxIds"]
+        bbox_3d_bbox_ids = data[bbox_3d_annotator]["info"]["bboxIds"]
+        
+        tight_id_to_bbox = {bbox_tight_id: bbox_tight_data for bbox_tight_id, bbox_tight_data in zip(bbox_tight_bbox_ids, bbox_tight)}
+        loose_id_to_bbox = {bbox_loose_id: bbox_loose_data for bbox_loose_id, bbox_loose_data in zip(bbox_loose_bbox_ids, bbox_loose)}
+        bbox3d_id_to_bbox = {bbox_3d_id: bbox_3d_data for bbox_3d_id, bbox_3d_data in zip(bbox_3d_bbox_ids, bbox_3d)}
 
-        # For box in tight, find the corresponding index of box in loose
-        bbox_loose_indices = np.where(np.isin(bbox_loose_bbox_ids, bbox_tight_bbox_ids))[0]
-        selected_bbox_loose = bbox_loose[bbox_loose_indices]
+        objs_data = self._process_bounding_boxes_3d(data[bbox_3d_annotator], data[camera_param_annotator])
 
-        for box_tight, box_loose in zip(bbox_tight, selected_bbox_loose):
+        # For box in tight and bbox_3d, find the corresponding index of box in loose
+        shared_ids = np.intersect1d(
+                bbox_tight_bbox_ids,
+                np.intersect1d(bbox_loose_bbox_ids, bbox_3d_bbox_ids)
+                )
 
+
+        for id in shared_ids:
+            box_tight = tight_id_to_bbox[id]
+            box_loose = loose_id_to_bbox[id]
+            
             label = []
 
             # Skip boxes shorter than threshold pixels in height
@@ -394,6 +412,7 @@ class UWCam_KittiWriter(Writer):
                 occlusion_estimation = 1
             else:
                 occlusion_estimation = 2
+
 
             # Check if bounding boxes are in the viewport
             if (
@@ -413,18 +432,24 @@ class UWCam_KittiWriter(Writer):
             if self._omit_semantic_type:
                 # omit semantic type
                 semantic_label = semantic_label.get("class", "Unlabelled")
+            
+            # Only compute object's 3d information after the above test
+            bbox3d_info = self._process_bounding_box_3d_single(bbox3d_id_to_bbox[id], data[camera_param_annotator])
 
             # Adding Kitti Data,  NOTE: Only class and 2d bbox coordinates are filled in
             label.append(semantic_label)  # semantic
-            label.append(f"{0.00:.2f}")  # truncated (not supported)
-            label.append(occlusion_estimation)  # occluded (estimation)
-            label.append(f"{0.00:.2f}")  # alpha (not supported)
+            label.append(f"{bbox3d_info['truncation_ratio']:.2f}")  # truncated
+            label.append(occlusion_estimation)  # occluded (estimation, NOT ACCURATE!)
+            label.append(f"{bbox3d_info['alpha']:.2f}")  # alpha 
             label.append(box_tight["x_min"])  # x min
             label.append(box_tight["y_min"])  # y min
             label.append(box_tight["x_max"])  # x max
             label.append(box_tight["y_max"])  # y max
-            for _ in range(7):
-                label.append(f"{0.00:.2f}")  # dimensions, location, rotation_y, score
+            # dimensions in world frame: x_size, y_size, z_size
+            label.extend([f"{v:.3f}" for v in bbox3d_info["size"]]) 
+            # location in camera frame: x, y, z
+            label.extend([f"{v:.3f}" for v in bbox3d_info["location_camera_frame"]])
+            label.append(f"{bbox3d_info['rotation_y']:.2f}")  # rotation_y
 
             label_set.append(label)
 
@@ -436,6 +461,252 @@ class UWCam_KittiWriter(Writer):
         writer.writerows(label_set)
 
         self._backend.schedule(self._backend.write_blob, data=bytes(buf.getvalue(), "utf-8"), path=kitti_filepath)
+    
+    
+    def _process_bounding_box_3d_single(self, bounding_box_3d_data: dict, camera_params: dict) ->dict :
+            bbox = bounding_box_3d_data
+            obj = {}
+            # `occlusionRatio` represents (visible pixels / total pixels) where `0.0` is fully visible and `1.0` is fully occluded
+            # NOTE: `obj_visibility` is inverted to match the format where `0.0` is fully occluded and `1.0`` is fully visible
+            obj_visibility = 1.0 - abs(float(bbox["occlusionRatio"]))
+
+
+            obj["visibility"] = round(obj_visibility, 3)
+
+            # Local space to to world transform (row-major)
+            local_to_world_tf = bbox["transform"]
+
+            obj["local_to_world_transform"] = local_to_world_tf.tolist()
+            # Extract world frame location (last row) and rotation matrix (3x3) from the row-major transform matrix
+            location_world_frame = local_to_world_tf[3, :3]
+            obj["location_world_frame"] = location_world_frame.tolist()
+            rotation_matrix_world_frame = local_to_world_tf[:3, :3]
+            obj["rotation_matrix_world_frame"] = rotation_matrix_world_frame.tolist()
+
+            # Get the world frame quaternion using Gf.Transform (row-major)
+            local_to_world_tf_gf = Gf.Transform()
+            local_to_world_tf_gf.SetMatrix(Gf.Matrix4d(local_to_world_tf.tolist()))
+            quat_world_frame_gf = local_to_world_tf_gf.GetRotation().GetQuat()
+            obj["quat_wxyz_world_frame"] = [quat_world_frame_gf.GetReal()] + list(
+                quat_world_frame_gf.GetImaginary()
+            )
+
+            # World to camera transform (row-major) (transform a point from world coordinate to camera coordinate)
+            world_to_camera_tf = camera_params["cameraViewTransform"].reshape(4, 4)
+            # Object world space to camera frame transform (row-major matrix multiplication)
+            obj_to_camera_tf = world_to_camera_tf @ local_to_world_tf
+            # Extract camera frame location (last row) and rotation matrix (3x3) from the row-major transform matrix
+            location_camera_frame = obj_to_camera_tf[3, :3]
+            obj["location_camera_frame"] = location_camera_frame.tolist()
+
+            rotation_matrix_camera_frame = obj_to_camera_tf[:3, :3]
+            obj["rotation_matrix_camera_frame"] = rotation_matrix_camera_frame.tolist()
+            # Get the camera frame quaternion using Gf.Transform (row-major)
+            obj_to_camera_tf_gf = Gf.Transform()
+            obj_to_camera_tf_gf.SetMatrix(Gf.Matrix4d(obj_to_camera_tf.tolist()))
+            quat_camera_frame_gf = obj_to_camera_tf_gf.GetRotation().GetQuat()
+            obj["quat_wxyz_camera_frame"] = [quat_camera_frame_gf.GetReal()] + list(
+                quat_camera_frame_gf.GetImaginary()
+            )
+            
+            # Compute the rotation_y and alpha for Kitti dataset
+            # rotation_y = arctan2(-sin(ry), cos(ry))
+            rotation_y = np.arctan2(rotation_matrix_camera_frame[2, 0], 
+                                           rotation_matrix_camera_frame[0, 0])
+            obj["rotation_y"] = float(rotation_y)
+            # α = rotation_y−arctan2(x,z)
+            alpha = rotation_y - np.arctan2(location_camera_frame[0], location_camera_frame[2])
+            # Normalize to [-π, π]
+            alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
+            obj["alpha"] = float(alpha)
+
+            # Size of the object before scale (NOTE: scale is not applied yet to objects in local frame)
+            min_local = np.array([bbox["x_min"], bbox["y_min"], bbox["z_min"], 1])
+            max_local = np.array([bbox["x_max"], bbox["y_max"], bbox["z_max"], 1])
+            size_local = np.abs(max_local - min_local)[:3].tolist()
+            center_local = min_local + (max_local - min_local) / 2
+
+            # Cuboid keypoints in local frame
+            keypoints_local = {
+                "Center": center_local,
+                "LDB": np.array([bbox["x_min"], bbox["y_min"], bbox["z_min"], 1]),  # Left-Down-Back
+                "LDF": np.array([bbox["x_min"], bbox["y_min"], bbox["z_max"], 1]),  # Left-Down-Front
+                "LUB": np.array([bbox["x_min"], bbox["y_max"], bbox["z_min"], 1]),  # Left-Up-Back
+                "LUF": np.array([bbox["x_min"], bbox["y_max"], bbox["z_max"], 1]),  # Left-Up-Front
+                "RDB": np.array([bbox["x_max"], bbox["y_min"], bbox["z_min"], 1]),  # Right-Down-Back
+                "RDF": np.array([bbox["x_max"], bbox["y_min"], bbox["z_max"], 1]),  # Right-Down-Front
+                "RUB": np.array([bbox["x_max"], bbox["y_max"], bbox["z_min"], 1]),  # Right-Up-Back
+                "RUF": np.array([bbox["x_max"], bbox["y_max"], bbox["z_max"], 1]),  # Right-Up-Front
+            }
+
+            # Calculate the (scaled) size of the object from its world bounds (NOTE: scale is applied through the transform)
+            min_world = min_local @ local_to_world_tf
+            max_world = max_local @ local_to_world_tf
+            size_world = np.abs(max_world - min_world)[:3].tolist()
+
+            obj["size"] = size_world
+
+
+            # Transform the cuboid keypoints from local to world frame in the given order
+            keypoints_world_ordered = [keypoints_local[k] @ local_to_world_tf for k in self._cuboid_keypoints_order]
+            obj["cuboid_keypoints_world_frame"] = [point[:3].tolist() for point in keypoints_world_ordered]
+            # Transform the cuboid keypoints from world to camera frame
+            keypoints_camera_ordered = [point @ world_to_camera_tf for point in keypoints_world_ordered]
+            obj["cuboid_keypoints_camera_frame"] = [point[:3].tolist() for point in keypoints_camera_ordered]
+
+            # Get the camera projection matrix and screen size to project the cuboid keypoints to screen space
+            cam_projection_tf = camera_params["cameraProjection"].reshape((4, 4))
+            screen_size = camera_params["renderProductResolution"]
+            keypoints_projected_ordered = [
+                self._project_camera_point_to_screen(point, cam_projection_tf, screen_size)
+                for point in keypoints_camera_ordered
+            ]
+            obj["cuboid_keypoints_projected"] = keypoints_projected_ordered
+
+            obj["truncation_ratio"] = calculate_truncation_ratio_simple(
+                keypoints_projected_ordered, screen_size[0], screen_size[1]
+            )
+
+            return obj
+
+    
+    def _process_bounding_boxes_3d(self, bounding_box_3d: dict, camera_params: dict) -> list:
+        # Map the ids to class names from the bbox annotator "idToLabels" data
+        # ('idToLabels': {0: {'class': 'cube'}, 1: {'class': 'sphere'}} -> {0: 'cube', 1: 'sphere'})
+        id_to_labels = {k: v["class"] for k, v in bounding_box_3d["info"]["idToLabels"].items()}
+
+        # if self._write_debug_images:
+        #     self._debug_frame_data["world_frame_transforms"] = []
+        #     self._debug_frame_data["projected_keypoints"] = []
+        #     self._debug_frame_data["size_local"] = []
+        #     self._debug_frame_data["center_local"] = []
+        # Iterate the bounding box data and extract the object informations
+        objs = []
+        for i, bbox in enumerate(bounding_box_3d["data"]):
+            obj = {}
+            # `occlusionRatio` represents (visible pixels / total pixels) where `0.0` is fully visible and `1.0` is fully occluded
+            # NOTE: `obj_visibility` is inverted to match the format where `0.0` is fully occluded and `1.0`` is fully visible
+            obj_visibility = 1.0 - abs(float(bbox["occlusionRatio"]))
+
+            # Early exit if visibility is below the given threshold
+            # if obj_visibility <= self._visibility_threshold:
+            #     continue
+
+
+            obj["label"] = id_to_labels[bbox["semanticId"]]
+            obj["prim_path"] = bounding_box_3d["info"]["primPaths"][i]
+            obj["visibility"] = round(obj_visibility, 3)
+
+            # Local space to to world transform (row-major)
+            local_to_world_tf = bbox["transform"]
+
+            obj["local_to_world_transform"] = local_to_world_tf.tolist()
+            # Extract world frame location (last row) and rotation matrix (3x3) from the row-major transform matrix
+            location_world_frame = local_to_world_tf[3, :3]
+            obj["location_world_frame"] = location_world_frame.tolist()
+            rotation_matrix_world_frame = local_to_world_tf[:3, :3]
+            obj["rotation_matrix_world_frame"] = rotation_matrix_world_frame.tolist()
+
+            # Get the world frame quaternion using Gf.Transform (row-major)
+            local_to_world_tf_gf = Gf.Transform()
+            local_to_world_tf_gf.SetMatrix(Gf.Matrix4d(local_to_world_tf.tolist()))
+            quat_world_frame_gf = local_to_world_tf_gf.GetRotation().GetQuat()
+            obj["quat_wxyz_world_frame"] = [quat_world_frame_gf.GetReal()] + list(
+                quat_world_frame_gf.GetImaginary()
+            )
+            # if self._write_debug_images:
+            #     self._debug_frame_data["world_frame_transforms"].append(local_to_world_tf)
+
+            # World to camera transform (row-major) (transform a point from world coordinate to camera coordinate)
+            world_to_camera_tf = camera_params["cameraViewTransform"].reshape(4, 4)
+            # Object world space to camera frame transform (row-major matrix multiplication)
+            obj_to_camera_tf = world_to_camera_tf @ local_to_world_tf
+            # Extract camera frame location (last row) and rotation matrix (3x3) from the row-major transform matrix
+            location_camera_frame = obj_to_camera_tf[3, :3]
+            obj["location_camera_frame"] = location_camera_frame.tolist()
+
+            rotation_matrix_camera_frame = obj_to_camera_tf[:3, :3]
+            obj["rotation_matrix_camera_frame"] = rotation_matrix_camera_frame.tolist()
+            # Get the camera frame quaternion using Gf.Transform (row-major)
+            obj_to_camera_tf_gf = Gf.Transform()
+            obj_to_camera_tf_gf.SetMatrix(Gf.Matrix4d(obj_to_camera_tf.tolist()))
+            quat_camera_frame_gf = obj_to_camera_tf_gf.GetRotation().GetQuat()
+            obj["quat_wxyz_camera_frame"] = [quat_camera_frame_gf.GetReal()] + list(
+                quat_camera_frame_gf.GetImaginary()
+            )
+
+            # Size of the object before scale (NOTE: scale is not applied yet to objects in local frame)
+            min_local = np.array([bbox["x_min"], bbox["y_min"], bbox["z_min"], 1])
+            max_local = np.array([bbox["x_max"], bbox["y_max"], bbox["z_max"], 1])
+            size_local = np.abs(max_local - min_local)[:3].tolist()
+            center_local = min_local + (max_local - min_local) / 2
+            # if self._write_debug_images:
+            #     self._debug_frame_data["size_local"].append(size_local)
+            #     self._debug_frame_data["center_local"].append(center_local[:3].tolist())
+
+            # Cuboid keypoints in local frame
+            keypoints_local = {
+                "Center": center_local,
+                "LDB": np.array([bbox["x_min"], bbox["y_min"], bbox["z_min"], 1]),  # Left-Down-Back
+                "LDF": np.array([bbox["x_min"], bbox["y_min"], bbox["z_max"], 1]),  # Left-Down-Front
+                "LUB": np.array([bbox["x_min"], bbox["y_max"], bbox["z_min"], 1]),  # Left-Up-Back
+                "LUF": np.array([bbox["x_min"], bbox["y_max"], bbox["z_max"], 1]),  # Left-Up-Front
+                "RDB": np.array([bbox["x_max"], bbox["y_min"], bbox["z_min"], 1]),  # Right-Down-Back
+                "RDF": np.array([bbox["x_max"], bbox["y_min"], bbox["z_max"], 1]),  # Right-Down-Front
+                "RUB": np.array([bbox["x_max"], bbox["y_max"], bbox["z_min"], 1]),  # Right-Up-Back
+                "RUF": np.array([bbox["x_max"], bbox["y_max"], bbox["z_max"], 1]),  # Right-Up-Front
+            }
+
+            # Calculate the (scaled) size of the object from its world bounds (NOTE: scale is applied through the transform)
+            min_world = min_local @ local_to_world_tf
+            max_world = max_local @ local_to_world_tf
+            size_world = np.abs(max_world - min_world)[:3].tolist()
+
+            obj["size"] = size_world
+
+
+            # Transform the cuboid keypoints from local to world frame in the given order
+            keypoints_world_ordered = [keypoints_local[k] @ local_to_world_tf for k in self._cuboid_keypoints_order]
+            obj["cuboid_keypoints_world_frame"] = [point[:3].tolist() for point in keypoints_world_ordered]
+            # Transform the cuboid keypoints from world to camera frame
+            keypoints_camera_ordered = [point @ world_to_camera_tf for point in keypoints_world_ordered]
+            obj["cuboid_keypoints_camera_frame"] = [point[:3].tolist() for point in keypoints_camera_ordered]
+
+            # Get the camera projection matrix and screen size to project the cuboid keypoints to screen space
+            cam_projection_tf = camera_params["cameraProjection"].reshape((4, 4))
+            screen_size = camera_params["renderProductResolution"]
+            keypoints_projected_ordered = [
+                self._project_camera_point_to_screen(point, cam_projection_tf, screen_size)
+                for point in keypoints_camera_ordered
+            ]
+            obj["cuboid_keypoints_projected"] = keypoints_projected_ordered
+
+            # if self._write_debug_images:
+            #     self._debug_frame_data["projected_keypoints"].append(keypoints_projected_ordered)
+
+            obj["truncation_ratio"] = calculate_truncation_ratio_simple(
+                keypoints_projected_ordered, screen_size[0], screen_size[1]
+            )
+
+            objs.append(obj)
+
+        return objs
+    
+    
+    
+    # Project a 3D point from camera coordinates to 2D screen coordinates
+    def _project_camera_point_to_screen(self, camera_point, projection_matrix, screen_size):
+        # Apply the projection matrix to project to screen coordinates
+        point_screen = camera_point @ projection_matrix
+
+        # Normalize to NDC (Normalized Device Coordinates) by dividing x, y, z, by w: (x, y, z, w) -> (x/w, y/w, z/w, 1)
+        point_screen_normalized = point_screen / point_screen[3]
+
+        # Map NDC to screen coordinates. Adjust x and y for screen dimensions, flipping y to match screen's coordinate system.
+        x = (point_screen_normalized[0] + 1) * screen_size[0] / 2
+        y = (1 - point_screen_normalized[1]) * screen_size[1] / 2
+
+        return round(x), round(y)
 
     def _procure_labels_from_json(self, json_path):
         with open(json_path, "r") as f:
@@ -541,7 +812,13 @@ class UWCam_KittiWriter(Writer):
             self._write_rgb(data, sub_dir, "rgb", "distance_to_camera", self._UW_param)
             self._write_segmentation(data, sub_dir, "semantic_segmentation", "instance_segmentation_fast")
             self._write_object_detection(
-                data, sub_dir, render_products[0], "bounding_box_2d_tight_fast", "bounding_box_2d_loose_fast"
+                data, 
+                sub_dir, 
+                render_products[0], 
+                "bounding_box_2d_tight_fast", 
+                "bounding_box_2d_loose_fast", 
+                "bounding_box_3d_fast",
+                "camera_params"
             )
             self._write_distance_to_camera(data, sub_dir, "distance_to_camera")
             self._write_camera_param(data, sub_dir, "camera_params")
@@ -702,7 +979,7 @@ for _ in range(5):
     simulation_app.update()
 
 # Set up objects in the scene
-object_group, objs_path = add_objects(physics=True)
+object_group, objs_path = add_objects(physics=False)
 # distractor_group = add_distractors()
 
 # Set the timeline parameters (start, end, no looping) and start the timeline

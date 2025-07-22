@@ -62,6 +62,41 @@ def prefix_with_isaac_asset_server(relative_path):
         )
     return assets_root_path + relative_path
 
+def calculate_truncation_ratio_simple(corners, img_width, img_height):
+    """
+    Calculate the truncation ratio of a cuboid using a simplified bounding box method.
+    Args:
+        corners: (9, 2) numpy array containing the projected corners of the cuboid.
+        img_width: width of image
+        img_height: height of image
+
+    Returns:
+        The truncation ratio of the cuboid.
+        1 means object is fully truncated and 0 means object is fully within screen.
+    """
+
+    # Calculate the bounding box of the cuboid
+    x_min, y_min = np.min(corners, axis=0)
+    x_max, y_max = np.max(corners, axis=0)
+
+    # Original bounding box area
+    original_area = (x_max - x_min) * (y_max - y_min)
+
+    # Clip the bounding box to the screen
+    clipped_x_min = min(max(x_min, 0), img_width)
+    clipped_y_min = min(max(y_min, 0), img_height)
+    clipped_x_max = max(min(x_max, img_width), 0)
+    clipped_y_max = max(min(y_max, img_height), 0)
+
+    # Clipped bounding box area
+    clipped_area = (clipped_x_max - clipped_x_min) * (clipped_y_max - clipped_y_min)
+
+    # Compute the truncation ratio
+    truncation_ratio = 1 - clipped_area / original_area if original_area > 0 else 1
+
+    return truncation_ratio
+
+
 
 def get_random_transform_values(
     loc_min=(0, 0, 0), loc_max=(1, 1, 1), rot_min=(0, 0, 0), rot_max=(360, 360, 360), scale_min_max=(0.1, 1.0)
