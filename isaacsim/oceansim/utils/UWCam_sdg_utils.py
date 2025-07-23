@@ -7,38 +7,38 @@ PALLETJACKS = [
 
 
 # The warehouse distractors which will be added to the scene and randomized
-DISTRACTORS_WAREHOUSE = 2 * [
+DISTRACTORS_WAREHOUSE = 1 * [
     "/Isaac/Environments/Simple_Warehouse/Props/S_TrafficCone.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/S_WetFloorSign.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/S_WetFloorSign.usd",
     "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_01.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_02.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_03.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_03.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_C_02.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticB_01.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticD_01.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticE_01.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_02.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_03.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_03.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_C_02.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticB_01.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticD_01.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticE_01.usd",
     "/Isaac/Environments/Simple_Warehouse/Props/SM_BucketPlastic_B.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1262.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1268.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1482.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1683.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_291.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1454.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1513.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_A_04.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_03.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_05.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_C_02.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_E_02.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_PushcartA_02.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_04.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_03.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1262.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1268.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1482.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1683.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_291.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1454.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1513.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_A_04.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_03.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_05.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_C_02.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_E_02.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_PushcartA_02.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_04.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_03.usd",
 ]
 
 import os
@@ -49,7 +49,7 @@ from isaacsim.storage.native import get_assets_root_path
 import random
 import numpy as np
 from omni.kit.viewport.utility import get_active_viewport
-from pxr import Gf, PhysxSchema, Usd, UsdGeom, UsdPhysics
+from pxr import Gf, PhysxSchema, Usd, UsdGeom, UsdPhysics, Sdf
 from isaacsim.core.utils.stage import get_current_stage
 from isaacsim.core.prims import SingleXFormPrim
 
@@ -62,39 +62,6 @@ def prefix_with_isaac_asset_server(relative_path):
         )
     return assets_root_path + relative_path
 
-def calculate_truncation_ratio_simple(corners, img_width, img_height):
-    """
-    Calculate the truncation ratio of a cuboid using a simplified bounding box method.
-    Args:
-        corners: (9, 2) numpy array containing the projected corners of the cuboid.
-        img_width: width of image
-        img_height: height of image
-
-    Returns:
-        The truncation ratio of the cuboid.
-        1 means object is fully truncated and 0 means object is fully within screen.
-    """
-
-    # Calculate the bounding box of the cuboid
-    x_min, y_min = np.min(corners, axis=0)
-    x_max, y_max = np.max(corners, axis=0)
-
-    # Original bounding box area
-    original_area = (x_max - x_min) * (y_max - y_min)
-
-    # Clip the bounding box to the screen
-    clipped_x_min = min(max(x_min, 0), img_width)
-    clipped_y_min = min(max(y_min, 0), img_height)
-    clipped_x_max = max(min(x_max, img_width), 0)
-    clipped_y_max = max(min(y_max, img_height), 0)
-
-    # Clipped bounding box area
-    clipped_area = (clipped_x_max - clipped_x_min) * (clipped_y_max - clipped_y_min)
-
-    # Compute the truncation ratio
-    truncation_ratio = 1 - clipped_area / original_area if original_area > 0 else 1
-
-    return truncation_ratio
 
 
 
@@ -299,33 +266,14 @@ def full_objs_list():
 
 
 
+def add_objects():
+    assets = []
+    for obj in full_objs_list():
+        asset = rep.create.from_usd(obj)
+        assets.append(asset)
 
-def add_objects(physics=False):
-    stage = get_current_stage()
-    full_objs = full_objs_list()
-    objs_rep = []
-    objs_paths = []
-    for mesh_url in full_objs:
-        rand_loc, rand_rot, rand_scale = get_random_transform_values(
-            # loc_min=working_area_min, loc_max=working_area_max, scale_min_max=shape_distractors_scale_min_max
-            )
-        prim_name = os.path.basename(mesh_url).split(".")[0]
-        prim_path = omni.usd.get_stage_next_free_path(stage, f"/World/objs/{prim_name}", False)
-        prim = stage.DefinePrim(prim_path, "Xform")
-        # asset_path = mesh_url if mesh_url.startswith("omniverse://") else get_assets_root_path() + mesh_url
-        asset_path = mesh_url
-        prim.GetReferences().AddReference(asset_path)
-        set_transform_attributes(prim, location=rand_loc, rotation=rand_rot, scale=rand_scale)
-        if physics:
-            add_colliders(prim)
-            disable_gravity = random.choice([True, False])
-            add_rigid_body_dynamics(prim, disable_gravity=disable_gravity)
-        objs_rep.append(rep.get.prim_at_path(prim_path))
-        objs_paths.append(prim_path)
-    
-    objs_group = rep.create.group(objs_rep)
-        
-    return objs_group, objs_paths
+    return rep.create.group(assets)
+
 
 
 def capture_pathtracing(duration=0.0, spp=128):
@@ -346,7 +294,7 @@ def capture_pathtracing(duration=0.0, spp=128):
     # Capture the frame by advancing the simulation for the given duration and combining the sub samples
     rep.orchestrator.step(delta_time=duration, pause_timeline=False)
 
-    # Restore the previous render and motion blur  settings
+    # Restore the previous render and motion blur settings
     print(f"[SDG] Restoring render mode from 'PathTracing' to '{prev_render_mode}'")
     carb.settings.get_settings().set("/rtx/rendermode", prev_render_mode)
 

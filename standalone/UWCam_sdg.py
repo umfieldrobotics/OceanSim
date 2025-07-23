@@ -9,6 +9,8 @@ import carb.settings
 import yaml
 from isaacsim import SimulationApp
 import carb
+from PIL import Image, ImageDraw
+from functools import partial
 
 # Default config dict, can be updated/replaced using json/yaml config files ('--config' cli argument)
 config = {
@@ -24,21 +26,22 @@ config = {
     "camera_collider_radius": 0.2,
     "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
     "rt_subframes": 4,
-    "num_frames": 2,
+    "num_frames": 10,
     # "distractors": "warehouse",
     "simulation_duration_between_captures": 0.05,
     "resolution": (1920, 1080),
     "camera_properties_kwargs": {
-        "focalLength": 24.0,
-        "focusDistance": 400,
-        "fStop": 0.0,
-        "clippingRange": (0.01, 10000),
+        "focal_length": 24.0,
+        "focus_distance": 400,
+        "f_stop": 0.0,
+        "clipping_range": (0.01, 10000),
     },
     "writer_type": "UWCam_KittiWriter",
     "writer_kwargs": {
         "output_dir": "/home/haoyu/Desktop/viz/",
         "colorize_instance_segmentation": True,
-        "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml"
+        "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
+        "debug_mode": True,
 
     },
     "obj_workspace": {
@@ -117,6 +120,7 @@ import omni.replicator.core.scripts.functional as F
 from omni.replicator.core import AnnotatorRegistry, WriterRegistry, BackendDispatch
 from omni.replicator.core.scripts.writers import Writer
 from isaacsim.oceansim.utils.UWrenderer_utils import *
+from isaacsim.replicator.writers.scripts.utils import calculate_truncation_ratio_simple
 
 EPS = 1e-5
 # Procuring standard KITTI Labels for objects annotated in the KITTI-format
@@ -202,8 +206,9 @@ class UWCam_KittiWriter(Writer):
         semantic_types: List[str] = None,
         omit_semantic_type: bool = True,
         bbox_height_threshold: int = 25,
-        partly_occluded_threshold: float = 0.5,
-        fully_visible_threshold: float = 0.95,
+        bbox2d_partly_occluded_threshold: float = 0.5,
+        bbox2d_fully_visible_threshold: float = 0.95,
+        bbox3d_visibility_threshold: float = 0.15,  # Threshold for filtering out objects with low 3d bbox visibility
         renderproduct_idxs: List[tuple] = None,
         mapping_path: str = None,
         mapping_dict: dict = None,
@@ -212,6 +217,7 @@ class UWCam_KittiWriter(Writer):
         use_kitti_dir_names: bool = False,
         UW_param:Union[list, str] = [0.0, 0.31, 0.24, 0.05, 0.05, 0.2, 0.05, 0.05, 0.05 ],
         cuboid_keypoints_order: list = ["Center", "LDB", "LDF", "LUB", "LUF", "RDB", "RDF", "RUB", "RUF"],
+        debug_mode: bool = False,
     ):
         self.version = __version__
         self._frame_id = 0
@@ -228,11 +234,19 @@ class UWCam_KittiWriter(Writer):
         self.backend = self._backend
         self._omit_semantic_type = omit_semantic_type
         self._bbox_height_threshold = bbox_height_threshold
-        self._partly_occluded_threshold = partly_occluded_threshold
-        self._fully_visible_threshold = fully_visible_threshold
+        self._bbox2d_partly_occluded_threshold = bbox2d_partly_occluded_threshold
+        self._bbox2d_fully_visible_threshold = bbox2d_fully_visible_threshold
+        self._bbox3d_visibility_threshold = bbox3d_visibility_threshold
         self._render_product_idxs = renderproduct_idxs
         self._use_kitti_dir_names = use_kitti_dir_names
         self._cuboid_keypoints_order = cuboid_keypoints_order
+        self._debug_mode = debug_mode
+
+        if self._debug_mode:
+            self._CUBOID_KEYPOINT_COLORS = ["white", "red", "green", "blue", "yellow", "cyan", "magenta", "orange", "purple"]
+            self._CUBOID_EDGE_COLORS = {"front": "red", "back": "blue", "connecting": "green"}
+            self._debug_data = {}
+
         if isinstance(UW_param, str):
             with open(UW_param, 'r') as file:
                 try:
@@ -299,6 +313,12 @@ class UWCam_KittiWriter(Writer):
             "camera_params",
         ]
 
+        if self._debug_mode:
+            self.annotators.append(
+                AnnotatorRegistry.get_annotator(
+                "pointcloud", init_params={"includeUnlabelled": True}, device=self._device
+            ))
+
     def _get_anno_semantic_mapping(self):
         anno_semantic_mapping = {}
         for k, v in self.mapping_dict.items():
@@ -315,12 +335,11 @@ class UWCam_KittiWriter(Writer):
                 anno_semantic_mapping[f"class:{k}"] = v
         return json.dumps(anno_semantic_mapping)
 
-    def _write_rgb(self, data, sub_dir: str, rgb_annotator: str, dist_to_cam_annotator:str, UW_param: list, write_raw:bool =False):
-        if write_raw:
-            rgb_dir_name = "image_02" if self._use_kitti_dir_names else "rgb"
-            rgb_file_path = os.path.join(sub_dir, rgb_dir_name, f"{self._frame_id}.png")
-            self._backend.schedule(F.write_image, data=data[rgb_annotator], path=rgb_file_path)
-        
+    def _write_rgb(self, data, sub_dir: str, rgb_annotator: str, dist_to_cam_annotator:str, UW_param: list):
+
+        if self._debug_mode:
+            self._debug_data["raw_rgb"] = data[rgb_annotator].numpy()
+
         uw_image = wp.empty(shape=data[rgb_annotator].shape, dtype=wp.uint8)
         uw_rgb_dir_name = "uw_image_02" if self._use_kitti_dir_names else "uw_rgb"
         uw_rgb_file_path = os.path.join(sub_dir, uw_rgb_dir_name, f"{self._frame_id}.png")
@@ -339,7 +358,14 @@ class UWCam_KittiWriter(Writer):
                 ]
             )  
         self._backend.schedule(F.write_image, data=uw_image, path=uw_rgb_file_path)
-    
+
+    def _write_object_pose(self, data, sub_dir: str, bbox_3d_annotator: str, camera_param_annotator: str):
+        objs_data = self._process_bounding_boxes_3d(data[bbox_3d_annotator], data[camera_param_annotator])
+        pose_dir_name = "pose_02" if self._use_kitti_dir_names else "pose"
+        pose_file_path = os.path.join(sub_dir, pose_dir_name, f"{self._frame_id}.json")
+        self.backend.schedule(F.write_json, path=pose_file_path, data=objs_data, indent=2)
+
+
     def _write_object_detection(
         self,
         data,
@@ -383,7 +409,6 @@ class UWCam_KittiWriter(Writer):
         loose_id_to_bbox = {bbox_loose_id: bbox_loose_data for bbox_loose_id, bbox_loose_data in zip(bbox_loose_bbox_ids, bbox_loose)}
         bbox3d_id_to_bbox = {bbox_3d_id: bbox_3d_data for bbox_3d_id, bbox_3d_data in zip(bbox_3d_bbox_ids, bbox_3d)}
 
-        objs_data = self._process_bounding_boxes_3d(data[bbox_3d_annotator], data[camera_param_annotator])
 
         # For box in tight and bbox_3d, find the corresponding index of box in loose
         shared_ids = np.intersect1d(
@@ -406,9 +431,9 @@ class UWCam_KittiWriter(Writer):
             area_loose = (box_loose["x_max"] - box_loose["x_min"]) * (box_loose["y_max"] - box_loose["y_min"])
             area_ratio = area_tight / (area_loose + EPS)
 
-            if area_ratio >= self._fully_visible_threshold:
+            if area_ratio >= self._bbox2d_fully_visible_threshold:
                 occlusion_estimation = 0
-            elif area_ratio >= self._partly_occluded_threshold:
+            elif area_ratio >= self._bbox2d_partly_occluded_threshold:
                 occlusion_estimation = 1
             else:
                 occlusion_estimation = 2
@@ -426,7 +451,11 @@ class UWCam_KittiWriter(Writer):
                 or box_tight["x_max"] < 0
             ):
                 continue
-
+            
+            bbox3d_info = self._process_bounding_box_3d_single(bbox3d_id_to_bbox[id], data[camera_param_annotator])
+            if bbox3d_info["visibility"] <= self._bbox3d_visibility_threshold:
+                continue
+            
             semantic_label = data[bbox_2d_tight_annotator]["info"]["idToLabels"].get(box_tight["semanticId"])
 
             if self._omit_semantic_type:
@@ -434,7 +463,6 @@ class UWCam_KittiWriter(Writer):
                 semantic_label = semantic_label.get("class", "Unlabelled")
             
             # Only compute object's 3d information after the above test
-            bbox3d_info = self._process_bounding_box_3d_single(bbox3d_id_to_bbox[id], data[camera_param_annotator])
 
             # Adding Kitti Data,  NOTE: Only class and 2d bbox coordinates are filled in
             label.append(semantic_label)  # semantic
@@ -510,12 +538,12 @@ class UWCam_KittiWriter(Writer):
             )
             
             # Compute the rotation_y and alpha for Kitti dataset
-            # rotation_y = arctan2(-sin(ry), cos(ry))
-            rotation_y = np.arctan2(rotation_matrix_camera_frame[2, 0], 
-                                           rotation_matrix_camera_frame[0, 0])
+            x_cam = rotation_matrix_camera_frame[:, 0]
+            rotation_y = np.arctan2(x_cam[0], x_cam[1])
+            
             obj["rotation_y"] = float(rotation_y)
             # α = rotation_y−arctan2(x,z)
-            alpha = rotation_y - np.arctan2(location_camera_frame[0], location_camera_frame[2])
+            alpha = rotation_y - np.arctan2(location_camera_frame[0], location_camera_frame[1])
             # Normalize to [-π, π]
             alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
             obj["alpha"] = float(alpha)
@@ -575,11 +603,11 @@ class UWCam_KittiWriter(Writer):
         # ('idToLabels': {0: {'class': 'cube'}, 1: {'class': 'sphere'}} -> {0: 'cube', 1: 'sphere'})
         id_to_labels = {k: v["class"] for k, v in bounding_box_3d["info"]["idToLabels"].items()}
 
-        # if self._write_debug_images:
-        #     self._debug_frame_data["world_frame_transforms"] = []
-        #     self._debug_frame_data["projected_keypoints"] = []
-        #     self._debug_frame_data["size_local"] = []
-        #     self._debug_frame_data["center_local"] = []
+        if self._debug_mode:
+            self._debug_data["world_frame_transforms"] = []
+            self._debug_data["projected_keypoints"] = []
+            self._debug_data["size_local"] = []
+            self._debug_data["center_local"] = []
         # Iterate the bounding box data and extract the object informations
         objs = []
         for i, bbox in enumerate(bounding_box_3d["data"]):
@@ -614,8 +642,8 @@ class UWCam_KittiWriter(Writer):
             obj["quat_wxyz_world_frame"] = [quat_world_frame_gf.GetReal()] + list(
                 quat_world_frame_gf.GetImaginary()
             )
-            # if self._write_debug_images:
-            #     self._debug_frame_data["world_frame_transforms"].append(local_to_world_tf)
+            if self._debug_mode:
+                self._debug_data["world_frame_transforms"].append(local_to_world_tf)
 
             # World to camera transform (row-major) (transform a point from world coordinate to camera coordinate)
             world_to_camera_tf = camera_params["cameraViewTransform"].reshape(4, 4)
@@ -640,9 +668,9 @@ class UWCam_KittiWriter(Writer):
             max_local = np.array([bbox["x_max"], bbox["y_max"], bbox["z_max"], 1])
             size_local = np.abs(max_local - min_local)[:3].tolist()
             center_local = min_local + (max_local - min_local) / 2
-            # if self._write_debug_images:
-            #     self._debug_frame_data["size_local"].append(size_local)
-            #     self._debug_frame_data["center_local"].append(center_local[:3].tolist())
+            if self._debug_mode:
+                self._debug_data["size_local"].append(size_local)
+                self._debug_data["center_local"].append(center_local[:3].tolist())
 
             # Cuboid keypoints in local frame
             keypoints_local = {
@@ -681,8 +709,8 @@ class UWCam_KittiWriter(Writer):
             ]
             obj["cuboid_keypoints_projected"] = keypoints_projected_ordered
 
-            # if self._write_debug_images:
-            #     self._debug_frame_data["projected_keypoints"].append(keypoints_projected_ordered)
+            if self._debug_mode:
+                self._debug_data["projected_keypoints"].append(keypoints_projected_ordered)
 
             obj["truncation_ratio"] = calculate_truncation_ratio_simple(
                 keypoints_projected_ordered, screen_size[0], screen_size[1]
@@ -691,9 +719,8 @@ class UWCam_KittiWriter(Writer):
             objs.append(obj)
 
         return objs
-    
-    
-    
+
+
     # Project a 3D point from camera coordinates to 2D screen coordinates
     def _project_camera_point_to_screen(self, camera_point, projection_matrix, screen_size):
         # Apply the projection matrix to project to screen coordinates
@@ -800,11 +827,17 @@ class UWCam_KittiWriter(Writer):
 
         camera_data["width"] = camera_params["renderProductResolution"].tolist()[0]
         camera_data["height"] = camera_params["renderProductResolution"].tolist()[1]
-
+        # Debug data needed for the overlay projections
+        if self._debug_mode:
+            self._debug_data["camera_projection_matrix"] = camera_params["cameraProjection"].reshape(4, 4)
+            self._debug_data["camera_view_matrix"] = camera_params["cameraViewTransform"].reshape(4, 4)
+            self._debug_data["resolution"] = camera_params["renderProductResolution"]
 
         file_path = os.path.join(sub_dir, "camera_param", f"{self._frame_id}.json")
         self._backend.schedule(F.write_json, data=camera_data, path=file_path)
-
+    
+    
+    
     def write(self, data):
         render_products = [k for k in data.keys() if k.startswith("rp_")]
         if len(render_products) == 1:
@@ -822,6 +855,11 @@ class UWCam_KittiWriter(Writer):
             )
             self._write_distance_to_camera(data, sub_dir, "distance_to_camera")
             self._write_camera_param(data, sub_dir, "camera_params")
+            # NOTE: To use the debug mode, you have to write the object pose 
+            self._write_object_pose(data, sub_dir, "bounding_box_3d_fast", "camera_params")
+            if self._debug_mode:
+                self._write_debug_data(sub_dir)
+                self._write_debug_pointcloud(data, sub_dir, "pointcloud")
         else:
             for render_product in render_products:
                 render_product_name = render_product[3:]
@@ -850,6 +888,179 @@ class UWCam_KittiWriter(Writer):
                 self._write_camera_param(data, sub_dir, f"camera_params-{render_product_name}")
 
         self._frame_id += 1
+    
+
+    #########################################################
+    ########### Below are debug functions ###################
+    #########################################################
+    
+    # Write overlay debug data to disk
+    def _write_debug_data(self, sub_dir: str):
+        # Create overlay image from the RGB data
+        rgb_img = Image.fromarray(self._debug_data["raw_rgb"])
+        draw = ImageDraw.Draw(rgb_img)
+        debug_dir_name = "image_02" if self._use_kitti_dir_names else "debug"
+        debug_file_path = os.path.join(sub_dir, debug_dir_name, f"{self._frame_id}.png")
+        
+        # Draw the projected cuboid and its edges
+        for keypoints in self._debug_data["projected_keypoints"]:
+            self._draw_projected_keypoints(draw, keypoints)
+
+        # Get the stored camera parameters for debug purposes
+        camera_projection_matrix = self._debug_data["camera_projection_matrix"]
+        camera_view_matrix = self._debug_data["camera_view_matrix"]
+        screen_size = self._debug_data["resolution"]
+
+        # Draw objects local frame axes
+        for i, tf in enumerate(self._debug_data["world_frame_transforms"]):
+            size = self._debug_data["size_local"][i]
+            center = self._debug_data["center_local"][i]
+            self._draw_local_frame_axes(
+                draw,
+                tf,
+                camera_view_matrix,
+                camera_projection_matrix,
+                screen_size,
+                size_local=size,
+                origin_local=center,
+            )
+
+        # Overlay the world frame axes on the bottom left part of the RGB image
+        self._draw_world_frame_axes_bottom_left(draw, camera_view_matrix, camera_projection_matrix, screen_size)
+
+        self.backend.schedule(F.write_image, path=debug_file_path, data=np.asarray(rgb_img))
+
+
+    # Project a 3D point from world coordinates to 2D screen coordinates
+    def _project_world_point_to_screen(self, world_point, view_matrix, projection_matrix, screen_size):
+        point_camera = self._world_point_to_camera_point(world_point, view_matrix)
+        return self._project_camera_point_to_screen(point_camera, projection_matrix, screen_size)
+    
+    # Transform a 3D point from world coordinates to camera coordinates
+    def _world_point_to_camera_point(self, world_point, view_matrix):
+        # Convert the 3D point to homogeneous coordinates (if not already in that form)
+        point_homogeneous = np.array(world_point) if len(world_point) == 4 else np.array([*world_point, 1.0])
+
+        # Transform to camera frame (row-major representation where the translation vector is on the left side of the multiplication)
+        point_camera = point_homogeneous @ view_matrix
+
+        return point_camera   
+    
+    # Draws the world frame axes at the bottom left corner of the image.
+    def _draw_world_frame_axes_bottom_left(
+        self, draw, camera_view_matrix, camera_projection_matrix, screen_size, axes_scale=0.03, margin_percentage=0.03
+    ):
+        # Set a world location for the axes origin (1 unit in front of the camera) where -Z is the camera's forward direction
+        camera_to_world_matrix = np.linalg.inv(camera_view_matrix)
+        point_in_camera_space = np.array([0, 0, -1, 1])
+
+        # Create the axes in world (1 unit in front of the camera) with the given axes size
+        origin_world = point_in_camera_space @ camera_to_world_matrix
+        x_axis_end_point_world = np.array([axes_scale + origin_world[0], origin_world[1], origin_world[2], 1])
+        y_axis_end_point_world = np.array([origin_world[0], axes_scale + origin_world[1], origin_world[2], 1])
+        z_axis_end_point_world = np.array([origin_world[0], origin_world[1], axes_scale + origin_world[2], 1])
+
+        # Create a partial function with fixed camera parameters
+        project_to_screen = partial(
+            self._project_world_point_to_screen,
+            view_matrix=camera_view_matrix,
+            projection_matrix=camera_projection_matrix,
+            screen_size=screen_size,
+        )
+
+        # Project the origin and axes end points into 2D screen coordinates
+        origin_2d = project_to_screen(origin_world)
+        x_axis_end_2d = project_to_screen(x_axis_end_point_world)
+        y_axis_end_2d = project_to_screen(y_axis_end_point_world)
+        z_axis_end_2d = project_to_screen(z_axis_end_point_world)
+
+        # Calculate offset margin (a percentage of the screen size) to ensure axes are not on the edge of the screen
+        margin = int(margin_percentage * min(screen_size))
+        offset_x = margin - min(origin_2d[0], x_axis_end_2d[0], y_axis_end_2d[0], z_axis_end_2d[0])
+        offset_y = screen_size[1] - margin - max(origin_2d[1], x_axis_end_2d[1], y_axis_end_2d[1], z_axis_end_2d[1])
+
+        # Apply the offset to the projected points
+        origin_2d = (origin_2d[0] + offset_x, origin_2d[1] + offset_y)
+        x_axis_end_2d = (x_axis_end_2d[0] + offset_x, x_axis_end_2d[1] + offset_y)
+        y_axis_end_2d = (y_axis_end_2d[0] + offset_x, y_axis_end_2d[1] + offset_y)
+        z_axis_end_2d = (z_axis_end_2d[0] + offset_x, z_axis_end_2d[1] + offset_y)
+
+        # Draw the axes with the specified colors
+        draw.line([origin_2d, x_axis_end_2d], fill="red", width=2)  # X-axis in red
+        draw.line([origin_2d, y_axis_end_2d], fill="green", width=2)  # Y-axis in green
+        draw.line([origin_2d, z_axis_end_2d], fill="blue", width=2)  # Z-axis in blue
+
+
+    # Draw the projected cuboid and its edges
+    def _draw_projected_keypoints(self, draw, keypoints, point_size=4, edge_size=2):
+        # Draw the projected cuboid keypoint vertices in the specified colors
+        for i, point in enumerate(keypoints):
+            draw.ellipse(
+                (point[0] - point_size, point[1] - point_size, point[0] + point_size, point[1] + point_size),
+                fill=self._CUBOID_KEYPOINT_COLORS[i],
+            )
+
+        # Draw the edges of the projected cuboid with specified colors for each set
+        edges = {
+            "front": [(1, 2), (2, 4), (4, 3), (3, 1)],  # Front face
+            "back": [(5, 6), (6, 8), (8, 7), (7, 5)],  # Back face
+            "connecting": [(1, 5), (2, 6), (3, 7), (4, 8)],  # Connecting edges
+        }
+        for edge_type, edge_list in edges.items():
+            for start, end in edge_list:
+                draw.line(keypoints[start] + keypoints[end], fill=self._CUBOID_EDGE_COLORS[edge_type], width=edge_size)
+
+    # Projects the local frame axes of the object to the screen
+    def _draw_local_frame_axes(
+        self,
+        draw,
+        local_to_world_transform,
+        camera_view_matrix,
+        camera_projection_matrix,
+        screen_size,
+        size_local=[1, 1, 1],
+        origin_local=[0, 0, 0],
+        axes_length_perc=0.25,
+    ):
+        # The length of the local axes is a percentage of the mean size of the object in local frame (before any scaling)
+        local_axes_length = np.mean(size_local) * axes_length_perc
+
+        # Define the end points of the local coordinate system axes include the local center of the object bounds
+        origin_local = np.array([origin_local[0], origin_local[1], origin_local[2], 1])
+        x_axis_end_point_local = np.array([local_axes_length + origin_local[0], origin_local[1], origin_local[2], 1])
+        y_axis_end_point_local = np.array([origin_local[0], local_axes_length + origin_local[1], origin_local[2], 1])
+        z_axis_end_point_local = np.array([origin_local[0], origin_local[1], local_axes_length + origin_local[2], 1])
+
+        # Transform local end points to world frame using row-major matrix multiplication (translation on the left side)
+        origin_world = origin_local @ local_to_world_transform
+        x_axis_end_point_world = x_axis_end_point_local @ local_to_world_transform
+        y_axis_end_point_world = y_axis_end_point_local @ local_to_world_transform
+        z_axis_end_point_world = z_axis_end_point_local @ local_to_world_transform
+
+        # Define a partial helper function to project 3D world points to 2D screen points
+        project_to_screen = partial(
+            self._project_world_point_to_screen,
+            view_matrix=camera_view_matrix,
+            projection_matrix=camera_projection_matrix,
+            screen_size=screen_size,
+        )
+
+        # Project the origin and axes end points from 3D world coordinates to 2D screen coordinates
+        origin_2d = project_to_screen(origin_world)
+        x_axis_end_2d = project_to_screen(x_axis_end_point_world)
+        y_axis_end_2d = project_to_screen(y_axis_end_point_world)
+        z_axis_end_2d = project_to_screen(z_axis_end_point_world)
+
+        # Draw the 3D axes on the 2D screen using lines with appropriate colors for each axis
+        draw.line([origin_2d, x_axis_end_2d], fill="red", width=2)  # X-axis in red
+        draw.line([origin_2d, y_axis_end_2d], fill="green", width=2)  # Y-axis in green
+        draw.line([origin_2d, z_axis_end_2d], fill="blue", width=2)  # Z-axis in blue
+
+    def _write_debug_pointcloud(self, data, sub_dir: str, pointcloud_annot: str):
+        
+        pcl_data = data[pointcloud_annot]["data"][0].numpy()  # shape :(1,N,3) <class 'warp.types.array'>
+        debug_pcl_path = os.path.join(sub_dir, "pointcloud", f"{self._frame_id}.npy")
+        self._backend.schedule(F.write_np, data=pcl_data, path=debug_pcl_path)
 
 WriterRegistry.register(UWCam_KittiWriter)
 
@@ -869,7 +1080,8 @@ from pxr import PhysxSchema, Sdf, UsdGeom, UsdPhysics, Gf
 from isaacsim.oceansim.utils.UWCam_sdg_utils import *
 
 
-
+# Increase maximum assets loading time in case assets are too many
+carb.settings.get_settings().set('/exts/omni.replicator.core/maxAssetLoadingTime', 1000)
 
 # Isaac nucleus assets root path
 assets_root_path = get_assets_root_path()
@@ -895,52 +1107,54 @@ physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
 physx_scene = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene"))
 physx_scene.GetTimeStepsPerSecondAttr().Set(60)
 
-# REPLICATOR
-# Disable capturing every frame (capture will be triggered manually using the step function)
-rep.orchestrator.set_capture_on_play(False)
 
+
+with rep.new_layer(name="SDG"):
 # Create the camera prims and their properties
-cameras = []
-num_cameras = config.get("num_cameras", 1)
-camera_properties_kwargs = config.get("camera_properties_kwargs", {})
-for i in range(num_cameras):
-    # Create camera and add its properties (focal length, focus distance, f-stop, clipping range, etc.)
-    cam_prim = stage.DefinePrim(f"/World/Cameras/cam_{i}", "Camera")
-    for key, value in camera_properties_kwargs.items():
-        if cam_prim.HasAttribute(key):
-            cam_prim.GetAttribute(key).Set(value)
-        else:
-            print(f"Unknown camera attribute with {key}:{value}")
-    cameras.append(cam_prim)
+    cameras = []
+    num_cameras = config.get("num_cameras", 1)
+    camera_properties_kwargs = config.get("camera_properties_kwargs", {})
+    for i in range(num_cameras):
+        # Create camera and add its properties (focal length, focus distance, f-stop, clipping range, etc.)
+        cameras.append(rep.create.camera(**camera_properties_kwargs))
+        
+    # Create a camera replicator group 
+    camera_groups = rep.create.group(cameras)
 
-# Add collision spheres (disabled by default) to cameras to avoid objects overlaping with the camera view
-# camera_colliders = []
-# camera_collider_radius = config.get("camera_collider_radius", 0)
-# if camera_collider_radius > 0:
-#     for cam in cameras:
-#         cam_path = cam.GetPath()
-#         cam_collider = stage.DefinePrim(f"{cam_path}/CollisionSphere", "Sphere")
-#         cam_collider.GetAttribute("radius").Set(camera_collider_radius)
-#         add_colliders(cam_collider)
-#         collision_api = UsdPhysics.CollisionAPI(cam_collider)
-#         collision_api.GetCollisionEnabledAttr().Set(False)
-#         UsdGeom.Imageable(cam_collider).MakeInvisible()
-#         camera_colliders.append(cam_collider)
 
-# Wait an app update to ensure the prim changes are applied
-simulation_app.update()
+    
+    # Set up objects in the scene
+    object_group = add_objects()
 
-# Wait an app update to ensure the prim changes are applied
-simulation_app.update()
+
+
+    num_frames = config.get("num_frames", 10)
+    rt_subframes = config.get("rt_subframes", -1) 
+    obj_ws = config.get("obj_workspace")
+    cam_ws = config.get("cam_workspace")
+    
+    with rep.trigger.on_frame(max_execs=num_frames, rt_subframes=rt_subframes):
+        
+        with object_group:
+            rep.modify.pose(
+                position=rep.distribution.uniform(obj_ws.get("min"), obj_ws.get("max")),
+                rotation=rep.distribution.uniform((0, 0, 0), (0, 0, 360)),
+                scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
+            )
+        
+        with camera_groups:
+            rep.modify.pose(
+                position=rep.distribution.uniform(cam_ws.get("min"), cam_ws.get("max")),
+                look_at=rep.distribution.choice(object_group),
+            )
+        
+# Amount of simulation time to wait between captures
+# sim_duration_between_captures = config.get("simulation_duration_between_captures", 0.0)
+
 
 # Create render products using the cameras
 resolution = config.get("resolution", (640, 480))
-for cam in cameras:
-    rp = rep.create.render_product(cam.GetPath(), resolution)
 
-# Create a camera replicator group 
-cams_rep = [rep.get.camera(cam.GetPath().pathString) for cam in cameras]
-camera_groups = rep.create.group(cams_rep)
 # Create the writer and attach the render products
 writer_type = config.get("writer_type", "BasicWriter")
 writer_kwargs = config.get("writer_kwargs", {})
@@ -951,113 +1165,17 @@ if out_dir := writer_kwargs.get("output_dir"):
         writer_kwargs["output_dir"] = out_dir
     print(f"[SDG] Writing data to: {out_dir}")
 
-# Since there is only one camera, attach one writer to the only rp for now.
 if writer_type is not None:
-    writer = rep.writers.get(writer_type)
-    writer.initialize(**writer_kwargs)
-    writer.attach(rp)
+    for cam in cameras:
+        rp = rep.create.render_product(cam, resolution)
+        writer = rep.writers.get(writer_type)
+        writer.initialize(**writer_kwargs)
+        writer.attach(rp)
 
 
-# SDG
-# Number of frames to capture
-num_frames = config.get("num_frames", 10)
-
-# Increase subframes if materials are not loaded on time, or ghosting artifacts appear on moving objects,
-# see: https://docs.omniverse.nvidia.com/extensions/latest/ext_replicator/subframes_examples.html
-rt_subframes = config.get("rt_subframes", -1) 
-# Because we are only using path tracing mode, otherwise we need to call 
-# rep.orchestrator.step(delta_time=duration, rt_subframes=st_subframes, pause_timeline=False) 
-# to suppress ghosting
-
-
-# Amount of simulation time to wait between captures
-sim_duration_between_captures = config.get("simulation_duration_between_captures", 0.0)
-# Increase maximum assets loading time in case assets are too many
-carb.settings.get_settings().set('/exts/omni.replicator.core/maxAssetLoadingTime', 1000)
-
-for _ in range(5):
-    simulation_app.update()
-
-# Set up objects in the scene
-object_group, objs_path = add_objects(physics=False)
-# distractor_group = add_distractors()
-
-# Set the timeline parameters (start, end, no looping) and start the timeline
-timeline = omni.timeline.get_timeline_interface()
-timeline.set_start_time(0)
-timeline.set_end_time(1000000)
-timeline.set_looping(False)
-
-# If no custom physx scene is created, a default one will be created by the physics engine once the timeline starts
-timeline.play()
-timeline.commit()
-simulation_app.update()
-
-# Store the wall start time for stats
-wall_time_start = time.perf_counter()
-
-obj_ws = config.get("obj_workspace")
-cam_ws = config.get("cam_workspace")
-# Run the simulation and capture data triggering randomizations and actions at custom frame intervals
-for i in range(num_frames):
-
-
-    # Randomize the pose of all the added palletjacks
-    with object_group:
-        rep.modify.pose(
-            position=rep.distribution.uniform(obj_ws.get("min"), obj_ws.get("max")),
-            rotation=rep.distribution.uniform((0, 0, 0), (0, 0, 360)),
-            scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
-        )
-    # Run few seconds for objects to fall on the ground
-    run_simulation_loop(duration=3, simulation_app=simulation_app)
-    # Move the camera around in the workspace, focus on one of the object in the scene
-    with camera_groups:
-        rep.modify.pose(
-            position=rep.distribution.uniform(cam_ws.get("min"), cam_ws.get("max")),
-            look_at=rep.distribution.choice(object_group),
-
-            
-        )
-    
-
-    # if camera_colliders:
-    #     simulate_camera_collision(simulation_app, camera_colliders,  num_frames=4)
-
-    # capture_pathtracing(spp=512)
-    capture_raytracing2(rt_subframes=rt_subframes)
-    # Capture the current frame
-    print(f"[SDG] Capturing frame {i}/{num_frames}, at simulation time: {timeline.get_current_time():.2f}")
-    
-    # Run the simulation for a given duration between frame captures
-    if sim_duration_between_captures > 0:
-        run_simulation_loop(duration=sim_duration_between_captures, simulation_app=simulation_app)
-    else:
-        simulation_app.update()
-
-# Wait for the data to be written (default writer backends are asynchronous)
+print("[SDG] Running the simulation")
+rep.orchestrator.run()
 rep.orchestrator.wait_until_complete()
-
-
-
-
-
-
-# Get the stats
-wall_duration = time.perf_counter() - wall_time_start
-sim_duration = timeline.get_current_time()
-avg_frame_fps = num_frames / wall_duration
-
-print(
-    f"[SDG] Captured {num_frames} frames in {wall_duration:.2f} seconds.\n"
-    f"\t Simulation duration: {sim_duration:.2f}\n"
-    f"\t Simulation duration between captures: {sim_duration_between_captures:.2f}\n"
-    f"\t Average frame FPS: {avg_frame_fps:.2f}\n"
-)
-
-# Unsubscribe the physics overlap checks and stop the timeline
-simulation_app.update()
-timeline.stop()
 
 simulation_app.close()
 
