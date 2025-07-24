@@ -10,7 +10,7 @@ PALLETJACKS = [
 DISTRACTORS_WAREHOUSE = 1 * [
     "/Isaac/Environments/Simple_Warehouse/Props/S_TrafficCone.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/S_WetFloorSign.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_01.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_01.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_02.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_03.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
@@ -23,7 +23,7 @@ DISTRACTORS_WAREHOUSE = 1 * [
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticD_01.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticE_01.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BucketPlastic_B.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BucketPlastic_B.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1262.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1268.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1482.usd",

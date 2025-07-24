@@ -473,8 +473,9 @@ class UWCam_KittiWriter(Writer):
             label.append(box_tight["y_min"])  # y min
             label.append(box_tight["x_max"])  # x max
             label.append(box_tight["y_max"])  # y max
-            # dimensions in world frame: x_size, y_size, z_size
-            label.extend([f"{v:.3f}" for v in bbox3d_info["size"]]) 
+            label.append(f"{bbox3d_info['size'][2]:.2f}")  # z_size represents height
+            label.append(f"{bbox3d_info['size'][1]:.2f}")  # y_size represents width
+            label.append(f"{bbox3d_info['size'][0]:.2f}")  # x_size represents length
             # location in camera frame: x, y, z
             label.extend([f"{v:.3f}" for v in bbox3d_info["location_camera_frame"]])
             label.append(f"{bbox3d_info['rotation_y']:.2f}")  # rotation_y
@@ -522,7 +523,7 @@ class UWCam_KittiWriter(Writer):
             # World to camera transform (row-major) (transform a point from world coordinate to camera coordinate)
             world_to_camera_tf = camera_params["cameraViewTransform"].reshape(4, 4)
             # Object world space to camera frame transform (row-major matrix multiplication)
-            obj_to_camera_tf = world_to_camera_tf @ local_to_world_tf
+            obj_to_camera_tf = local_to_world_tf @ world_to_camera_tf
             # Extract camera frame location (last row) and rotation matrix (3x3) from the row-major transform matrix
             location_camera_frame = obj_to_camera_tf[3, :3]
             obj["location_camera_frame"] = location_camera_frame.tolist()
@@ -538,14 +539,11 @@ class UWCam_KittiWriter(Writer):
             )
             
             # Compute the rotation_y and alpha for Kitti dataset
-            x_cam = rotation_matrix_camera_frame[:, 0]
-            rotation_y = np.arctan2(x_cam[0], x_cam[1])
-            
-            obj["rotation_y"] = float(rotation_y)
-            # α = rotation_y−arctan2(x,z)
+            x, y = quat_camera_frame_gf.GetImaginary()[0], quat_camera_frame_gf.GetImaginary()[1]
+            rotation_y = np.arctan2(x, y)
             alpha = rotation_y - np.arctan2(location_camera_frame[0], location_camera_frame[1])
-            # Normalize to [-π, π]
             alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
+            obj["rotation_y"] = float(rotation_y)
             obj["alpha"] = float(alpha)
 
             # Size of the object before scale (NOTE: scale is not applied yet to objects in local frame)
@@ -648,7 +646,7 @@ class UWCam_KittiWriter(Writer):
             # World to camera transform (row-major) (transform a point from world coordinate to camera coordinate)
             world_to_camera_tf = camera_params["cameraViewTransform"].reshape(4, 4)
             # Object world space to camera frame transform (row-major matrix multiplication)
-            obj_to_camera_tf = world_to_camera_tf @ local_to_world_tf
+            obj_to_camera_tf = local_to_world_tf @ world_to_camera_tf
             # Extract camera frame location (last row) and rotation matrix (3x3) from the row-major transform matrix
             location_camera_frame = obj_to_camera_tf[3, :3]
             obj["location_camera_frame"] = location_camera_frame.tolist()
@@ -1108,6 +1106,10 @@ physx_scene = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene
 physx_scene.GetTimeStepsPerSecondAttr().Set(60)
 
 
+num_frames = config.get("num_frames", 10)
+rt_subframes = config.get("rt_subframes", -1) 
+obj_ws = config.get("obj_workspace")
+cam_ws = config.get("cam_workspace")
 
 with rep.new_layer(name="SDG"):
 # Create the camera prims and their properties
@@ -1125,29 +1127,32 @@ with rep.new_layer(name="SDG"):
     
     # Set up objects in the scene
     object_group = add_objects()
-
-
-
-    num_frames = config.get("num_frames", 10)
-    rt_subframes = config.get("rt_subframes", -1) 
-    obj_ws = config.get("obj_workspace")
-    cam_ws = config.get("cam_workspace")
-    
-    with rep.trigger.on_frame(max_execs=num_frames, rt_subframes=rt_subframes):
-        
-        with object_group:
+    with object_group:
             rep.modify.pose(
                 position=rep.distribution.uniform(obj_ws.get("min"), obj_ws.get("max")),
                 rotation=rep.distribution.uniform((0, 0, 0), (0, 0, 360)),
                 scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
             )
+
+
+    
+    with rep.trigger.on_frame(max_execs=num_frames, rt_subframes=rt_subframes):
+        
+        # with object_group:
+        #     rep.modify.pose(
+        #         position=rep.distribution.uniform(obj_ws.get("min"), obj_ws.get("max")),
+        #         rotation=rep.distribution.uniform((0, 0, 0), (0, 0, 360)),
+        #         scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
+        #     )
         
         with camera_groups:
             rep.modify.pose(
                 position=rep.distribution.uniform(cam_ws.get("min"), cam_ws.get("max")),
                 look_at=rep.distribution.choice(object_group),
             )
-        
+
+
+
 # Amount of simulation time to wait between captures
 # sim_duration_between_captures = config.get("simulation_duration_between_captures", 0.0)
 
