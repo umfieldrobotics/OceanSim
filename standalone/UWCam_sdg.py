@@ -16,7 +16,7 @@ from functools import partial
 config = {
     "launch_config": {
         "renderer": "RaytracedLighting",
-        "headless": False,
+        "headless": True,
         "extra_args": [
             "--/persistent/renderer/rtpt/enabled=True",              # This enables RTX realtime preview renderer
             "--/log/level=error",
@@ -121,6 +121,7 @@ from omni.replicator.core import AnnotatorRegistry, WriterRegistry, BackendDispa
 from omni.replicator.core.scripts.writers import Writer
 from isaacsim.oceansim.utils.UWrenderer_utils import *
 from isaacsim.replicator.writers.scripts.utils import calculate_truncation_ratio_simple
+import isaacsim.core.utils.rotations as rotations_utils
 
 EPS = 1e-5
 # Procuring standard KITTI Labels for objects annotated in the KITTI-format
@@ -473,10 +474,12 @@ class UWCam_KittiWriter(Writer):
             label.append(box_tight["y_min"])  # y min
             label.append(box_tight["x_max"])  # x max
             label.append(box_tight["y_max"])  # y max
-            label.append(f"{bbox3d_info['size'][2]:.2f}")  # z_size represents height
-            label.append(f"{bbox3d_info['size'][1]:.2f}")  # y_size represents width
-            label.append(f"{bbox3d_info['size'][0]:.2f}")  # x_size represents length
-            # location in camera frame: x, y, z
+            #NOTE: size is in world frame (meters) and this represents the size of the 3D bbox that does not rotate with the object
+            #NOTE: To get the local frame (cm), use bbox3d_info["size_local"] and this represents the size of the 3D bbox that rotates with the object
+            label.append(f"{bbox3d_info['size_world'][2]:.2f}")  # z_size represents height
+            label.append(f"{bbox3d_info['size_world'][1]:.2f}")  # y_size represents width
+            label.append(f"{bbox3d_info['size_world'][0]:.2f}")  # x_size represents length
+            # location of the xform origin in camera frame (NOTE: not the object centroid which is bbox3d_info["center_camera_frame"])
             label.extend([f"{v:.3f}" for v in bbox3d_info["location_camera_frame"]])
             label.append(f"{bbox3d_info['rotation_y']:.2f}")  # rotation_y
 
@@ -527,7 +530,6 @@ class UWCam_KittiWriter(Writer):
             # Extract camera frame location (last row) and rotation matrix (3x3) from the row-major transform matrix
             location_camera_frame = obj_to_camera_tf[3, :3]
             obj["location_camera_frame"] = location_camera_frame.tolist()
-
             rotation_matrix_camera_frame = obj_to_camera_tf[:3, :3]
             obj["rotation_matrix_camera_frame"] = rotation_matrix_camera_frame.tolist()
             # Get the camera frame quaternion using Gf.Transform (row-major)
@@ -537,11 +539,14 @@ class UWCam_KittiWriter(Writer):
             obj["quat_wxyz_camera_frame"] = [quat_camera_frame_gf.GetReal()] + list(
                 quat_camera_frame_gf.GetImaginary()
             )
-            
-            # Compute the rotation_y and alpha for Kitti dataset
-            x, y = quat_camera_frame_gf.GetImaginary()[0], quat_camera_frame_gf.GetImaginary()[1]
-            rotation_y = np.arctan2(x, y)
-            alpha = rotation_y - np.arctan2(location_camera_frame[0], location_camera_frame[1])
+            # yaw is the angle between the object local forward X direction and the camera rightward X direction [-pi, pi]
+            row, pitch, yaw = rotations_utils.quat_to_euler_angles(np.array(obj["quat_wxyz_camera_frame"]), extrinsic=False)
+            # which is rotation_y in Kitti format (NOTE: this is the rotation with respect to the camera frame, Y up)
+            rotation_y = yaw
+            # α measures the object’s orientation relative to camera’s observation angle towards the center of the object
+            # NOTE: we flip the z-axis because camera's observation angle is -z axis, for x we dont need to do anything
+            alpha = rotation_y - np.arctan2(location_camera_frame[0], -location_camera_frame[2])
+            # Normalize the alpha to [-pi, pi]
             alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
             obj["rotation_y"] = float(rotation_y)
             obj["alpha"] = float(alpha)
@@ -565,20 +570,27 @@ class UWCam_KittiWriter(Writer):
                 "RUF": np.array([bbox["x_max"], bbox["y_max"], bbox["z_max"], 1]),  # Right-Up-Front
             }
 
-            # Calculate the (scaled) size of the object from its world bounds (NOTE: scale is applied through the transform)
-            min_world = min_local @ local_to_world_tf
-            max_world = max_local @ local_to_world_tf
-            size_world = np.abs(max_world - min_world)[:3].tolist()
-
-            obj["size"] = size_world
-
-
             # Transform the cuboid keypoints from local to world frame in the given order
             keypoints_world_ordered = [keypoints_local[k] @ local_to_world_tf for k in self._cuboid_keypoints_order]
             obj["cuboid_keypoints_world_frame"] = [point[:3].tolist() for point in keypoints_world_ordered]
             # Transform the cuboid keypoints from world to camera frame
             keypoints_camera_ordered = [point @ world_to_camera_tf for point in keypoints_world_ordered]
             obj["cuboid_keypoints_camera_frame"] = [point[:3].tolist() for point in keypoints_camera_ordered]
+            
+            obj["center_camera_frame"] = keypoints_camera_ordered[0][:3].tolist()
+
+            # Calculate the (scaled) size of the object from its world bounds (NOTE: scale is applied through the transform)
+            all_world_keypoints = np.vstack(keypoints_world_ordered)
+            min_world = np.min(all_world_keypoints[:, :3], axis=0)
+            max_world = np.max(all_world_keypoints[:, :3], axis=0)
+            size_world = np.abs(max_world - min_world).tolist()
+            print(f"[SDG] all_world_keypoints: {all_world_keypoints}")
+            print(f"[SDG] min_world: {min_world}")
+            print(f"[SDG] max_world: {max_world}")
+            print(f"[SDG] size_world: {size_world}")
+            obj["size_world"] = size_world
+            obj["size_local"] = size_local
+
 
             # Get the camera projection matrix and screen size to project the cuboid keypoints to screen space
             cam_projection_tf = camera_params["cameraProjection"].reshape((4, 4))
@@ -683,12 +695,6 @@ class UWCam_KittiWriter(Writer):
                 "RUF": np.array([bbox["x_max"], bbox["y_max"], bbox["z_max"], 1]),  # Right-Up-Front
             }
 
-            # Calculate the (scaled) size of the object from its world bounds (NOTE: scale is applied through the transform)
-            min_world = min_local @ local_to_world_tf
-            max_world = max_local @ local_to_world_tf
-            size_world = np.abs(max_world - min_world)[:3].tolist()
-
-            obj["size"] = size_world
 
 
             # Transform the cuboid keypoints from local to world frame in the given order
@@ -697,6 +703,19 @@ class UWCam_KittiWriter(Writer):
             # Transform the cuboid keypoints from world to camera frame
             keypoints_camera_ordered = [point @ world_to_camera_tf for point in keypoints_world_ordered]
             obj["cuboid_keypoints_camera_frame"] = [point[:3].tolist() for point in keypoints_camera_ordered]
+            
+            obj["center_camera_frame"] = keypoints_camera_ordered[0][:3].tolist()
+
+
+            # Calculate the (scaled) size of the object from its world bounds (NOTE: scale is applied through the transform)
+            all_world_keypoints = np.vstack(keypoints_world_ordered)
+            min_world = np.min(all_world_keypoints[:, :3], axis=0)
+            max_world = np.max(all_world_keypoints[:, :3], axis=0)
+            size_world = np.abs(max_world - min_world).tolist()
+
+            obj["size_world"] = size_world
+            obj["size_local"] = size_local
+
 
             # Get the camera projection matrix and screen size to project the cuboid keypoints to screen space
             cam_projection_tf = camera_params["cameraProjection"].reshape((4, 4))
@@ -1130,8 +1149,8 @@ with rep.new_layer(name="SDG"):
     with object_group:
             rep.modify.pose(
                 position=rep.distribution.uniform(obj_ws.get("min"), obj_ws.get("max")),
-                rotation=rep.distribution.uniform((0, 0, 0), (0, 0, 360)),
-                scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
+                rotation=rep.distribution.uniform((0, 0, 0), (360, 360, 360)),
+                # scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
             )
 
 

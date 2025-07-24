@@ -1,0 +1,115 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import matplotlib.image as mpimg
+import json
+
+def load_kitti_label(label_path):
+    objects = []
+    with open(label_path, 'r') as f:
+        for line in f:
+            if line.strip() == '': continue
+            data = line.strip().split()
+            obj = {
+                'type': data[0],
+                'truncated': float(data[1]),
+                'occluded': int(data[2]),
+                'alpha': float(data[3]),
+                'bbox': [float(x) for x in data[4:8]],
+                'dimensions': [float(x) for x in data[8:11]],  # h, w, l
+                'location': [float(x) for x in data[11:14]],  # x, y, z (user: z backward)
+                'rotation_y': float(data[14]),
+            }
+            objects.append(obj)
+    return objects
+
+def plot_all(label_path, rgb_path, debug_path):
+    objects = load_kitti_label(label_path)
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+
+    # --- BEV subplot ---
+    ax = axs[0]
+    for obj in objects:
+        loc = obj['location']
+        dims = obj['dimensions']
+        ry = obj['rotation_y']
+        label = obj['type']
+        alpha = obj['alpha']
+        x, y, z = loc
+        z = -z  # convert to z-forward
+        assert alpha == ry - np.atan2(x, z)
+        ax.plot(x, z, 'ro')
+        ax.text(x, z, label, color='blue', fontsize=10, ha='center', va='bottom')
+        arrow_length = 0.5
+        dx = np.cos(ry) * arrow_length
+        dz = np.sin(ry) * arrow_length
+        ax.arrow(x, z, dx, dz, head_width=0.12, head_length=0.15, fc='m', ec='m', linewidth=2)
+        h, w, l = dims
+        # Correct order: front-right, front-left, rear-left, rear-right, close
+        corners = np.array([
+            [ l/2, -w/2],   # front-right
+            [ l/2,  w/2],   # front-left
+            [-l/2,  w/2],   # rear-left
+            [-l/2, -w/2],   # rear-right
+            [ l/2, -w/2],   # close rectangle
+        ])
+        R = np.array([
+            [np.cos(ry), -np.sin(ry)],
+            [np.sin(ry),  np.cos(ry)]
+        ])
+        bev_corners = (R @ corners.T).T + np.array([x, z])
+        ax.plot(bev_corners[:,0], bev_corners[:,1], 'g-', linewidth=2)
+    ax.set_xlim(-3, 3)
+    ax.set_ylim(-0.5, 5)
+    ax.plot(0, 0, marker='^', color='black', markersize=14, label='Camera')
+    ax.text(0, 0, 'Camera', color='black', fontsize=12, ha='right', va='bottom', fontweight='bold')
+    cam_arrow_len = 1.0
+    ax.arrow(0, 0, 0, cam_arrow_len, head_width=0.2, head_length=0.2, fc='navy', ec='navy', linewidth=3, zorder=5, label='Camera View')
+    ax.text(0, cam_arrow_len+0.2, 'View', color='navy', fontsize=12, ha='center', va='bottom', fontweight='bold')
+    ax.set_facecolor('#f7f7fa')
+    ax.grid(True, linestyle='--', linewidth=0.7, alpha=0.7)
+    ax.set_xlabel('x (right, m)', fontsize=12, fontweight='bold')
+    ax.set_ylabel('z (forward, m)', fontsize=12, fontweight='bold')
+    ax.set_title('BEV', fontsize=14, fontweight='bold')
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], marker='^', color='w', label='Camera', markerfacecolor='black', markersize=14),
+        Line2D([0], [0], color='navy', lw=3, label='Camera View'),
+        Line2D([0], [0], marker='o', color='w', label='Object Center', markerfacecolor='red', markersize=10),
+        Line2D([0], [0], color='g', lw=2, label='Object BBox'),
+        Line2D([0], [0], color='m', lw=2, label='Object Direction'),
+    ]
+    ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
+
+    # --- 2D BBox on RGB image subplot ---
+    ax2 = axs[1]
+    img = mpimg.imread(rgb_path)
+    ax2.imshow(img)
+    for obj in objects:
+        bbox = obj['bbox']  # [xmin, ymin, xmax, ymax]
+        label = obj['type']
+        rect = patches.Rectangle((bbox[0], bbox[1]), bbox[2]-bbox[0], bbox[3]-bbox[1], linewidth=2, edgecolor='lime', facecolor='none')
+        ax2.add_patch(rect)
+        ax2.text(bbox[0], bbox[1]-5, label, color='lime', fontsize=10, fontweight='bold', va='bottom', ha='left', bbox=dict(facecolor='black', alpha=0.3, edgecolor='none', pad=1))
+    ax2.set_title('2D Bounding Boxes', fontsize=14, fontweight='bold')
+    ax2.axis('off')
+
+    # --- Debug image subplot ---
+    ax3 = axs[2]
+    debug_img = mpimg.imread(debug_path)
+    ax3.imshow(debug_img)
+    ax3.set_title('Debug Image', fontsize=14, fontweight='bold')
+    ax3.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--index", type=int, default=0)
+    index = parser.parse_args().index
+    label_path = f"/home/haoyu/Desktop/viz/Camera/object_detection/{index}.txt"
+    rgb_path = f"/home/haoyu/Desktop/viz/Camera/uw_rgb/{index}.png"
+    debug_path = f"/home/haoyu/Desktop/viz/Camera/debug/{index}.png"
+    plot_all(label_path, rgb_path, debug_path)
