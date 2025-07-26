@@ -1,24 +1,17 @@
-# This is the location of the palletjacks in the simready asset library
-PALLETJACKS = [
-    "http://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/DigitalTwin/Assets/Warehouse/Equipment/Pallet_Trucks/Scale_A/PalletTruckScale_A01_PR_NVD_01.usd",
-    "http://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/DigitalTwin/Assets/Warehouse/Equipment/Pallet_Trucks/Heavy_Duty_A/HeavyDutyPalletTruck_A01_PR_NVD_01.usd",
-    "http://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/DigitalTwin/Assets/Warehouse/Equipment/Pallet_Trucks/Low_Profile_A/LowProfilePalletTruck_A01_PR_NVD_01.usd",
-]
-
 
 # The warehouse distractors which will be added to the scene and randomized
-DISTRACTORS_WAREHOUSE = 1 * [
+DISTRACTORS_WAREHOUSE = 3 * [
     "/Isaac/Environments/Simple_Warehouse/Props/S_TrafficCone.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/S_WetFloorSign.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/S_WetFloorSign.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_01.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_02.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_03.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_03.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_03.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_C_02.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
-    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticB_01.usd",
+    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticB_01.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticD_01.usd",
@@ -41,17 +34,16 @@ DISTRACTORS_WAREHOUSE = 1 * [
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_03.usd",
 ]
 
-import os
 import carb.settings
 import omni.replicator.core as rep
 import omni.timeline
 from isaacsim.storage.native import get_assets_root_path
 import random
 import numpy as np
-from omni.kit.viewport.utility import get_active_viewport
-from pxr import Gf, PhysxSchema, Usd, UsdGeom, UsdPhysics, Sdf
+from pxr import Gf, PhysxSchema, Usd, UsdGeom, UsdPhysics
 from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.prims import SingleXFormPrim
+from omni.kit.viewport.utility import get_active_viewport
+
 
 # needed for loading textures correctly
 def prefix_with_isaac_asset_server(relative_path):
@@ -63,23 +55,6 @@ def prefix_with_isaac_asset_server(relative_path):
     return assets_root_path + relative_path
 
 
-
-
-def get_random_transform_values(
-    loc_min=(0, 0, 0), loc_max=(1, 1, 1), rot_min=(0, 0, 0), rot_max=(360, 360, 360), scale_min_max=(0.1, 1.0)
-):
-    location = (
-        random.uniform(loc_min[0], loc_max[0]),
-        random.uniform(loc_min[1], loc_max[1]),
-        random.uniform(loc_min[2], loc_max[2]),
-    )
-    rotation = (
-        random.uniform(rot_min[0], rot_max[0]),
-        random.uniform(rot_min[1], rot_max[1]),
-        random.uniform(rot_min[2], rot_max[2]),
-    )
-    scale = tuple([random.uniform(scale_min_max[0], scale_min_max[1])] * 3)
-    return location, rotation, scale
 
 
 # Add transformation properties to the prim (if not already present)
@@ -190,23 +165,12 @@ def create_collision_box_walls(stage, path, width, depth, height, thickness=0.5,
             UsdGeom.Imageable(prim).MakeInvisible()
 
 
-# Create a random transformation values for location, rotation, and scale
-def get_random_transform_values(
-    loc_min=(0, 0, 0), loc_max=(1, 1, 1), rot_min=(0, 0, 0), rot_max=(360, 360, 360), scale_min_max=(0.1, 1.0)
-):
-    location = (
-        random.uniform(loc_min[0], loc_max[0]),
-        random.uniform(loc_min[1], loc_max[1]),
-        random.uniform(loc_min[2], loc_max[2]),
-    )
-    rotation = (
-        random.uniform(rot_min[0], rot_max[0]),
-        random.uniform(rot_min[1], rot_max[1]),
-        random.uniform(rot_min[2], rot_max[2]),
-    )
-    scale = tuple([random.uniform(scale_min_max[0], scale_min_max[1])] * 3)
-    return location, rotation, scale
-
+# Enable or disable the render products and viewport rendering
+def set_render_products_updates(render_products, enabled, include_viewport=False):
+    for rp in render_products:
+        rp.hydra_texture.set_updates_enabled(enabled)
+    if include_viewport:
+        get_active_viewport().updates_enabled = enabled
 
 # Generate a random pose on a sphere looking at the origin
 # https://docs.omniverse.nvidia.com/isaacsim/latest/reference_conventions.html
@@ -236,21 +200,6 @@ def get_random_pose_on_sphere(origin, radius, camera_forward_axis=(0, 0, -1)):
     return location, orientation
 
 
-# Temporarily enable camera colliders and simulate for the given number of frames to push out any overlapping objects
-def simulate_camera_collision(simulation_app, camera_colliders, num_frames=1):
-    timeline = omni.timeline.get_timeline_interface()
-    for cam_collider in camera_colliders:
-        collision_api = UsdPhysics.CollisionAPI(cam_collider)
-        collision_api.GetCollisionEnabledAttr().Set(True)
-    if not timeline.is_playing():
-        timeline.play()
-    for _ in range(num_frames):
-        simulation_app.update()
-    for cam_collider in camera_colliders:
-        collision_api = UsdPhysics.CollisionAPI(cam_collider)
-        collision_api.GetCollisionEnabledAttr().Set(False)
-
-
         
 def full_objs_list():
     """Distractor type allowed are warehouse, additional or None. They load corresponding objects and add
@@ -260,16 +209,18 @@ def full_objs_list():
     for obj in DISTRACTORS_WAREHOUSE:
         full_objs_list.append(prefix_with_isaac_asset_server(obj))
 
-    print("Objects being added to the scene.")
-
     return full_objs_list
 
 
 
-def add_objects():
+def add_objects(physics=False):
     assets = []
     for obj in full_objs_list():
         asset = rep.create.from_usd(obj)
+        prim = asset.get_output_prims()["prims"][0]
+
+        if physics:
+            add_colliders_and_rigid_body_dynamics(prim)
         assets.append(asset)
 
     return rep.create.group(assets)

@@ -19,29 +19,29 @@ config = {
         "headless": True,
         "extra_args": [
             "--/persistent/renderer/rtpt/enabled=True",              # This enables RTX realtime preview renderer
-            "--/log/level=error",
+            "--/log/level=error",                                    # These will shut up isaac sim as I could 
+            "--/log/fileLogLevel=error", 
+            "--/log/outputStreamLevel=error"
             ]
     },
-    "num_cameras" : 1,
+    "num_cameras" : 5,
     "camera_collider_radius": 0.2,
     "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
-    "rt_subframes": 4,
+    "rt_subframes": 16,
     "num_frames": 10,
-    # "distractors": "warehouse",
-    "simulation_duration_between_captures": 0.05,
     "resolution": (1920, 1080),
     "camera_properties_kwargs": {
         "focal_length": 24.0,
         "focus_distance": 400,
         "f_stop": 0.0,
-        "clipping_range": (0.01, 10000),
+        "clipping_range": (0.01, 100),
     },
     "writer_type": "UWCam_KittiWriter",
     "writer_kwargs": {
         "output_dir": "/home/haoyu/Desktop/viz/",
         "colorize_instance_segmentation": True,
         "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
-        "debug_mode": True,
+        "debug_mode": False,
 
     },
     "obj_workspace": {
@@ -49,8 +49,8 @@ config = {
         "max" : (1.5, 3.7, 1.65)
     },
     "cam_workspace" : {
-        "min" : (-1.5, -2.3, 1.25),
-        "max" : (1.5, 3.7, 1.65)
+        "min" : (-1.5, -2.3, 1.15),
+        "max" : (1.5, 3.7, 1.5)
     },
     # "Renderer": "Real-Time 2.0 (Preview)",
     # "UW_param": [0.0, 0.31, 0.24, 0.05, 0.05, 0.2, 0.05, 0.05, 0.05 ]
@@ -92,15 +92,11 @@ else:
     simulation_app.close()
     sys.exit("[SDG] OceanSim loaded failed. SDG Stopped...")
 
-value1 = extensions_utils.enable_extension(extension_name="omni.kit.environment.core")
-value2 = extensions_utils.enable_extension(extension_name="omni.kit.property.environment")
-value3 = extensions_utils.enable_extension(extension_name="omni.kit.window.environment")
-# if not all([value1, value2, value3]):
-#     print("[SDG] Environment extension loaded successfully")
-# else:
-#     simulation_app.update()
-#     simulation_app.close()
-#     sys.exit("[SDG] Environment extension loaded failed. SDG Stopped...")
+# Load an environment extension that some usd scenes will rely on
+extensions_utils.enable_extension(extension_name="omni.kit.environment.core")
+extensions_utils.enable_extension(extension_name="omni.kit.property.environment")
+extensions_utils.enable_extension(extension_name="omni.kit.window.environment")
+
 ############################################
 #### Here goes implementation of writer #### 
 ############################################
@@ -195,7 +191,6 @@ class UWCam_KittiWriter(Writer):
         - Bounding boxes with a height smaller than 25 pixels are discarded
         - **Supported:** bounding box extents, semantic labels
         - **Partial Support:** occluded (occlusion is estimated from the area ratio of tight / loose bounding boxes)
-        - **Unsupported:** alpha, dimensions, location, rotation_y, truncated (all set to default values of ``0.0``)
     """
 
     def __init__(
@@ -210,7 +205,6 @@ class UWCam_KittiWriter(Writer):
         bbox2d_partly_occluded_threshold: float = 0.5,
         bbox2d_fully_visible_threshold: float = 0.95,
         bbox3d_visibility_threshold: float = 0.15,  # Threshold for filtering out objects with low 3d bbox visibility
-        renderproduct_idxs: List[tuple] = None,
         mapping_path: str = None,
         mapping_dict: dict = None,
         colorize_instance_segmentation: bool = False,
@@ -232,13 +226,11 @@ class UWCam_KittiWriter(Writer):
             )
         else:
             self._backend = BackendDispatch(output_dir=output_dir)
-        self.backend = self._backend
         self._omit_semantic_type = omit_semantic_type
         self._bbox_height_threshold = bbox_height_threshold
         self._bbox2d_partly_occluded_threshold = bbox2d_partly_occluded_threshold
         self._bbox2d_fully_visible_threshold = bbox2d_fully_visible_threshold
         self._bbox3d_visibility_threshold = bbox3d_visibility_threshold
-        self._render_product_idxs = renderproduct_idxs
         self._use_kitti_dir_names = use_kitti_dir_names
         self._cuboid_keypoints_order = cuboid_keypoints_order
         self._debug_mode = debug_mode
@@ -314,11 +306,6 @@ class UWCam_KittiWriter(Writer):
             "camera_params",
         ]
 
-        if self._debug_mode:
-            self.annotators.append(
-                AnnotatorRegistry.get_annotator(
-                "pointcloud", init_params={"includeUnlabelled": True}, device=self._device
-            ))
 
     def _get_anno_semantic_mapping(self):
         anno_semantic_mapping = {}
@@ -364,7 +351,7 @@ class UWCam_KittiWriter(Writer):
         objs_data = self._process_bounding_boxes_3d(data[bbox_3d_annotator], data[camera_param_annotator])
         pose_dir_name = "pose_02" if self._use_kitti_dir_names else "pose"
         pose_file_path = os.path.join(sub_dir, pose_dir_name, f"{self._frame_id}.json")
-        self.backend.schedule(F.write_json, path=pose_file_path, data=objs_data, indent=2)
+        self._backend.schedule(F.write_json, path=pose_file_path, data=objs_data, indent=2)
 
 
     def _write_object_detection(
@@ -584,10 +571,7 @@ class UWCam_KittiWriter(Writer):
             min_world = np.min(all_world_keypoints[:, :3], axis=0)
             max_world = np.max(all_world_keypoints[:, :3], axis=0)
             size_world = np.abs(max_world - min_world).tolist()
-            print(f"[SDG] all_world_keypoints: {all_world_keypoints}")
-            print(f"[SDG] min_world: {min_world}")
-            print(f"[SDG] max_world: {max_world}")
-            print(f"[SDG] size_world: {size_world}")
+
             obj["size_world"] = size_world
             obj["size_local"] = size_local
 
@@ -625,11 +609,6 @@ class UWCam_KittiWriter(Writer):
             # `occlusionRatio` represents (visible pixels / total pixels) where `0.0` is fully visible and `1.0` is fully occluded
             # NOTE: `obj_visibility` is inverted to match the format where `0.0` is fully occluded and `1.0`` is fully visible
             obj_visibility = 1.0 - abs(float(bbox["occlusionRatio"]))
-
-            # Early exit if visibility is below the given threshold
-            # if obj_visibility <= self._visibility_threshold:
-            #     continue
-
 
             obj["label"] = id_to_labels[bbox["semanticId"]]
             obj["prim_path"] = bounding_box_3d["info"]["primPaths"][i]
@@ -766,7 +745,6 @@ class UWCam_KittiWriter(Writer):
         seg_filepath = os.path.join(sub_dir, "semantic", f"{self._frame_id}.png")
         seg_col_filepath = os.path.join(sub_dir, sem_rgb_dir_name, f"{self._frame_id}.png")
         inst_filepath = os.path.join(sub_dir, inst_dir_name, f"{self._frame_id}.png")
-        inst_col_filepath = os.path.join(sub_dir, "instance_rgb", f"{self._frame_id}.png")
 
         inst_id_to_labels = data[inst_annotator]["info"]["idToSemantics"]
         self._backend.schedule(F.write_image, data=data[sem_annotator]["data"], path=seg_col_filepath)
@@ -775,6 +753,7 @@ class UWCam_KittiWriter(Writer):
         height, width = inst_seg_img.shape[:2]
 
         if self.colorize_instance_segmentation:
+            inst_col_filepath = os.path.join(sub_dir, "instance_rgb", f"{self._frame_id}.png")
             inst_seg_img_colorized = inst_seg_img.view(np.uint8)
             inst_seg_img_colorized = inst_seg_img_colorized.reshape(height, width, -1)
             self._backend.schedule(F.write_image, data=inst_seg_img_colorized, path=inst_col_filepath)
@@ -872,11 +851,11 @@ class UWCam_KittiWriter(Writer):
             )
             self._write_distance_to_camera(data, sub_dir, "distance_to_camera")
             self._write_camera_param(data, sub_dir, "camera_params")
-            # NOTE: To use the debug mode, you have to write the object pose 
-            self._write_object_pose(data, sub_dir, "bounding_box_3d_fast", "camera_params")
             if self._debug_mode:
+                # NOTE: To use the debug mode, you have to write the object pose to get some debug info
+                self._write_object_pose(data, sub_dir, "bounding_box_3d_fast", "camera_params")
                 self._write_debug_data(sub_dir)
-                self._write_debug_pointcloud(data, sub_dir, "pointcloud")
+
         else:
             for render_product in render_products:
                 render_product_name = render_product[3:]
@@ -900,9 +879,14 @@ class UWCam_KittiWriter(Writer):
                     render_product,
                     f"bounding_box_2d_tight_fast-{render_product_name}",
                     f"bounding_box_2d_loose_fast-{render_product_name}",
+                    f"bounding_box_3d_fast-{render_product_name}",
+                    f"camera_params-{render_product_name}"
                 )
                 self._write_distance_to_camera(data, sub_dir, f"distance_to_camera-{render_product_name}")
                 self._write_camera_param(data, sub_dir, f"camera_params-{render_product_name}")
+                if self._debug_mode:
+                    self._write_object_pose(data, sub_dir, f"bounding_box_3d_fast-{render_product_name}", f"camera_params-{render_product_name}")
+                    self._write_debug_data(sub_dir)
 
         self._frame_id += 1
     
@@ -945,7 +929,7 @@ class UWCam_KittiWriter(Writer):
         # Overlay the world frame axes on the bottom left part of the RGB image
         self._draw_world_frame_axes_bottom_left(draw, camera_view_matrix, camera_projection_matrix, screen_size)
 
-        self.backend.schedule(F.write_image, path=debug_file_path, data=np.asarray(rgb_img))
+        self._backend.schedule(F.write_image, path=debug_file_path, data=np.asarray(rgb_img))
 
 
     # Project a 3D point from world coordinates to 2D screen coordinates
@@ -1073,11 +1057,6 @@ class UWCam_KittiWriter(Writer):
         draw.line([origin_2d, y_axis_end_2d], fill="green", width=2)  # Y-axis in green
         draw.line([origin_2d, z_axis_end_2d], fill="blue", width=2)  # Z-axis in blue
 
-    def _write_debug_pointcloud(self, data, sub_dir: str, pointcloud_annot: str):
-        
-        pcl_data = data[pointcloud_annot]["data"][0].numpy()  # shape :(1,N,3) <class 'warp.types.array'>
-        debug_pcl_path = os.path.join(sub_dir, "pointcloud", f"{self._frame_id}.npy")
-        self._backend.schedule(F.write_np, data=pcl_data, path=debug_pcl_path)
 
 WriterRegistry.register(UWCam_KittiWriter)
 
@@ -1130,77 +1109,136 @@ rt_subframes = config.get("rt_subframes", -1)
 obj_ws = config.get("obj_workspace")
 cam_ws = config.get("cam_workspace")
 
-with rep.new_layer(name="SDG"):
-# Create the camera prims and their properties
-    cameras = []
-    num_cameras = config.get("num_cameras", 1)
-    camera_properties_kwargs = config.get("camera_properties_kwargs", {})
-    for i in range(num_cameras):
-        # Create camera and add its properties (focal length, focus distance, f-stop, clipping range, etc.)
-        cameras.append(rep.create.camera(**camera_properties_kwargs))
-        
-    # Create a camera replicator group 
-    camera_groups = rep.create.group(cameras)
 
-
-    
-    # Set up objects in the scene
-    object_group = add_objects()
-    with object_group:
-            rep.modify.pose(
-                position=rep.distribution.uniform(obj_ws.get("min"), obj_ws.get("max")),
-                rotation=rep.distribution.uniform((0, 0, 0), (360, 360, 360)),
-                # scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
-            )
-
-
-    
-    with rep.trigger.on_frame(max_execs=num_frames, rt_subframes=rt_subframes):
-        
-        # with object_group:
-        #     rep.modify.pose(
-        #         position=rep.distribution.uniform(obj_ws.get("min"), obj_ws.get("max")),
-        #         rotation=rep.distribution.uniform((0, 0, 0), (0, 0, 360)),
-        #         scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
-        #     )
-        
-        with camera_groups:
-            rep.modify.pose(
-                position=rep.distribution.uniform(cam_ws.get("min"), cam_ws.get("max")),
-                look_at=rep.distribution.choice(object_group),
-            )
-
-
-
-# Amount of simulation time to wait between captures
-# sim_duration_between_captures = config.get("simulation_duration_between_captures", 0.0)
-
-
-# Create render products using the cameras
 resolution = config.get("resolution", (640, 480))
-
 # Create the writer and attach the render products
 writer_type = config.get("writer_type", "BasicWriter")
 writer_kwargs = config.get("writer_kwargs", {})
+
 # If not an absolute path, set it relative to the current working directory
 if out_dir := writer_kwargs.get("output_dir"):
     if not os.path.isabs(out_dir):
         out_dir = os.path.join(os.getcwd(), out_dir)
         writer_kwargs["output_dir"] = out_dir
     print(f"[SDG] Writing data to: {out_dir}")
+num_cameras = config.get("num_cameras", 1)
+camera_properties_kwargs = config.get("camera_properties_kwargs", {})
+camera_collider_radius = config.get("camera_collider_radius", 0)
 
-if writer_type is not None:
-    for cam in cameras:
+
+
+with rep.new_layer(name="SDG"):
+
+    cameras = []
+    render_products = []
+    for i in range(num_cameras):
+        cam = rep.create.camera(**camera_properties_kwargs, name=f"Camera_{i}")
         rp = rep.create.render_product(cam, resolution)
         writer = rep.writers.get(writer_type)
         writer.initialize(**writer_kwargs)
         writer.attach(rp)
+        cameras.append(cam)        
+        render_products.append(rp)
+
+        # Add collision spheres (disabled by default) to cameras to avoid objects overlaping with the camera view
+        if camera_collider_radius > 0:
+            cam_path = cam.get_output_prims()["prims"][0].GetPath().pathString
+            cam_collider = stage.DefinePrim(f"{cam_path}/CollisionSphere", "Sphere")
+            cam_collider.GetAttribute("radius").Set(camera_collider_radius)
+            add_colliders(cam_collider)
+            collision_api = UsdPhysics.CollisionAPI(cam_collider)
+            UsdGeom.Imageable(cam_collider).MakeInvisible()
+
+    # Setup the camera and object groups
+    camera_group = rep.create.group(cameras)
+
+    print(f"[SDG] Camera group created with {num_cameras} cameras and colliders: {camera_collider_radius > 0}")
+    object_group = add_objects(physics=True)
+    print(f"[SDG] Objects being added to the scene") 
+
+    def randomize_camera():
+        with camera_group:
+            rep.modify.pose(
+                position=rep.distribution.uniform(cam_ws.get("min"), cam_ws.get("max")),
+                look_at=rep.distribution.choice(object_group),
+            )
+        return camera_group.node
+    
+    rep.randomizer.register(randomize_camera)
+    with rep.trigger.on_custom_event(event_name="randomize_camera"):
+        rep.randomizer.randomize_camera()
+    
+    
+    def randomize_object():
+        with object_group:
+            rep.modify.pose(
+                position=rep.distribution.uniform(obj_ws.get("min"), obj_ws.get("max")),
+                rotation=rep.distribution.uniform((0, 0, 0), (360, 360, 360)),
+                scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
+            )
+        return object_group.node
+    
+    rep.randomizer.register(randomize_object)
 
 
-print("[SDG] Running the simulation")
-rep.orchestrator.run()
+    with rep.trigger.on_custom_event(event_name="randomize_object"):
+        rep.randomizer.randomize_object()
+
+
+# Data will be captured manually using step
+rep.orchestrator.set_capture_on_play(False)
+# Set the timeline parameters (start, end, no looping) and start the timeline
+
+print(f"[SDG] Heating up the simulation for 100 ticks")
+for _ in range(100):
+    simulation_app.update()
+
+print(f"[SDG] Timeline starts. Running the simulation for {num_frames} frames")
+timeline = omni.timeline.get_timeline_interface()
+timeline.set_start_time(0)
+timeline.set_end_time(1e8)
+timeline.set_looping(False)
+timeline.play()
+timeline.commit()
+
+wall_time_start = time.perf_counter()
+
+for i in range(num_frames):
+    
+    
+    rep.utils.send_og_event(event_name="randomize_object")
+    
+    # Run the simulation loop for 3 ticks for physics to settle
+    for _ in range(3):
+        simulation_app.update()
+
+    rep.utils.send_og_event(event_name="randomize_camera")
+    # Run the simulation loop for 3 ticks for camera collider to push back objects
+    for _ in range(1):
+        simulation_app.update()
+
+    # set_render_products_updates(render_products, True, include_viewport=True)
+    print(f"[SDG] Capturing frame {i}/{num_frames}, at simulation time: {timeline.get_current_time():.2f}")
+    # The step function provides new data to the annotators, triggers the randomizers and the writer
+    rep.orchestrator.step(rt_subframes=rt_subframes)
+    # set_render_products_updates(render_products, False, include_viewport=True)
+
+
+set_render_products_updates(render_products, True, include_viewport=True)
+
 rep.orchestrator.wait_until_complete()
+# Get the stats
+wall_duration = time.perf_counter() - wall_time_start
+avg_frame_fps = num_frames / wall_duration
 
+print(
+    f"[SDG] Captured {num_frames} frames in {wall_duration:.2f} seconds.\n"
+    f"\t Simulation duration: {timeline.get_current_time():.2f}\n"
+    f"\t Average frame FPS: {avg_frame_fps:.2f}\n"
+)
+
+timeline.stop()
+simulation_app.update()
 simulation_app.close()
 
 

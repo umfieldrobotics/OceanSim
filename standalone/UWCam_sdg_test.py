@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.image as mpimg
 import json
+import cv2
+import os
 
 def load_kitti_label(label_path):
     objects = []
@@ -23,21 +25,24 @@ def load_kitti_label(label_path):
             objects.append(obj)
     return objects
 
-def plot_all(label_path, rgb_path, debug_path):
+def plot_all(label_path, rgb_path, debug_path, instance_seg_path=None, semantic_seg_path=None):
     objects = load_kitti_label(label_path)
-    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+    fig, axs = plt.subplots(2, 3, figsize=(18, 12))
+    axs = np.atleast_2d(axs)
 
     # --- BEV subplot ---
-    ax = axs[0]
+    ax = axs[0, 0]
     for obj in objects:
         loc = obj['location']
         dims = obj['dimensions']
         ry = obj['rotation_y']
         label = obj['type']
-        alpha = obj['alpha']
         x, y, z = loc
         z = -z  # convert to z-forward
-        assert alpha == ry - np.atan2(x, z)
+        alpha = ry - np.atan2(x, z)
+        alpha = alpha % (2 * np.pi)
+        alpha = alpha - 2 * np.pi if alpha > np.pi else alpha  # normalize to [-pi, pi]
+        assert np.isclose(obj['alpha'], alpha, atol=1e-2) # 1e-2 because SDG saves :2f
         ax.plot(x, z, 'ro')
         ax.text(x, z, label, color='blue', fontsize=10, ha='center', va='bottom')
         arrow_length = 0.5
@@ -82,7 +87,7 @@ def plot_all(label_path, rgb_path, debug_path):
     ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
 
     # --- 2D BBox on RGB image subplot ---
-    ax2 = axs[1]
+    ax2 = axs[0, 1]
     img = mpimg.imread(rgb_path)
     ax2.imshow(img)
     for obj in objects:
@@ -95,11 +100,33 @@ def plot_all(label_path, rgb_path, debug_path):
     ax2.axis('off')
 
     # --- Debug image subplot ---
-    ax3 = axs[2]
+    ax3 = axs[0, 2]
     debug_img = mpimg.imread(debug_path)
     ax3.imshow(debug_img)
     ax3.set_title('Debug Image', fontsize=14, fontweight='bold')
     ax3.axis('off')
+
+    # --- Instance segmentation subplot (second row) ---
+    ax4 = axs[1, 0]
+    # Read 16-bit PNG
+    import PIL.Image as Image
+    inst_img = np.array(Image.open(instance_seg_path))
+
+    instance_id = inst_img & 0xFF
+    # Visualize instance ID with a colormap, 0 is background
+    ax4.imshow(instance_id, cmap='tab20', interpolation='nearest')
+    ax4.set_title('Instance Segmentation', fontsize=14, fontweight='bold')
+    ax4.axis('off')
+    
+    # --- Semantic segmentation subplot (second row) ---
+    ax5 = axs[1, 1]
+    semantic_id = (inst_img >> 8) & 0xFF
+    ax5.imshow(semantic_id, cmap='tab20', interpolation='nearest')
+    ax5.set_title('Semantic Segmentation', fontsize=14, fontweight='bold')
+    ax5.axis('off')
+
+    # Hide the unused subplot in the second row
+    axs[1, 2].axis('off')
 
     plt.tight_layout()
     plt.show()
@@ -109,7 +136,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--index", type=int, default=0)
     index = parser.parse_args().index
-    label_path = f"/home/haoyu/Desktop/viz/Camera/object_detection/{index}.txt"
-    rgb_path = f"/home/haoyu/Desktop/viz/Camera/uw_rgb/{index}.png"
-    debug_path = f"/home/haoyu/Desktop/viz/Camera/debug/{index}.png"
-    plot_all(label_path, rgb_path, debug_path)
+    base = f"/home/haoyu/Desktop/viz/Camera_0"
+    label_path = os.path.join(base, "object_detection", f"{index}.txt")
+    rgb_path = os.path.join(base, "uw_rgb", f"{index}.png")
+    debug_path = os.path.join(base, "debug", f"{index}.png")
+    instance_seg_path = os.path.join(base, "instance_segmentation", f"{index}.png")
+    semantic_seg_path = os.path.join(base, "semantic_segmentation", f"{index}.png")
+    plot_all(label_path, rgb_path, debug_path, instance_seg_path, semantic_seg_path)
