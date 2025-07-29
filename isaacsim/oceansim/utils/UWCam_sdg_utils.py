@@ -1,6 +1,7 @@
 
 # The warehouse distractors which will be added to the scene and randomized
-DISTRACTORS_WAREHOUSE = 3 * [
+# THese mesh are defualt and used to test the code
+DEFAULT_OBJECTS = 3 * [
     "/Isaac/Environments/Simple_Warehouse/Props/S_TrafficCone.usd",
     "/Isaac/Environments/Simple_Warehouse/Props/S_WetFloorSign.usd",
     "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_01.usd",
@@ -33,6 +34,73 @@ DISTRACTORS_WAREHOUSE = 3 * [
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_04.usd",
     # "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_03.usd",
 ]
+DEFAULT_LABELS = {
+    "UNLABELLED": (0, 0, 0, 0),
+    "BACKGROUND": (0, 0, 0, 0),
+    "wall": (0, 0, 0, 0),
+    "pillar": (0, 0, 0, 0),
+    "floor": (0, 0, 0, 0),
+    "floor_decal": (0, 0, 0, 0),
+    "klt_bin": (111, 74, 0, 255),
+    "palletjack": (81, 0, 81, 255),
+    "cone": (128, 64, 128, 255),
+    "sign": (244, 35, 232, 255),
+    "barel": (250, 170, 160, 255),
+    "bottle": (230, 150, 140, 255),
+    "box": (70, 70, 70, 255),
+    "crate": (102, 102, 156, 255),
+    "cart": (190, 153, 153, 255),
+    "rack": (180, 165, 180, 255),
+    "sign": (150, 100, 100, 255),
+    "bucket": (150, 120, 90, 255),
+    "wire": (153, 153, 153, 255),
+    "pallet": (153, 153, 153, 255),
+    "fire_extinguisher": (250, 170, 30, 255),
+    "fuse_box": (220, 220, 0, 255),
+
+}
+
+
+# Predefined colors for better visual distinction
+# Using distinct colors that are visually different from each other
+COLOR_PALETTE = [
+        (255, 0, 0, 255),      # Red
+        (0, 255, 0, 255),      # Green
+        (0, 0, 255, 255),      # Blue
+        (255, 255, 0, 255),    # Yellow
+        (255, 0, 255, 255),    # Magenta
+        (0, 255, 255, 255),    # Cyan
+        (128, 0, 0, 255),      # Dark Red
+        (0, 128, 0, 255),      # Dark Green
+        (0, 0, 128, 255),      # Dark Blue
+        (128, 128, 0, 255),    # Olive
+        (128, 0, 128, 255),    # Purple
+        (0, 128, 128, 255),    # Teal
+        (255, 128, 0, 255),    # Orange
+        (128, 255, 0, 255),    # Lime
+        (0, 255, 128, 255),    # Spring Green
+        (128, 0, 255, 255),    # Violet
+        (255, 0, 128, 255),    # Pink
+        (0, 128, 255, 255),    # Sky Blue
+        (255, 128, 128, 255),  # Light Red
+        (128, 255, 128, 255),  # Light Green
+        (128, 128, 255, 255),  # Light Blue
+        (255, 255, 128, 255),  # Light Yellow
+        (255, 128, 255, 255),  # Light Magenta
+        (128, 255, 255, 255),  # Light Cyan
+        (192, 192, 192, 255),  # Silver
+        (128, 64, 0, 255),     # Brown
+        (64, 128, 0, 255),     # Dark Green
+        (0, 64, 128, 255),     # Dark Blue
+        (128, 0, 64, 255),     # Dark Purple
+        (64, 0, 128, 255),     # Dark Violet
+        (0, 128, 64, 255),     # Dark Teal
+        (128, 64, 128, 255),   # Medium Purple
+        (64, 128, 128, 255),   # Medium Teal
+        (128, 128, 64, 255),   # Medium Olive
+    ]
+
+COU_objects_folder_path = "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready/"
 
 import carb.settings
 import omni.replicator.core as rep
@@ -43,7 +111,61 @@ import numpy as np
 from pxr import Gf, PhysxSchema, Usd, UsdGeom, UsdPhysics
 from isaacsim.core.utils.stage import get_current_stage
 from omni.kit.viewport.utility import get_active_viewport
+import os
 
+def parse_object_folder(objects_folder_path):
+    """
+    Parses the object folder and returns a dictionary of subfolders and their corresponding paths.
+    """
+    subfolders = {}
+    try:
+        # Get all items in the directory
+        items = os.listdir(objects_folder_path)
+        print(f"Found {len(items)} categories: {items} in {objects_folder_path}")
+        # Filter for directories only
+        for item in items:
+            item_path = os.path.join(objects_folder_path, item)
+            if os.path.isdir(item_path):
+                subfolders[item] = item_path
+        return subfolders
+                
+    except PermissionError:
+        print(f"Error: Permission denied accessing {objects_folder_path}")
+        return {}
+    except Exception as e:
+        print(f"Error accessing {objects_folder_path}: {e}")
+        return {}
+
+
+
+def add_COU_objects(objects_folder_path=COU_objects_folder_path, physics=False):
+    """
+    Returns all subfolder names and their corresponding paths within the COU_objects_folder_path.
+    
+    Returns:
+        dict: A dictionary where keys are subfolder names and values are their full paths.
+              Returns empty dict if the folder doesn't exist or has no subfolders.
+    """
+    if categories := parse_object_folder(objects_folder_path):
+
+        assets_paths = []
+        for category, folder_path in categories.items():
+            node = rep.create.from_dir(folder_path, recursive=True, semantics=[("class", category)])
+            if physics:
+                with node:
+                    rep.physics.collider("boundingSphere")
+
+
+            for prim in node.get_output_prims()["prims"]:
+                print(f"{category} : {prim.GetPath().pathString} added.")
+                assets_paths.append(prim.GetPath())
+
+        assets_group = rep.create.group(assets_paths)
+        return assets_group, generate_kitti_labels(categories)
+    
+    else:
+        print(f"Adding default objects")
+        return add_default_objects(), DEFAULT_LABELS
 
 # needed for loading textures correctly
 def prefix_with_isaac_asset_server(relative_path):
@@ -200,27 +322,23 @@ def get_random_pose_on_sphere(origin, radius, camera_forward_axis=(0, 0, -1)):
     return location, orientation
 
 
-        
-def full_objs_list():
-    """Distractor type allowed are warehouse, additional or None. They load corresponding objects and add
-    them to the scene for DR"""
+
+
+def add_default_objects(physics=False):
     full_objs_list = []
 
-    for obj in DISTRACTORS_WAREHOUSE:
+    for obj in DEFAULT_OBJECTS:
         full_objs_list.append(prefix_with_isaac_asset_server(obj))
 
-    return full_objs_list
-
-
-
-def add_objects(physics=False):
     assets = []
-    for obj in full_objs_list():
+    for obj in full_objs_list:
         asset = rep.create.from_usd(obj)
-        prim = asset.get_output_prims()["prims"][0]
+        # prim = asset.get_output_prims()["prims"][0]
 
         if physics:
-            add_colliders_and_rigid_body_dynamics(prim)
+            with asset:
+                rep.physics.collider("boundingSphere")
+
         assets.append(asset)
 
     return rep.create.group(assets)
@@ -276,5 +394,50 @@ def run_simulation_loop(duration, simulation_app):
     print(
         f"[SDG] Simulation loop finished in {elapsed_time:.2f} seconds at {timeline.get_current_time():.2f} with {app_updates_counter} app updates."
     )
+
+
+
+
+def generate_kitti_labels(categories):
+    """
+    Automatically generates KITTI labels based on subfolder names in the given path.
+    
+    Args:
+        folder_path (str): Path to the folder containing subfolders for object categories.
+    
+    Returns:
+        dict: A dictionary with category names as keys and RGBA color tuples as values.
+    """
+    
+    # Create KITTI labels dictionary
+    kitti_labels = {
+        "UNLABELLED": (0, 0, 0, 0),
+        "BACKGROUND": (0, 0, 0, 0),
+    }
+    
+    # Add each category with a unique color
+    categories_list = sorted(categories.keys())
+    for i, category in enumerate(categories_list):
+        if i < len(COLOR_PALETTE):
+            kitti_labels[category] = COLOR_PALETTE[i]
+        else:
+            # Generate a color if we run out of predefined colors
+            # Use a hash-based approach for consistent colors
+            import hashlib
+            hash_obj = hashlib.md5(category.encode())
+            hash_bytes = hash_obj.digest()
+            r = hash_bytes[0]
+            g = hash_bytes[1]
+            b = hash_bytes[2]
+            kitti_labels[category] = (r, g, b, 255)
+    
+    
+    return kitti_labels
+
+
+
+
+
+
 
 

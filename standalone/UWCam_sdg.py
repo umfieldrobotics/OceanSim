@@ -19,13 +19,13 @@ config = {
         "headless": True,
         "extra_args": [
             "--/persistent/renderer/rtpt/enabled=True",              # This enables RTX realtime preview renderer
-            "--/log/level=error",                                    # These will shut up isaac sim as I could 
-            "--/log/fileLogLevel=error", 
-            "--/log/outputStreamLevel=error"
+            # "--/log/level=error",                                    # These will shut up isaac sim as I could 
+            # "--/log/fileLogLevel=error", 
+            # "--/log/outputStreamLevel=error"
             ]
     },
-    "num_cameras" : 5,
-    "camera_collider_radius": 0.2,
+    "num_cameras" : 1,
+    # "camera_collider_radius": 0.2,
     "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
     "rt_subframes": 16,
     "num_frames": 10,
@@ -41,7 +41,7 @@ config = {
         "output_dir": "/home/haoyu/Desktop/viz/",
         "colorize_instance_segmentation": True,
         "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
-        "debug_mode": False,
+        "debug_mode": True,
 
     },
     "obj_workspace": {
@@ -49,7 +49,7 @@ config = {
         "max" : (1.5, 3.7, 1.65)
     },
     "cam_workspace" : {
-        "min" : (-1.5, -2.3, 1.15),
+        "min" : (-1.5, -2.3, 1.25),
         "max" : (1.5, 3.7, 1.5)
     },
     # "Renderer": "Real-Time 2.0 (Preview)",
@@ -226,6 +226,7 @@ class UWCam_KittiWriter(Writer):
             )
         else:
             self._backend = BackendDispatch(output_dir=output_dir)
+        self.backend = self._backend
         self._omit_semantic_type = omit_semantic_type
         self._bbox_height_threshold = bbox_height_threshold
         self._bbox2d_partly_occluded_threshold = bbox2d_partly_occluded_threshold
@@ -403,6 +404,8 @@ class UWCam_KittiWriter(Writer):
                 bbox_tight_bbox_ids,
                 np.intersect1d(bbox_loose_bbox_ids, bbox_3d_bbox_ids)
                 )
+        
+        print(f"Frame: {self._frame_id}")
 
 
         for id in shared_ids:
@@ -440,9 +443,11 @@ class UWCam_KittiWriter(Writer):
             ):
                 continue
             
+            # Only compute object's 3d information after the above test
             bbox3d_info = self._process_bounding_box_3d_single(bbox3d_id_to_bbox[id], data[camera_param_annotator])
-            if bbox3d_info["visibility"] <= self._bbox3d_visibility_threshold:
-                continue
+            
+            # if bbox3d_info["visibility"] <= self._bbox3d_visibility_threshold:
+            #     continue
             
             semantic_label = data[bbox_2d_tight_annotator]["info"]["idToLabels"].get(box_tight["semanticId"])
 
@@ -450,7 +455,6 @@ class UWCam_KittiWriter(Writer):
                 # omit semantic type
                 semantic_label = semantic_label.get("class", "Unlabelled")
             
-            # Only compute object's 3d information after the above test
 
             # Adding Kitti Data,  NOTE: Only class and 2d bbox coordinates are filled in
             label.append(semantic_label)  # semantic
@@ -744,10 +748,13 @@ class UWCam_KittiWriter(Writer):
         inst_dir_name = "instance" if self._use_kitti_dir_names else "instance_segmentation"
         seg_filepath = os.path.join(sub_dir, "semantic", f"{self._frame_id}.png")
         seg_col_filepath = os.path.join(sub_dir, sem_rgb_dir_name, f"{self._frame_id}.png")
+        seg_mapping_filepath = os.path.join(sub_dir, sem_rgb_dir_name, "semantic_mapping.json")
+
         inst_filepath = os.path.join(sub_dir, inst_dir_name, f"{self._frame_id}.png")
 
         inst_id_to_labels = data[inst_annotator]["info"]["idToSemantics"]
         self._backend.schedule(F.write_image, data=data[sem_annotator]["data"], path=seg_col_filepath)
+        self._backend.schedule(F.write_json, data=self.mapping_dict, path=seg_mapping_filepath)
 
         inst_seg_img = data[inst_annotator]["data"]
         height, width = inst_seg_img.shape[:2]
@@ -1068,10 +1075,7 @@ WriterRegistry.register(UWCam_KittiWriter)
 
 import time
 import omni.replicator.core as rep
-import omni.timeline
-import omni.usd
 from isaacsim.storage.native import get_assets_root_path
-import isaacsim.core.utils.prims as prims_utils
 from pxr import PhysxSchema, Sdf, UsdGeom, UsdPhysics, Gf
 from isaacsim.oceansim.utils.UWCam_sdg_utils import *
 
@@ -1123,51 +1127,63 @@ if out_dir := writer_kwargs.get("output_dir"):
     print(f"[SDG] Writing data to: {out_dir}")
 num_cameras = config.get("num_cameras", 1)
 camera_properties_kwargs = config.get("camera_properties_kwargs", {})
-camera_collider_radius = config.get("camera_collider_radius", 0)
+# camera_collider_radius = config.get("camera_collider_radius", 0)
 
 
 
 with rep.new_layer(name="SDG"):
-
     cameras = []
     render_products = []
+    
+    object_group, kitti_labels = add_COU_objects(physics=True)
+    print(f"[SDG] Objects being added to the scene") 
+    print(f"[SDG] KITTI labels: {kitti_labels}")
+
     for i in range(num_cameras):
         cam = rep.create.camera(**camera_properties_kwargs, name=f"Camera_{i}")
         rp = rep.create.render_product(cam, resolution)
         writer = rep.writers.get(writer_type)
-        writer.initialize(**writer_kwargs)
+        writer.initialize(**writer_kwargs, mapping_dict=kitti_labels)
         writer.attach(rp)
         cameras.append(cam)        
         render_products.append(rp)
 
+        # This is buggy, adding a collider will mess up with the camera orientation in multi-camera SDG
         # Add collision spheres (disabled by default) to cameras to avoid objects overlaping with the camera view
-        if camera_collider_radius > 0:
-            cam_path = cam.get_output_prims()["prims"][0].GetPath().pathString
-            cam_collider = stage.DefinePrim(f"{cam_path}/CollisionSphere", "Sphere")
-            cam_collider.GetAttribute("radius").Set(camera_collider_radius)
-            add_colliders(cam_collider)
-            collision_api = UsdPhysics.CollisionAPI(cam_collider)
-            UsdGeom.Imageable(cam_collider).MakeInvisible()
+        # if camera_collider_radius > 0:
+            # cam_path = cam.get_output_prims()["prims"][0].GetPath().pathString
+            # cam_collider = stage.DefinePrim(f"{cam_path}/CollisionSphere", "Sphere")
+            # cam_collider.GetAttribute("radius").Set(camera_collider_radius)
+            # add_colliders(cam_collider)
+            # collision_api = UsdPhysics.CollisionAPI(cam_collider)
+            # UsdGeom.Imageable(cam_collider).MakeInvisible()
 
     # Setup the camera and object groups
     camera_group = rep.create.group(cameras)
 
-    print(f"[SDG] Camera group created with {num_cameras} cameras and colliders: {camera_collider_radius > 0}")
-    object_group = add_objects(physics=True)
-    print(f"[SDG] Objects being added to the scene") 
+    print(f"[SDG] Camera group created with {num_cameras} cameras.")
+    
 
     def randomize_camera():
         with camera_group:
             rep.modify.pose(
                 position=rep.distribution.uniform(cam_ws.get("min"), cam_ws.get("max")),
-                look_at=rep.distribution.choice(object_group),
             )
         return camera_group.node
     
     rep.randomizer.register(randomize_camera)
     with rep.trigger.on_custom_event(event_name="randomize_camera"):
         rep.randomizer.randomize_camera()
-    
+
+    def camera_look_at():
+        with camera_group:
+            rep.modify.pose(
+                look_at=rep.distribution.choice(object_group),
+            )
+        return camera_group.node
+    rep.randomizer.register(camera_look_at)
+    with rep.trigger.on_custom_event(event_name="camera_look_at"):
+        rep.randomizer.camera_look_at()
     
     def randomize_object():
         with object_group:
@@ -1176,6 +1192,7 @@ with rep.new_layer(name="SDG"):
                 rotation=rep.distribution.uniform((0, 0, 0), (360, 360, 360)),
                 scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
             )
+        
         return object_group.node
     
     rep.randomizer.register(randomize_object)
@@ -1207,15 +1224,13 @@ for i in range(num_frames):
     
     
     rep.utils.send_og_event(event_name="randomize_object")
-    
+    rep.utils.send_og_event(event_name="randomize_camera")
+
     # Run the simulation loop for 3 ticks for physics to settle
     for _ in range(3):
         simulation_app.update()
 
-    rep.utils.send_og_event(event_name="randomize_camera")
-    # Run the simulation loop for 3 ticks for camera collider to push back objects
-    for _ in range(1):
-        simulation_app.update()
+    rep.utils.send_og_event(event_name="camera_look_at")    
 
     # set_render_products_updates(render_products, True, include_viewport=True)
     print(f"[SDG] Capturing frame {i}/{num_frames}, at simulation time: {timeline.get_current_time():.2f}")
