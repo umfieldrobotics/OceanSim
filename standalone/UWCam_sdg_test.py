@@ -104,10 +104,18 @@ def plot_all_debug(label_path, rgb_path, debug_path, instance_seg_path, mapping_
     for obj in objects:
         bbox = obj['bbox']  # [xmin, ymin, xmax, ymax]
         label = obj['type']
+        occlusion = obj['occluded']
+        truncation = obj['truncated']
+        # Compose label with occlusion and truncation
+        label_text = f"{label}\n({occlusion}, {truncation:.2f})"
         rect = patches.Rectangle((bbox[0], bbox[1]), bbox[2]-bbox[0], bbox[3]-bbox[1], linewidth=2, edgecolor='lime', facecolor='none')
         ax2.add_patch(rect)
-        ax2.text(bbox[0], bbox[1]-5, label, color='lime', fontsize=10, fontweight='bold', va='bottom', ha='left', bbox=dict(facecolor='black', alpha=0.3, edgecolor='none', pad=1))
-    ax2.set_title('2D Bounding Boxes', fontsize=14, fontweight='bold')
+        ax2.text(
+            bbox[0], bbox[1]-5, label_text,
+            color='lime', fontsize=10, fontweight='bold', va='bottom', ha='left',
+            bbox=dict(facecolor='black', alpha=0.3, edgecolor='none', pad=1)
+        )
+    ax2.set_title('2D Bounding Boxes (occlusion level, truncation ratio)', fontsize=14, fontweight='bold')
     ax2.axis('off')
 
     # --- Debug image subplot ---
@@ -272,10 +280,18 @@ def plot_all(label_path, rgb_path, instance_seg_path, mapping_path):
     for obj in objects:
         bbox = obj['bbox']  # [xmin, ymin, xmax, ymax]
         label = obj['type']
-        rect = patches.Rectangle((bbox[0], bbox[1]), bbox[2]-bbox[0], bbox[3]-bbox[1], linewidth=1, edgecolor='lime', facecolor='none')
+        occlusion = obj['occluded']
+        truncation = obj['truncated']
+        # Compose label with occlusion and truncation
+        label_text = f"{label}\n({occlusion}, {truncation:.2f})"
+        rect = patches.Rectangle((bbox[0], bbox[1]), bbox[2]-bbox[0], bbox[3]-bbox[1], linewidth=2, edgecolor='lime', facecolor='none')
         ax2.add_patch(rect)
-        ax2.text(bbox[0], bbox[1]-5, label, color='lime', fontsize=10, fontweight='bold', va='bottom', ha='left', bbox=dict(facecolor='black', alpha=0.3, edgecolor='none', pad=1))
-    ax2.set_title('2D Bounding Boxes', fontsize=14, fontweight='bold')
+        ax2.text(
+            bbox[0], bbox[1]-5, label_text,
+            color='lime', fontsize=10, fontweight='bold', va='bottom', ha='left',
+            bbox=dict(facecolor='black', alpha=0.3, edgecolor='none', pad=1)
+        )
+    ax2.set_title('2D Bounding Boxes (occlusion level, truncation ratio)', fontsize=14, fontweight='bold')
     ax2.axis('off')
 
 
@@ -353,7 +369,6 @@ def plot_all(label_path, rgb_path, instance_seg_path, mapping_path):
 
     table = ax6.table(cellText=cell_text,
                       cellColours=cell_colors,
-                    #   colLabels=[f'Label {i+1}' for i in range(n_cols)],
                       loc='center')
     table.auto_set_font_size(False)
     table.set_fontsize(8)
@@ -374,7 +389,7 @@ if __name__ == "__main__":
     parser.add_argument("--index", action="store", type=int, default=0)
     parser.add_argument("--debug", action="store_true", default=False)
     index = parser.parse_args().index
-    base = f"/home/haoyu/Desktop/viz/Camera_0"
+    base = f"/home/haoyu/Desktop/viz/cam_0"
     label_path = os.path.join(base, "object_detection", f"{index}.txt")
     rgb_path = os.path.join(base, "uw_rgb", f"{index}.png")
     instance_seg_path = os.path.join(base, "instance_segmentation", f"{index}.png")
