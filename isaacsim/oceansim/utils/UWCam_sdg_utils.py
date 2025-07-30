@@ -5,34 +5,34 @@ DEFAULT_OBJECTS = 3 * [
     "/Isaac/Environments/Simple_Warehouse/Props/S_TrafficCone.usd",
     "/Isaac/Environments/Simple_Warehouse/Props/S_WetFloorSign.usd",
     "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_01.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_02.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_03.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_03.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_C_02.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticB_01.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticD_01.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticE_01.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_BucketPlastic_B.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1262.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1268.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1482.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1683.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_291.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1454.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1513.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_A_04.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_03.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_05.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_C_02.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_E_02.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_PushcartA_02.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_04.usd",
-    # "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_03.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_03.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_03.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_C_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticB_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticD_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticE_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BucketPlastic_B.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1262.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1268.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1482.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1683.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_291.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1454.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1513.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_A_04.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_03.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_05.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_C_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_E_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_PushcartA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_04.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_03.usd",
 ]
 DEFAULT_LABELS = {
     "UNLABELLED": (0, 0, 0, 0),
@@ -139,25 +139,18 @@ def parse_object_folder(objects_folder_path):
 
 
 def add_COU_objects(objects_folder_path=COU_objects_folder_path, physics=False):
-    """
-    Returns all subfolder names and their corresponding paths within the COU_objects_folder_path.
-    
-    Returns:
-        dict: A dictionary where keys are subfolder names and values are their full paths.
-              Returns empty dict if the folder doesn't exist or has no subfolders.
-    """
+
     if categories := parse_object_folder(objects_folder_path):
 
         assets_paths = []
         for category, folder_path in categories.items():
-            node = rep.create.from_dir(folder_path, recursive=True, semantics=[("class", category)])
-            if physics:
-                with node:
-                    rep.physics.collider("boundingSphere")
+            node = rep.create.from_dir(folder_path, recursive=True, semantics=[("class", category)])                
 
 
             for prim in node.get_output_prims()["prims"]:
                 print(f"{category} : {prim.GetPath().pathString} added.")
+                if physics:
+                    add_colliders(prim, approximation_shape="boundingCube")
                 assets_paths.append(prim.GetPath())
 
         assets_group = rep.create.group(assets_paths)
@@ -200,7 +193,7 @@ def set_transform_attributes(prim, location=None, orientation=None, rotation=Non
 
 
 # Enables collisions with the asset (without rigid body dynamics the asset will be static)
-def add_colliders(root_prim):
+def add_colliders(root_prim, approximation_shape="convexHull"):
     # Iterate descendant prims (including root) and add colliders to mesh or primitive types
     for desc_prim in Usd.PrimRange(root_prim):
         if desc_prim.IsA(UsdGeom.Mesh) or desc_prim.IsA(UsdGeom.Gprim):
@@ -226,7 +219,7 @@ def add_colliders(root_prim):
                 mesh_collision_api = UsdPhysics.MeshCollisionAPI.Apply(desc_prim)
             else:
                 mesh_collision_api = UsdPhysics.MeshCollisionAPI(desc_prim)
-            mesh_collision_api.CreateApproximationAttr().Set("convexHull")
+            mesh_collision_api.CreateApproximationAttr().Set(approximation_shape)
 
 
 # Check if prim (or its descendants) has colliders
@@ -333,11 +326,10 @@ def add_default_objects(physics=False):
     assets = []
     for obj in full_objs_list:
         asset = rep.create.from_usd(obj)
-        # prim = asset.get_output_prims()["prims"][0]
+        prim = asset.get_output_prims()["prims"][0]
 
         if physics:
-            with asset:
-                rep.physics.collider("boundingSphere")
+            add_colliders(prim, approximation_shape="boundingCube")
 
         assets.append(asset)
 

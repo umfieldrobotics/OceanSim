@@ -16,12 +16,12 @@ from functools import partial
 config = {
     "launch_config": {
         "renderer": "RaytracedLighting",
-        "headless": True,
+        "headless": False,
         "extra_args": [
             "--/persistent/renderer/rtpt/enabled=True",              # This enables RTX realtime preview renderer
-            # "--/log/level=error",                                    # These will shut up isaac sim as I could 
-            # "--/log/fileLogLevel=error", 
-            # "--/log/outputStreamLevel=error"
+            "--/log/level=error",                                    # These will shut up isaac sim as I could 
+            "--/log/fileLogLevel=error", 
+            "--/log/outputStreamLevel=error"
             ]
     },
     "num_cameras" : 1,
@@ -41,7 +41,7 @@ config = {
         "output_dir": "/home/haoyu/Desktop/viz/",
         "colorize_instance_segmentation": True,
         "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
-        "debug_mode": True,
+        "debug_mode": False,
 
     },
     "obj_workspace": {
@@ -52,8 +52,7 @@ config = {
         "min" : (-1.5, -2.3, 1.25),
         "max" : (1.5, 3.7, 1.5)
     },
-    # "Renderer": "Real-Time 2.0 (Preview)",
-    # "UW_param": [0.0, 0.31, 0.24, 0.05, 0.05, 0.2, 0.05, 0.05, 0.05 ]
+    "object_mask_rate": 0.075, # The percentage of objects to be shown among all objects
 }
 
 
@@ -93,6 +92,15 @@ else:
     sys.exit("[SDG] OceanSim loaded failed. SDG Stopped...")
 
 # Load an environment extension that some usd scenes will rely on
+
+extensions_utils.enable_extension(extension_name="omni.kit.actions.core")
+extensions_utils.enable_extension(extension_name="omni.kit.window.preferences")
+extensions_utils.enable_extension(extension_name="omni.kit.widget.sliderbar")
+extensions_utils.enable_extension(extension_name="omni.kit.viewport.utility")
+extensions_utils.enable_extension(extension_name="omni.kit.usd.layers")
+extensions_utils.enable_extension(extension_name="omni.rtx.window.settings")
+extensions_utils.enable_extension(extension_name="omni.kit.notification_manager")
+extensions_utils.enable_extension(extension_name="omni.kit.window.filepicker")
 extensions_utils.enable_extension(extension_name="omni.kit.environment.core")
 extensions_utils.enable_extension(extension_name="omni.kit.property.environment")
 extensions_utils.enable_extension(extension_name="omni.kit.window.environment")
@@ -101,7 +109,7 @@ extensions_utils.enable_extension(extension_name="omni.kit.window.environment")
 #### Here goes implementation of writer #### 
 ############################################
 # Notice writer should not accept any parameters definition from config file
-# In future, move writier class into modules of OceanSim
+
 
 import csv
 import io
@@ -118,36 +126,6 @@ from omni.replicator.core.scripts.writers import Writer
 from isaacsim.oceansim.utils.UWrenderer_utils import *
 from isaacsim.replicator.writers.scripts.utils import calculate_truncation_ratio_simple
 import isaacsim.core.utils.rotations as rotations_utils
-
-EPS = 1e-5
-# Procuring standard KITTI Labels for objects annotated in the KITTI-format
-# The dictionary is ordered where label idx corresponds to semantic ID
-# See https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/helpers/labels.py
-KITTI_LABELS = {
-    "UNLABELLED": (0, 0, 0, 0),
-    "BACKGROUND": (0, 0, 0, 0),
-    "wall": (0, 0, 0, 0),
-    "pillar": (0, 0, 0, 0),
-    "floor": (0, 0, 0, 0),
-    "floor_decal": (0, 0, 0, 0),
-    "klt_bin": (111, 74, 0, 255),
-    "palletjack": (81, 0, 81, 255),
-    "cone": (128, 64, 128, 255),
-    "sign": (244, 35, 232, 255),
-    "barel": (250, 170, 160, 255),
-    "bottle": (230, 150, 140, 255),
-    "box": (70, 70, 70, 255),
-    "crate": (102, 102, 156, 255),
-    "cart": (190, 153, 153, 255),
-    "rack": (180, 165, 180, 255),
-    "sign": (150, 100, 100, 255),
-    "bucket": (150, 120, 90, 255),
-    "wire": (153, 153, 153, 255),
-    "pallet": (153, 153, 153, 255),
-    "fire_extinguisher": (250, 170, 30, 255),
-    "fuse_box": (220, 220, 0, 255),
-
-}
 
 
 __version__ = "0.1.0"
@@ -201,10 +179,9 @@ class UWCam_KittiWriter(Writer):
         s3_endpoint: str = None,
         semantic_types: List[str] = None,
         omit_semantic_type: bool = True,
-        bbox_height_threshold: int = 25,
+        bbox_height_threshold: int = 10,
         bbox2d_partly_occluded_threshold: float = 0.5,
         bbox2d_fully_visible_threshold: float = 0.95,
-        bbox3d_visibility_threshold: float = 0.15,  # Threshold for filtering out objects with low 3d bbox visibility
         mapping_path: str = None,
         mapping_dict: dict = None,
         colorize_instance_segmentation: bool = False,
@@ -231,7 +208,6 @@ class UWCam_KittiWriter(Writer):
         self._bbox_height_threshold = bbox_height_threshold
         self._bbox2d_partly_occluded_threshold = bbox2d_partly_occluded_threshold
         self._bbox2d_fully_visible_threshold = bbox2d_fully_visible_threshold
-        self._bbox3d_visibility_threshold = bbox3d_visibility_threshold
         self._use_kitti_dir_names = use_kitti_dir_names
         self._cuboid_keypoints_order = cuboid_keypoints_order
         self._debug_mode = debug_mode
@@ -271,7 +247,10 @@ class UWCam_KittiWriter(Writer):
             self.mapping_dict = mapping_dict
             carb.log_info("Using label mapping from provided dictionary")
         else:
-            self.mapping_dict = KITTI_LABELS
+            self.mapping_dict = {
+                    "UNLABELLED": (0, 0, 0, 255),
+                    "BACKGROUND": (0, 0, 0, 0),
+            }
             carb.log_info("Using default KITTI label mapping")
 
         # Specify the semantic types that will be included in output
@@ -405,7 +384,6 @@ class UWCam_KittiWriter(Writer):
                 np.intersect1d(bbox_loose_bbox_ids, bbox_3d_bbox_ids)
                 )
         
-        print(f"Frame: {self._frame_id}")
 
 
         for id in shared_ids:
@@ -420,7 +398,7 @@ class UWCam_KittiWriter(Writer):
 
             area_tight = (box_tight["x_max"] - box_tight["x_min"]) * (box_tight["y_max"] - box_tight["y_min"])
             area_loose = (box_loose["x_max"] - box_loose["x_min"]) * (box_loose["y_max"] - box_loose["y_min"])
-            area_ratio = area_tight / (area_loose + EPS)
+            area_ratio = area_tight / (area_loose + 1e-5)
 
             if area_ratio >= self._bbox2d_fully_visible_threshold:
                 occlusion_estimation = 0
@@ -446,8 +424,7 @@ class UWCam_KittiWriter(Writer):
             # Only compute object's 3d information after the above test
             bbox3d_info = self._process_bounding_box_3d_single(bbox3d_id_to_bbox[id], data[camera_param_annotator])
             
-            # if bbox3d_info["visibility"] <= self._bbox3d_visibility_threshold:
-            #     continue
+
             
             semantic_label = data[bbox_2d_tight_annotator]["info"]["idToLabels"].get(box_tight["semanticId"])
 
@@ -734,7 +711,11 @@ class UWCam_KittiWriter(Writer):
         y = (1 - point_screen_normalized[1]) * screen_size[1] / 2
 
         return round(x), round(y)
-
+    
+    
+    # Procuring standard KITTI Labels for objects annotated in the KITTI-format
+    # The dictionary is ordered where label idx corresponds to semantic ID
+    # See https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/helpers/labels.py
     def _procure_labels_from_json(self, json_path):
         with open(json_path, "r") as f:
             labels_dict = json.load(f)
@@ -785,8 +766,9 @@ class UWCam_KittiWriter(Writer):
         for i, iid in enumerate(instance_ids):
             semantic_class = inst_id_to_labels[iid].get("class", "unlabelled")
             is_unlabelled = semantic_class.lower() == "unlabelled"
+            is_background = semantic_class.lower() == "background"
             is_in_mapping = semantic_class in self.mapping_dict
-            if not is_in_mapping or is_unlabelled:
+            if not is_in_mapping or is_unlabelled or is_background:
                 inst_seg_img_renumbered[inst_seg_uint32 == iid] = 0
             else:
                 cur_semantics = str(inst_id_to_labels[iid])
@@ -1075,16 +1057,13 @@ WriterRegistry.register(UWCam_KittiWriter)
 
 import time
 import omni.replicator.core as rep
-from isaacsim.storage.native import get_assets_root_path
 from pxr import PhysxSchema, Sdf, UsdGeom, UsdPhysics, Gf
 from isaacsim.oceansim.utils.UWCam_sdg_utils import *
-
+import omni.usd
 
 # Increase maximum assets loading time in case assets are too many
 carb.settings.get_settings().set('/exts/omni.replicator.core/maxAssetLoadingTime', 1000)
 
-# Isaac nucleus assets root path
-assets_root_path = get_assets_root_path()
 
 # ENVIRONMENT
 # Create an empty or load a custom stage (clearing any previous semantics)
@@ -1112,7 +1091,7 @@ num_frames = config.get("num_frames", 10)
 rt_subframes = config.get("rt_subframes", -1) 
 obj_ws = config.get("obj_workspace")
 cam_ws = config.get("cam_workspace")
-
+mask_object_rate = config.get("object_mask_rate", 1.0)
 
 resolution = config.get("resolution", (640, 480))
 # Create the writer and attach the render products
@@ -1136,7 +1115,9 @@ with rep.new_layer(name="SDG"):
     render_products = []
     
     object_group, kitti_labels = add_COU_objects(physics=True)
-    print(f"[SDG] Objects being added to the scene") 
+    object_prims = object_group.get_output_prims()["prims"]
+    num_objects = len(object_prims)
+    print(f"[SDG] {num_objects} objects being added to the scene") 
     print(f"[SDG] KITTI labels: {kitti_labels}")
 
     for i in range(num_cameras):
@@ -1164,49 +1145,43 @@ with rep.new_layer(name="SDG"):
     print(f"[SDG] Camera group created with {num_cameras} cameras.")
     
 
-    def randomize_camera():
-        with camera_group:
-            rep.modify.pose(
-                position=rep.distribution.uniform(cam_ws.get("min"), cam_ws.get("max")),
-            )
-        return camera_group.node
     
-    rep.randomizer.register(randomize_camera)
-    with rep.trigger.on_custom_event(event_name="randomize_camera"):
-        rep.randomizer.randomize_camera()
-
-    def camera_look_at():
-        with camera_group:
-            rep.modify.pose(
-                look_at=rep.distribution.choice(object_group),
-            )
-        return camera_group.node
-    rep.randomizer.register(camera_look_at)
-    with rep.trigger.on_custom_event(event_name="camera_look_at"):
-        rep.randomizer.camera_look_at()
-    
-    def randomize_object():
+    with rep.trigger.on_custom_event(event_name="randomize_object"):
         with object_group:
             rep.modify.pose(
                 position=rep.distribution.uniform(obj_ws.get("min"), obj_ws.get("max")),
                 rotation=rep.distribution.uniform((0, 0, 0), (360, 360, 360)),
-                scale=rep.distribution.uniform((0.25, 0.25, 0.25), (0.5, 0.5, 0.5)),
+                scale=rep.distribution.uniform((0.5, 0.5, 0.5), (1.5, 1.5, 1.5)),
             )
-        
-        return object_group.node
+            rep.modify.visibility(False)
+
     
-    rep.randomizer.register(randomize_object)
+    with rep.trigger.on_custom_event(event_name="show_random_object_and_camera_look_at"):
+        shown_objects = rep.distribution.choice(object_prims, num_samples=int(num_objects * mask_object_rate))
 
+        
+        with shown_objects:
+            rep.modify.visibility(True)
+        
 
-    with rep.trigger.on_custom_event(event_name="randomize_object"):
-        rep.randomizer.randomize_object()
+        # TODO: This is not working, the camera is not looking at the object
+        # Stupid rep.distribution.choice just output empty list
+        with camera_group:
+            rep.modify.pose(
+                position=rep.distribution.uniform(cam_ws.get("min"), cam_ws.get("max")),
+                look_at=rep.distribution.choice(shown_objects)
+            )    
+
 
 
 # Data will be captured manually using step
 rep.orchestrator.set_capture_on_play(False)
 # Set the timeline parameters (start, end, no looping) and start the timeline
 
-print(f"[SDG] Heating up the simulation for 100 ticks")
+print(f"[SDG] Call the randomizer once and update few frames to heat up the simulation")
+rep.utils.send_og_event(event_name="randomize_object")
+rep.utils.send_og_event(event_name="show_random_object_and_camera_look_at")
+
 for _ in range(100):
     simulation_app.update()
 
@@ -1221,22 +1196,20 @@ timeline.commit()
 wall_time_start = time.perf_counter()
 
 for i in range(num_frames):
-    
-    
     rep.utils.send_og_event(event_name="randomize_object")
-    rep.utils.send_og_event(event_name="randomize_camera")
 
-    # Run the simulation loop for 3 ticks for physics to settle
+
     for _ in range(3):
         simulation_app.update()
-
-    rep.utils.send_og_event(event_name="camera_look_at")    
+    
+    rep.utils.send_og_event(event_name="show_random_object_and_camera_look_at")
 
     # set_render_products_updates(render_products, True, include_viewport=True)
     print(f"[SDG] Capturing frame {i}/{num_frames}, at simulation time: {timeline.get_current_time():.2f}")
     # The step function provides new data to the annotators, triggers the randomizers and the writer
     rep.orchestrator.step(rt_subframes=rt_subframes)
     # set_render_products_updates(render_products, False, include_viewport=True)
+
 
 
 set_render_products_updates(render_products, True, include_viewport=True)
