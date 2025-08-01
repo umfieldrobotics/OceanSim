@@ -1,28 +1,41 @@
 @echo off
-REM Batch script to run UWCam_sdg.py on all YAML configs in UWCam_configs
+REM Batch script to run UWCam_sdg.py on all YAML configs in a specified config directory
 
-set SCRIPT=extsUser\isaacsim.oceansim\standalone\UWCam_sdg.py
-set CONFIG_DIR=extsUser\isaacsim.oceansim\standalone\UWCam_configs
+REM Get the directory of this batch file
+set "BASEDIR=C:\Users\mahaoyu\Code\isaacsim-4.5\"
 
-set STARTTIME=%TIME%
+set "SCRIPT=%BASEDIR%extsUser\isaacsim.oceansim\standalone\UWCam_sdg.py"
 
-for %%F in (%CONFIG_DIR%\*.yaml) do (
-    echo Running %%F ...
-    call python.bat %SCRIPT% --config "%%F" --close_on_completion
+REM Use first argument as config directory, or default if not provided
+if "%~1"=="" (
+    set "CONFIG_DIR=%BASEDIR%extsUser\isaacsim.oceansim\standalone\UWCam_configs\empty"
+) else (
+    REM If argument is an absolute path (starts with drive letter or \\), use as is; otherwise, make it relative to BASEDIR
+    echo %~1 | findstr /B /I "[A-Z]:\\ \\" >nul
+    if %errorlevel%==0 (
+        set "CONFIG_DIR=%~1"
+    ) else (
+        set "CONFIG_DIR=%BASEDIR%%~1"
+    )
 )
 
-set ENDTIME=%TIME%
+echo Using config directory: "%CONFIG_DIR%"
 
-REM Calculate elapsed time
-for /f "tokens=1-4 delims=:." %%a in ("%STARTTIME%") do set START_H=%%a& set START_M=%%b& set START_S=%%c& set START_MS=%%d
-for /f "tokens=1-4 delims=:." %%a in ("%ENDTIME%") do set END_H=%%a& set END_M=%%b& set END_S=%%c& set END_MS=%%d
+REM Get start time
+for /f "tokens=1-4 delims=:." %%a in ("%time%") do set START=%%a%%b%%c%%d
 
-set /a START_TOTAL_MS=(%START_H%*3600 + %START_M%*60 + %START_S%)*100 + %START_MS%
-set /a END_TOTAL_MS=(%END_H%*3600 + %END_M%*60 + %END_S%)*100 + %END_MS%
-set /a ELAPSED_MS=%END_TOTAL_MS%-%START_TOTAL_MS%
+for %%F in ("%CONFIG_DIR%\*.yaml") do (
+    echo Running %%F ...
+    call "%BASEDIR%python.bat" "%SCRIPT%" --config "%%F" --close_on_completion
+)
 
-set /a ELAPSED_S=%ELAPSED_MS% / 100
-set /a ELAPSED_MS_ONLY=%ELAPSED_MS% %% 100
+REM Get end time
+for /f "tokens=1-4 delims=:." %%a in ("%time%") do set END=%%a%%b%%c%%d
 
-echo Total elapsed time: %ELAPSED_S%.%ELAPSED_MS_ONLY% seconds
+REM Calculate elapsed time in seconds
+set /a STARTSEC=%START:~0,2%*3600 + %START:~2,2%*60 + %START:~4,2% + %START:~6,2%/100
+set /a ENDSEC=%END:~0,2%*3600 + %END:~2,2%*60 + %END:~4,2% + %END:~6,2%/100
+set /a ELAPSED=%ENDSEC%-%STARTSEC%
+
+echo Total elapsed time: %ELAPSED% seconds
 pause

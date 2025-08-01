@@ -268,12 +268,19 @@ def run_sdg(config: dict=config):
         randomize_poses(objects, location_range=obj_ws, rotation_range=(0, 360), scale_range=(0.75, 1.25))
         
         # Mask a random number of objects
-        masked_objects = mask_random_objects(objects, ratio=masked_objects_ratio)
-        visible_objects = [obj for obj in objects if obj not in masked_objects]
+        if masked_objects_ratio == 1:
+            for obj in objects:
+                obj.GetAttribute("visibility").Set("invisible")
+            
+            randomize_camera_poses_rel_to_ws(cameras, objects, cam_ws, look_at_offset=(-0.0, 0.0))
+        else:
+            masked_objects = mask_random_objects(objects, ratio=masked_objects_ratio)
+            visible_objects = [obj for obj in objects if obj not in masked_objects]
+            
+            
+            # Randomize the poses of the cameras
+            randomize_camera_poses_rel_to_ws(cameras, visible_objects, cam_ws, look_at_offset=(-0.0, 0.0))
         
-        
-        # Randomize the poses of the cameras
-        randomize_camera_poses_rel_to_ws(cameras, visible_objects, cam_ws, look_at_offset=(-0.0, 0.0))
         # Run simulation a bit for collider to settle
         run_simulation(num_frames=3, render=False)
 
@@ -303,7 +310,7 @@ def run_sdg(config: dict=config):
                 rp.hydra_texture.set_updates_enabled(False)
 
 
-        unmask_objects(masked_objects)
+        unmask_objects(objects)
 
         capture_counter += 1
         print(f"[SDG] Captured {capture_counter}/{total_captures} frames")
