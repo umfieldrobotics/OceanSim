@@ -386,10 +386,11 @@ def plot_all(label_path, rgb_path, instance_seg_path, mapping_path):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument("--base", action="store", type=str, default="")
     parser.add_argument("--index", action="store", type=int, default=0)
     parser.add_argument("--debug", action="store_true", default=False)
     index = parser.parse_args().index
-    base = f"/home/haoyu/Desktop/viz/cam_0"
+    base = f"{parser.parse_args().base}/cam_0"
     label_path = os.path.join(base, "object_detection", f"{index}.txt")
     rgb_path = os.path.join(base, "uw_rgb", f"{index}.png")
     instance_seg_path = os.path.join(base, "instance_segmentation", f"{index}.png")

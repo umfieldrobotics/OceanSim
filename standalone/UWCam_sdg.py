@@ -1,7 +1,7 @@
 # Default config dict, can be updated/replaced using json/yaml config files ('--config' cli argument)
 config = {
     "launch_config": {
-        "renderer": "RaytracedLighting",
+        "renderer": "RealTimePathTracing",
         "headless": True,
         "extra_args": [
             "--/persistent/renderer/rtpt/enabled=True",              # This enables RTX realtime preview renderer
@@ -12,7 +12,9 @@ config = {
     },
     "total_captures" : 10,
     "camera_collider_radius": 0.2,
-    "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
+    # "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
+    "env_url": "D:/haoyu/Assets/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
+    "objects_url": "D:/haoyu/Assets/ObjectAssets_simready",
     "rt_subframes": 16,
     "resolution": (1024, 1024),
     "masked_objects_ratio": 0.92,
@@ -27,8 +29,8 @@ config = {
             # Type of the writer to use (e.g. PoseWriter, BasicWriter, etc.) and the kwargs to pass to the writer init
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                # "output_dir": "/media/haoyu/T7 Shield 3/haoyu/SDG/",
-                "output_dir": "/home/haoyu/Desktop/viz/",
+                "output_dir": "D:/haoyu/SDG/",
+                # "output_dir": "/home/haoyu/Desktop/viz/",
                 "colorize_instance_segmentation": True,
                 # "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
                 "debug_mode": True,
@@ -135,6 +137,7 @@ def run_sdg(config: dict=config):
 
 
     env_url = config.get("env_url", "")
+    objects_url = config.get("objects_url", "")
     total_captures = config.get("total_captures", 10)
     rt_subframes = config.get("rt_subframes", 4) 
     obj_ws = config.get("obj_workspace")
@@ -143,7 +146,7 @@ def run_sdg(config: dict=config):
     masked_objects_ratio = config.get("masked_objects_ratio", 0.5)
     path_tracing = config.get("path_tracing", False)
     num_cameras = config.get("num_cameras", 1)
-    resolution = config.get("resolution", (640, 480))
+    resolution = tuple(config.get("resolution", [640, 480]))
 
     disable_render_products = config.get("disable_render_products", False)
 
@@ -180,7 +183,10 @@ def run_sdg(config: dict=config):
         cam_prim = stage.DefinePrim(f"{cam_path}/cam_{i}", "Camera")
         for key, value in camera_properties_kwargs.items():
             if cam_prim.HasAttribute(key):
-                cam_prim.GetAttribute(key).Set(value)
+                if key == "clippingRange":
+                    cam_prim.GetAttribute(key).Set(tuple(value))
+                else:
+                    cam_prim.GetAttribute(key).Set(value)
             else:
                 print(f"Unknown camera attribute with {key}:{value}")
         cameras.append(cam_prim)
@@ -211,7 +217,7 @@ def run_sdg(config: dict=config):
         print(f"[SDG] Created camera colliders with radius {camera_collider_radius}")
     
     # Add COU objects
-    objects, kitti_labels = add_COU_objects(collider=True)
+    objects, kitti_labels = add_COU_objects(objects_folder_path=objects_url, collider=True)
     print(f"[SDG] {len(objects)} numbers of COU objects being added to the scene")
 
     # Resolve any centimeter-meter scale issues of the assets
