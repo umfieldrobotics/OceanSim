@@ -100,80 +100,97 @@ COLOR_PALETTE = [
         (128, 128, 64, 255),   # Medium Olive
     ]
 
-COU_objects_folder_path = "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready/"
+COU_OBJECTS_FOLDER_PATH = "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready/"
 
-import carb.settings
+import math
+import os
+import random
+import re
+from itertools import chain
+from collections import defaultdict
+import json
+
+import omni.kit.app
+import omni.kit.commands
+import omni.physx
 import omni.replicator.core as rep
 import omni.timeline
+import omni.usd
+import carb.settings
+from isaacsim.core.utils.semantics import add_update_semantics, remove_all_semantics
+from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.storage.native import get_assets_root_path
-import random
-import numpy as np
-from pxr import Gf, PhysxSchema, Usd, UsdGeom, UsdPhysics
-from isaacsim.core.utils.stage import get_current_stage
-from omni.kit.viewport.utility import get_active_viewport
-import os
+from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics
+from isaacsim.core.utils.viewports import set_camera_view
+from isaacsim.core.utils.transformations import get_relative_transform
+
+def find_usd_files_recursively(root_folder):
+    """
+    Recursively find all files with .usd extension in the given folder and return their absolute paths.
+
+    Args:
+        root_folder (str): The root directory to search.
+
+    Returns:
+        List[str]: List of absolute paths to .usd files found.
+    """
+    usd_files = []
+    for dirpath, dirnames, filenames in os.walk(root_folder):
+        for filename in filenames:
+            if filename.lower().endswith('.usd'):
+                abs_path = os.path.abspath(os.path.join(dirpath, filename))
+                usd_files.append(abs_path)
+    return usd_files
 
 def parse_object_folder(objects_folder_path):
     """
     Parses the object folder and returns a dictionary of subfolders and their corresponding paths.
     """
-    subfolders = {}
-    try:
-        # Get all items in the directory
-        items = os.listdir(objects_folder_path)
-        print(f"Found {len(items)} categories: {items} in {objects_folder_path}")
-        # Filter for directories only
-        for item in items:
-            item_path = os.path.join(objects_folder_path, item)
-            if os.path.isdir(item_path):
-                subfolders[item] = item_path
-        return subfolders
-                
-    except PermissionError:
-        print(f"Error: Permission denied accessing {objects_folder_path}")
-        return {}
-    except Exception as e:
-        print(f"Error accessing {objects_folder_path}: {e}")
-        return {}
+    category_dict = {}
+
+    categories = os.listdir(objects_folder_path)
+    print(f"[SDG] Found {len(categories)} categories: {categories} in {objects_folder_path}")
+    for category in categories:
+        category_folder_path = os.path.join(objects_folder_path, category)
+        usd_files = find_usd_files_recursively(category_folder_path)
+        category_dict[category] = usd_files
+    return category_dict
 
 
 
-def add_COU_objects(objects_folder_path=COU_objects_folder_path, physics=False):
+def add_COU_objects(
+                objects_folder_path=COU_OBJECTS_FOLDER_PATH, 
+                root_path="SDG_objects",
+                name_prefix="", 
+                collider=False,
+                ) -> tuple[list[Usd.Prim], dict[str, tuple[int, int, int, int]]]:
+    stage = omni.usd.get_context().get_stage()
+    stage.DefinePrim(f"/{root_path}", "Scope")
+    categories = parse_object_folder(objects_folder_path)
+    assets = []
+    for category, usd_files in categories.items():
+        for usd_file in usd_files:
+            
+            prim_path = omni.usd.get_stage_next_free_path(stage, f"/{root_path}/{name_prefix}{category}", False)
 
-    if categories := parse_object_folder(objects_folder_path):
-
-        assets_paths = []
-        for category, folder_path in categories.items():
-            node = rep.create.from_dir(folder_path, recursive=True, semantics=[("class", category)])                
-
-
-            for prim in node.get_output_prims()["prims"]:
-                print(f"{category} : {prim.GetPath().pathString} added.")
-                if physics:
-                    add_colliders(prim, approximation_shape="boundingCube")
-                assets_paths.append(prim.GetPath())
-
-        assets_group = rep.create.group(assets_paths)
-        return assets_group, generate_kitti_labels(categories)
+            prim = add_reference_to_stage(usd_path=usd_file, prim_path=prim_path)
+            if collider:
+                add_colliders(prim, approximation_type="boundingCube")
+            remove_all_semantics(prim, recursive=True)
+            add_update_semantics(prim, category)
+            assets.append(prim)
+    return assets, generate_kitti_labels(categories)
     
-    else:
-        print(f"Adding default objects")
-        return add_default_objects(), DEFAULT_LABELS
 
 # needed for loading textures correctly
-def prefix_with_isaac_asset_server(relative_path):
-    assets_root_path = get_assets_root_path()
-    if assets_root_path is None:
-        raise Exception(
-            "Nucleus server not found, could not access Isaac Sim assets folder"
-        )
-    return assets_root_path + relative_path
-
-
-
-
-# Add transformation properties to the prim (if not already present)
-def set_transform_attributes(prim, location=None, orientation=None, rotation=None, scale=None):
+def set_transform_attributes(
+    prim: Usd.Prim,
+    location: Gf.Vec3d | None = None,
+    orientation: Gf.Quatf | None = None,
+    rotation: Gf.Vec3f | None = None,
+    scale: Gf.Vec3f | None = None,
+) -> None:
+    """Set transformation attributes (location, orientation, rotation, scale) on a prim."""
     if location is not None:
         if not prim.HasAttribute("xformOp:translate"):
             UsdGeom.Xformable(prim).AddTranslateOp()
@@ -192,73 +209,57 @@ def set_transform_attributes(prim, location=None, orientation=None, rotation=Non
         prim.GetAttribute("xformOp:scale").Set(scale)
 
 
-# Enables collisions with the asset (without rigid body dynamics the asset will be static)
-def add_colliders(root_prim, approximation_shape="convexHull"):
-    # Iterate descendant prims (including root) and add colliders to mesh or primitive types
+def add_colliders(root_prim: Usd.Prim, approximation_type: str = "convexHull") -> None:
+    """Add collision attributes to mesh and geometry primitives under the root prim."""
     for desc_prim in Usd.PrimRange(root_prim):
-        if desc_prim.IsA(UsdGeom.Mesh) or desc_prim.IsA(UsdGeom.Gprim):
-            # Physics
+        if desc_prim.IsA(UsdGeom.Gprim):
             if not desc_prim.HasAPI(UsdPhysics.CollisionAPI):
                 collision_api = UsdPhysics.CollisionAPI.Apply(desc_prim)
             else:
                 collision_api = UsdPhysics.CollisionAPI(desc_prim)
             collision_api.CreateCollisionEnabledAttr(True)
-            # PhysX
-            if not desc_prim.HasAPI(PhysxSchema.PhysxCollisionAPI):
-                physx_collision_api = PhysxSchema.PhysxCollisionAPI.Apply(desc_prim)
-            else:
-                physx_collision_api = PhysxSchema.PhysxCollisionAPI(desc_prim)
-            # Set PhysX specific properties
-            physx_collision_api.CreateContactOffsetAttr(0.001)
-            physx_collision_api.CreateRestOffsetAttr(0.0)
 
-        # Add mesh specific collision properties only to mesh types
         if desc_prim.IsA(UsdGeom.Mesh):
-            # Add mesh collision properties to the mesh (e.g. collider aproximation type)
             if not desc_prim.HasAPI(UsdPhysics.MeshCollisionAPI):
                 mesh_collision_api = UsdPhysics.MeshCollisionAPI.Apply(desc_prim)
             else:
                 mesh_collision_api = UsdPhysics.MeshCollisionAPI(desc_prim)
-            mesh_collision_api.CreateApproximationAttr().Set(approximation_shape)
+            mesh_collision_api.CreateApproximationAttr().Set(approximation_type)
 
 
-# Check if prim (or its descendants) has colliders
-def has_colliders(root_prim):
+def has_colliders(root_prim: Usd.Prim) -> bool:
+    """Check if any descendant prims under the root prim have collision attributes."""
     for desc_prim in Usd.PrimRange(root_prim):
         if desc_prim.HasAPI(UsdPhysics.CollisionAPI):
             return True
     return False
 
 
-# Enables rigid body dynamics (physics simulation) on the prim
-def add_rigid_body_dynamics(prim, disable_gravity=False, angular_damping=None):
+def add_rigid_body_dynamics(prim: Usd.Prim, disable_gravity: bool = False) -> None:
+    """Add rigid body dynamics properties to a prim if it has colliders, with optional gravity setting."""
     if has_colliders(prim):
-        # Physics
         if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             rigid_body_api = UsdPhysics.RigidBodyAPI.Apply(prim)
         else:
             rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
         rigid_body_api.CreateRigidBodyEnabledAttr(True)
-        # PhysX
+
+        # Apply PhysX rigid body dynamics
         if not prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
             physx_rigid_body_api = PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
         else:
             physx_rigid_body_api = PhysxSchema.PhysxRigidBodyAPI(prim)
         physx_rigid_body_api.GetDisableGravityAttr().Set(disable_gravity)
-        if angular_damping is not None:
-            physx_rigid_body_api.CreateAngularDampingAttr().Set(angular_damping)
     else:
-        print(f"Prim '{prim.GetPath()}' has no colliders. Skipping rigid body dynamics properties.")
+        print(
+            f"[SDG-Infinigen] Prim '{prim.GetPath()}' has no colliders. Skipping adding rigid body dynamics properties."
+        )
 
 
-# Add dynamics properties to the prim (if mesh or primitive) (rigid body to root + colliders to the meshes)
-# https://docs.omniverse.nvidia.com/extensions/latest/ext_physics/rigid-bodies.html#rigid-body-simulation
-def add_colliders_and_rigid_body_dynamics(prim, disable_gravity=False):
-    # Add colliders to mesh or primitive types of the descendants of the prim (including root)
+def add_colliders_and_rigid_body_dynamics(prim: Usd.Prim, disable_gravity: bool = False) -> None:
+    """Add colliders and rigid body dynamics properties to a prim, with optional gravity setting."""
     add_colliders(prim)
-    # Add rigid body dynamics properties (to the root only) only if it has colliders
-    add_rigid_body_dynamics(prim, disable_gravity=disable_gravity)
-
+    add_rigid_body_dynamics(prim, disable_gravity)
 
 # Createa  collision box area wrapping the given working area with origin in (0, 0, 0) with thickness towards outside
 def create_collision_box_walls(stage, path, width, depth, height, thickness=0.5, visible=False):
@@ -279,66 +280,181 @@ def create_collision_box_walls(stage, path, width, depth, height, thickness=0.5,
         if not visible:
             UsdGeom.Imageable(prim).MakeInvisible()
 
+def find_matching_prims(
+    match_strings: list[str], root_path: str | None = None, prim_type: str | None = None, first_match_only: bool = False
+) -> Usd.Prim | list[Usd.Prim] | None:
+    """Find prims matching specified strings, with optional type filtering and single match return."""
+    stage = omni.usd.get_context().get_stage()
+    root_prim = stage.GetPseudoRoot() if root_path is None else stage.GetPrimAtPath(root_path)
 
-# Enable or disable the render products and viewport rendering
-def set_render_products_updates(render_products, enabled, include_viewport=False):
-    for rp in render_products:
-        rp.hydra_texture.set_updates_enabled(enabled)
-    if include_viewport:
-        get_active_viewport().updates_enabled = enabled
+    matching_prims = []
+    for prim in Usd.PrimRange(root_prim):
+        if any(match in str(prim.GetPath()) for match in match_strings):
+            if prim_type is None or prim.GetTypeName() == prim_type:
+                if first_match_only:
+                    return prim
+                matching_prims.append(prim)
 
-# Generate a random pose on a sphere looking at the origin
-# https://docs.omniverse.nvidia.com/isaacsim/latest/reference_conventions.html
-def get_random_pose_on_sphere(origin, radius, camera_forward_axis=(0, 0, -1)):
-    origin = Gf.Vec3f(origin)
-    camera_forward_axis = Gf.Vec3f(camera_forward_axis)
+    return matching_prims if not first_match_only else None
 
-    # Generate random angles for spherical coordinates
-    theta = np.random.uniform(0, 2 * np.pi)
-    phi = np.arcsin(np.random.uniform(-1, 1))
 
-    # Spherical to Cartesian conversion
-    x = radius * np.cos(theta) * np.cos(phi)
-    y = radius * np.sin(phi)
-    z = radius * np.sin(theta) * np.cos(phi)
+def hide_matching_prims(match_strings: list[str], root_path: str | None = None, prim_type: str | None = None) -> None:
+    """Set visibility of prims matching specified strings to 'invisible' within the root path."""
+    stage = omni.usd.get_context().get_stage()
+    root_prim = stage.GetPseudoRoot() if root_path is None else stage.GetPrimAtPath(root_path)
 
-    location = origin + Gf.Vec3f(x, y, z)
+    for prim in Usd.PrimRange(root_prim):
+        if prim_type is None or prim.GetTypeName() == prim_type:
+            if any(match in str(prim.GetPath()) for match in match_strings):
+                prim.GetAttribute("visibility").Set("invisible")
+
+
+
+def get_random_pose_on_sphere(
+    origin: tuple[float, float, float],
+    radius_range: tuple[float, float],
+    polar_angle_range: tuple[float, float],
+    camera_forward_axis: tuple[float, float, float] = (0, 0, -1),
+) -> tuple[Gf.Vec3d, Gf.Quatf]:
+    """Generate a random pose on a sphere looking at the origin, with specified radius and polar angle ranges."""
+    # https://docs.omniverse.nvidia.com/isaacsim/latest/reference_conventions.html
+    # Convert degrees to radians for polar angles (theta)
+    polar_angle_min_rad = math.radians(polar_angle_range[0])
+    polar_angle_max_rad = math.radians(polar_angle_range[1])
+
+    # Generate random spherical coordinates
+    radius = random.uniform(radius_range[0], radius_range[1])
+    polar_angle = random.uniform(polar_angle_min_rad, polar_angle_max_rad)
+    azimuthal_angle = random.uniform(0, 2 * math.pi)
+
+    # Convert spherical coordinates to Cartesian coordinates
+    x = radius * math.sin(polar_angle) * math.cos(azimuthal_angle)
+    y = radius * math.sin(polar_angle) * math.sin(azimuthal_angle)
+    z = radius * math.cos(polar_angle)
+
+    # Calculate the location in 3D space
+    location = Gf.Vec3d(origin[0] + x, origin[1] + y, origin[2] + z)
 
     # Calculate direction vector from camera to look_at point
-    direction = origin - location
+    direction = Gf.Vec3d(origin) - location
     direction_normalized = direction.GetNormalized()
 
     # Calculate rotation from forward direction (rotateFrom) to direction vector (rotateTo)
-    rotation = Gf.Rotation(Gf.Vec3d(camera_forward_axis), Gf.Vec3d(direction_normalized))
+    rotation = Gf.Rotation(Gf.Vec3d(camera_forward_axis), direction_normalized)
     orientation = Gf.Quatf(rotation.GetQuat())
 
     return location, orientation
 
+def randomize_poses(
+    prims: list[Usd.Prim],
+    location_range: tuple[float, float, float, float, float, float],
+    rotation_range: tuple[float, float],
+    scale_range: tuple[float, float],
+) -> None:
+    """Randomize the location, rotation, and scale of a list of prims within specified ranges."""
+    for prim in prims:
+        rand_loc = (
+            random.uniform(location_range[0], location_range[3]),
+            random.uniform(location_range[1], location_range[4]),
+            random.uniform(location_range[2], location_range[5]),
+        )
+        rand_rot = (
+            random.uniform(rotation_range[0], rotation_range[1]),
+            random.uniform(rotation_range[0], rotation_range[1]),
+            random.uniform(rotation_range[0], rotation_range[1]),
+        )
+        rand_scale = random.uniform(scale_range[0], scale_range[1])
+        set_transform_attributes(prim, location=rand_loc, rotation=rand_rot, scale=(rand_scale, rand_scale, rand_scale))
+
+def randomize_camera_poses_rel_to_targets(
+    cameras: list[Usd.Prim],
+    targets: list[Usd.Prim],
+    distance_range: tuple[float, float],
+    polar_angle_range: tuple[float, float] = (0, 180),
+    look_at_offset: tuple[float, float] = (-0.1, 0.1),
+) -> None:
+    """Randomize the poses of cameras to look at random targets with adjustable distance and offset."""
+    for cam in cameras:
+        # Get a random target asset to look at
+        target_asset = random.choice(targets)
+
+        # Add a look_at offset so the target is not always in the center of the camera view
+        target_loc = target_asset.GetAttribute("xformOp:translate").Get()
+        target_loc = (
+            target_loc[0] + random.uniform(look_at_offset[0], look_at_offset[1]),
+            target_loc[1] + random.uniform(look_at_offset[0], look_at_offset[1]),
+            target_loc[2] + random.uniform(look_at_offset[0], look_at_offset[1]),
+        )
+
+        # Generate random camera pose
+        loc, quat = get_random_pose_on_sphere(target_loc, distance_range, polar_angle_range)
+
+        # Set the camera's transform attributes to the generated location and orientation
+        set_transform_attributes(cam, location=loc, orientation=quat)
+
+def randomize_camera_poses_rel_to_ws(
+    cameras: list[Usd.Prim],
+    targets: list[Usd.Prim],
+    cam_ws: tuple[float, float, float, float, float, float],
+    look_at_offset: tuple[float, float] = (-0.1, 0.1),
+) -> None:
+    """Randomize the poses of cameras to look at random targets with adjustable distance and offset."""
+    for cam in cameras:
+        # Get a random target asset to look at
+        target_asset = random.choice(targets)
+
+        # Add a look_at offset so the target is not always in the center of the camera view
+        target_loc = target_asset.GetAttribute("xformOp:translate").Get()
+        target_loc = (
+            target_loc[0] + random.uniform(look_at_offset[0], look_at_offset[1]),
+            target_loc[1] + random.uniform(look_at_offset[0], look_at_offset[1]),
+            target_loc[2] + random.uniform(look_at_offset[0], look_at_offset[1]),
+        )
+
+        # Generate random camera pose
+        camera_loc = (
+            random.uniform(cam_ws[0], cam_ws[3]),
+            random.uniform(cam_ws[1], cam_ws[4]),
+            random.uniform(cam_ws[2], cam_ws[5]),
+        )
+        set_camera_view(eye=camera_loc, target=target_loc, camera_prim_path=cam.GetPath().pathString)
+
+
+def mask_random_objects(objects: list[Usd.Prim], ratio: float = 0.5) -> list[Usd.Prim]:
+    """Mask a random number of objects in the list."""
+    num_objects = int(len(objects) * ratio)
+    masked_objects = random.sample(objects, num_objects)
+    for obj in masked_objects:
+        obj.GetAttribute("visibility").Set("invisible")
+    return masked_objects
+
+def unmask_objects(objects: list[Usd.Prim]) -> None:
+    """Unmask a list of objects."""
+    for obj in objects:
+        obj.GetAttribute("visibility").Set("inherited")
+
+# def add_default_objects(physics=False):
+#     full_objs_list = []
+
+#     for obj in DEFAULT_OBJECTS:
+#         full_objs_list.append(prefix_with_isaac_asset_server(obj))
+
+#     assets = []
+#     for obj in full_objs_list:
+#         asset = rep.create.from_usd(obj)
+#         prim = asset.get_output_prims()["prims"][0]
+
+#         if physics:
+#             add_colliders(prim, approximation_shape="boundingCube")
+
+#         assets.append(asset)
+
+#     return rep.create.group(assets)
 
 
 
-def add_default_objects(physics=False):
-    full_objs_list = []
-
-    for obj in DEFAULT_OBJECTS:
-        full_objs_list.append(prefix_with_isaac_asset_server(obj))
-
-    assets = []
-    for obj in full_objs_list:
-        asset = rep.create.from_usd(obj)
-        prim = asset.get_output_prims()["prims"][0]
-
-        if physics:
-            add_colliders(prim, approximation_shape="boundingCube")
-
-        assets.append(asset)
-
-    return rep.create.group(assets)
-
-
-
-def capture_pathtracing(duration=0.0, spp=128):
-    timeline = omni.timeline.get_timeline_interface()
+def capture_pathtracing(delta_time=0.0, spp=128, pause_timeline=True):
+    # timeline = omni.timeline.get_timeline_interface()
 
     # Set the render mode to PathTracing
     prev_render_mode = carb.settings.get_settings().get("/rtx/rendermode")
@@ -348,54 +464,66 @@ def capture_pathtracing(duration=0.0, spp=128):
     carb.settings.get_settings().set("/rtx/pathtracing/totalSpp", spp)
     carb.settings.get_settings().set("/rtx/pathtracing/optixDenoiser/enabled", 0)
 
-    # Make sure the timeline is playing
-    if not timeline.is_playing():
-        timeline.play()
+    # # Make sure the timeline is playing, this is used to get the motion blur
+    # if not timeline.is_playing():
+    #     timeline.play()
 
     # Capture the frame by advancing the simulation for the given duration and combining the sub samples
-    rep.orchestrator.step(delta_time=duration, pause_timeline=False)
+    rep.orchestrator.step(delta_time=delta_time, pause_timeline=pause_timeline)
 
     # Restore the previous render and motion blur settings
-    print(f"[SDG] Restoring render mode from 'PathTracing' to '{prev_render_mode}'")
     carb.settings.get_settings().set("/rtx/rendermode", prev_render_mode)
 
 
-def capture_raytracing2(rt_subframes=-1, pause_timeline=True, duration=0.0,):
+def capture_raytracing2(rt_subframes=-1, pause_timeline=True, delta_time=0.0,):
     if carb.settings.get_settings().get("/rtx/rendermode") != "RealTimePathTracing":
         carb.settings.get_settings().set("/rtx/rendermode", "RealTimePathTracing")    
     # Capture the frame by advancing the simulation for the given duration and combining the sub samples
-    rep.orchestrator.step(rt_subframes=rt_subframes, delta_time=duration, pause_timeline=pause_timeline)# Update the app until a given simulation duration has passed (simulate the world between captures)
+    rep.orchestrator.step(rt_subframes=rt_subframes, delta_time=delta_time, pause_timeline=pause_timeline)# Update the app until a given simulation duration has passed (simulate the world between captures)
 
 
 
-def run_simulation_loop(duration, simulation_app):
-    timeline = omni.timeline.get_timeline_interface()
-    elapsed_time = 0.0
-    previous_time = timeline.get_current_time()
-    if not timeline.is_playing():
+def run_simulation(num_frames: int, render: bool = True) -> None:
+    """Run a simulation for a specified number of frames, optionally without rendering."""
+    if render:
+        # Start the timeline and advance the app, this will render the physics simulation results every frame
+        timeline = omni.timeline.get_timeline_interface()
+        timeline.set_start_time(0)
+        timeline.set_end_time(1000000)
+        timeline.set_looping(False)
         timeline.play()
-    app_updates_counter = 0
-    while elapsed_time <= duration:
-        simulation_app.update()
-        elapsed_time += timeline.get_current_time() - previous_time
-        previous_time = timeline.get_current_time()
-        app_updates_counter += 1
-        print(
-            f"\t Simulation loop at {timeline.get_current_time():.2f}, current elapsed time: {elapsed_time:.2f}, counter: {app_updates_counter}"
-        )
-    print(
-        f"[SDG] Simulation loop finished in {elapsed_time:.2f} seconds at {timeline.get_current_time():.2f} with {app_updates_counter} app updates."
-    )
+        for _ in range(num_frames):
+            omni.kit.app.get_app().update()
+        timeline.pause()
+    else:
+        # Run the physics simulation steps without advancing the app
+        stage = omni.usd.get_context().get_stage()
+        physx_scene = None
 
+        # Search for or create a physics scene
+        for prim in stage.Traverse():
+            if prim.IsA(UsdPhysics.Scene):
+                physx_scene = PhysxSchema.PhysxSceneAPI.Apply(prim)
+                break
+
+        if physx_scene is None:
+            physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
+            physx_scene = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene"))
+
+        # Get simulation parameters
+        physx_dt = 1 / physx_scene.GetTimeStepsPerSecondAttr().Get()
+        physx_sim_interface = omni.physx.get_physx_simulation_interface()
+
+        # Run physics simulation for each frame
+        for _ in range(num_frames):
+            physx_sim_interface.simulate(physx_dt, 0)
+            physx_sim_interface.fetch_results()
 
 
 
 def generate_kitti_labels(categories):
     """
-    Automatically generates KITTI labels based on subfolder names in the given path.
-    
-    Args:
-        folder_path (str): Path to the folder containing subfolders for object categories.
+    Automatically generates KITTI labels based on subfolder names.
     
     Returns:
         dict: A dictionary with category names as keys and RGBA color tuples as values.
@@ -429,7 +557,45 @@ def generate_kitti_labels(categories):
 
 
 
+def register_UWCam_KittiWriter() -> None:
+    from isaacsim.oceansim.writers.UWCam_KittiWriter import UWCam_KittiWriter
+    rep.WriterRegistry.register(UWCam_KittiWriter)
 
 
 
 
+
+
+def resolve_scale_issues_with_metrics_assembler() -> None:
+    """Enable and execute metrics assembler to resolve scale issues in the stage."""
+    import omni.kit.app
+
+    ext_manager = omni.kit.app.get_app().get_extension_manager()
+    if not ext_manager.is_extension_enabled("omni.usd.metrics.assembler"):
+        ext_manager.set_extension_enabled_immediate("omni.usd.metrics.assembler", True)
+    from omni.metrics.assembler.core import get_metrics_assembler_interface
+
+    stage_id = omni.usd.get_context().get_stage_id()
+    get_metrics_assembler_interface().resolve_stage(stage_id)
+
+
+def save_object_info(objects: list[Usd.Prim], cameras: list[Usd.Prim], output_path: str):
+    info = defaultdict(dict)
+    for cam in cameras:
+        cam_name = cam.GetPath().pathString.split("/")[-1]
+        objs_info = info.setdefault(cam_name, {})
+        for obj in objects:
+            obj_name = obj.GetPath().pathString.split("/")[-1]
+            obj_info = objs_info.setdefault(obj_name, {})
+            cam_to_obj_tf_gf = Gf.Transform()
+            # NOTE: get_relative_transform returns column major matrix, so we need to transpose it before using it in Gf
+            cam_to_obj_tf_gf.SetMatrix(Gf.Matrix4d(get_relative_transform(obj, cam).T.tolist()))
+            rotation = cam_to_obj_tf_gf.GetRotation().GetQuat()
+            translation = cam_to_obj_tf_gf.GetTranslation()
+            scale = cam_to_obj_tf_gf.GetScale()
+            obj_info["location"] = list(translation)
+            obj_info["rotation"] = [rotation.GetReal()] + list(rotation.GetImaginary())
+            obj_info["scale"] = list(scale)
+            obj_info["visibility"] = True if obj.GetAttribute("visibility").Get() == "inherited" else False
+    with open(output_path, "w") as f:
+        json.dump(info, f)

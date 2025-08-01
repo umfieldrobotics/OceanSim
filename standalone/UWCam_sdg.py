@@ -2,10 +2,10 @@
 config = {
     "launch_config": {
         "renderer": "RaytracedLighting",
-        "headless": False,
+        "headless": True,
         "extra_args": [
             "--/persistent/renderer/rtpt/enabled=True",              # This enables RTX realtime preview renderer
-            # "--/log/level=error",                                    # These will shut up isaac sim as I could 
+            # "--/log/level=error",                                    # These will shut isaac sim the fuck up 
             # "--/log/fileLogLevel=error", 
             # "--/log/outputStreamLevel=error"
             ]
@@ -17,10 +17,10 @@ config = {
     "resolution": (1024, 1024),
     "masked_objects_ratio": 0.92,
     "camera_properties_kwargs": {
-        "focal_length": 24.0,
-        "focus_distance": 400,
-        "f_stop": 0.0,
-        "clipping_range": (0.01, 100),
+        # "focalLength": 24.0,
+        # "focusDistance": 400,
+        # "fStop": 0.0,
+        "clippingRange": (0.01, 100),
     },
     "writers": [
         {
@@ -30,7 +30,7 @@ config = {
                 # "output_dir": "/media/haoyu/T7 Shield 3/haoyu/SDG/",
                 "output_dir": "/home/haoyu/Desktop/viz/",
                 "colorize_instance_segmentation": True,
-                "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
+                # "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
                 "debug_mode": True,
             },
         }
@@ -39,6 +39,7 @@ config = {
     "cam_workspace" : [-1.5, -2.3, 1.25, 1.5, 3.7, 1.5],
     "disable_render_products": False,
     "debug_mode": True,
+    "path_tracing": False,
 }
 
 
@@ -78,8 +79,6 @@ launch_config = config.get("launch_config", {})
 debug_mode = config.get("debug_mode", False)
 if debug_mode:
     launch_config["headless"] = False
-else:
-    launch_config["headless"] = True
 
 from isaacsim.simulation_app import SimulationApp
 
@@ -117,7 +116,6 @@ import random
 from isaacsim.oceansim.utils.UWCam_sdg_utils import *
 
 
-
 #########################################################
 #### Here goes scene construction and randomnization ####
 #########################################################
@@ -143,7 +141,7 @@ def run_sdg(config: dict=config):
     cam_ws = config.get("cam_workspace")
     camera_properties_kwargs = config.get("camera_properties_kwargs", {})
     masked_objects_ratio = config.get("masked_objects_ratio", 0.5)
-
+    path_tracing = config.get("path_tracing", False)
     num_cameras = config.get("num_cameras", 1)
     resolution = config.get("resolution", (640, 480))
 
@@ -279,18 +277,30 @@ def run_sdg(config: dict=config):
             for rp in render_products:
                 rp.hydra_texture.set_updates_enabled(True)
     
+        if path_tracing:
+            capture_pathtracing(delta_time=0.0, spp=512, pause_timeline=True)
+        else:
+            rep.orchestrator.step(rt_subframes=rt_subframes, delta_time=0.0)
 
-        rep.orchestrator.step(rt_subframes=rt_subframes, delta_time=0.0)
-
+        
+        
+        # NOTE: Temporary code to save the object info as metadata
+        if not os.path.exists(os.path.join(out_dir, "metadata")):
+            os.makedirs(os.path.join(out_dir, "metadata"), exist_ok=True)
+        save_object_info(objects, cameras, os.path.join(out_dir, "metadata", f"object_info_{capture_counter}.json"))
+        
+        
+        
         # Check if the render products need to be disabled until the next capture
         if disable_render_products:
             for rp in render_products:
                 rp.hydra_texture.set_updates_enabled(False)
 
-        # Unmask the objects
+
         unmask_objects(masked_objects)
 
         capture_counter += 1
+        print(f"[SDG] Captured {capture_counter}/{total_captures} frames")
 
 
     # Wait until the data is written to the disk
@@ -312,12 +322,11 @@ def run_sdg(config: dict=config):
 
 register_UWCam_KittiWriter()
 
-
-
 if debug_mode:
     np.random.seed(10)
     random.seed(10)
     rep.set_global_seed(10)
+
 
 # Start the SDG pipeline
 print(f"[SDG] Starting the SDG pipeline.")

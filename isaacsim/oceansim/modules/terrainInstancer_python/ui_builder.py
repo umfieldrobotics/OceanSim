@@ -247,7 +247,7 @@ class UIBuilder:
         # stage_utils.add_reference_to_stage(test_scene_usd_path, defaultPrimPath)
 
         geomPointInstancerPath = defaultPrimPath + "/pointinstancer"
-        MeshActorPath = defaultPrimPath + "/model"
+        MeshActorPath = defaultPrimPath + "/mesh"
 
         # stage_utils.add_reference_to_stage(test_scene_usd_path, MeshActorPath)
 
