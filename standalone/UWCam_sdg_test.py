@@ -6,6 +6,7 @@ import json
 import cv2
 import os
 import matplotlib
+import math
 def load_kitti_label(label_path):
     objects = []
     with open(label_path, 'r') as f:
@@ -26,19 +27,10 @@ def load_kitti_label(label_path):
     return objects
 
 
-def load_semantic_mapping(mapping_path):
-    with open(mapping_path, 'r') as f:
-        label_to_color = json.load(f)
-    label_order = list(label_to_color.keys())
-    index_to_label = {}
-    for idx, label in enumerate(label_order):
-        index_to_label[idx] = label
-    return index_to_label, label_to_color
-
 
 def plot_all_debug(label_path, rgb_path, debug_path, instance_seg_path, mapping_path):
     objects = load_kitti_label(label_path)
-    fig, axs = plt.subplots(2, 3, figsize=(18, 12))
+    fig, axs = plt.subplots(2, 3, figsize=(24, 12))
     axs = np.atleast_2d(axs)
 
     # --- BEV subplot ---
@@ -118,12 +110,14 @@ def plot_all_debug(label_path, rgb_path, debug_path, instance_seg_path, mapping_
     ax2.set_title('2D Bounding Boxes (occlusion level, truncation ratio)', fontsize=14, fontweight='bold')
     ax2.axis('off')
 
+
     # --- Debug image subplot ---
     ax3 = axs[0, 2]
     debug_img = mpimg.imread(debug_path)
     ax3.imshow(debug_img)
     ax3.set_title('Debug Image', fontsize=14, fontweight='bold')
     ax3.axis('off')
+
 
     # --- Instance segmentation subplot (second row) ---
     ax4 = axs[1, 0]
@@ -161,51 +155,80 @@ def plot_all_debug(label_path, rgb_path, debug_path, instance_seg_path, mapping_
     # --- Semantic segmentation subplot (second row) ---
     ax5 = axs[1, 1]
     semantic_id = (inst_img >> 8) & 0xFF
-    index_to_label, label_to_color = load_semantic_mapping(mapping_path)
+    # Read semantic mapping and build id-to-class mapping
+    import matplotlib
+    with open(mapping_path, 'r') as f:
+        semantic_mapping = json.load(f)
+    id_to_class = {v: k for k, v in semantic_mapping.items()}
+    max_id = max(id_to_class.keys())
+    num_classes = max_id + 1
+    cmap = matplotlib.colormaps['tab20']
+    colors = [cmap(i % cmap.N) for i in range(num_classes)]  # RGBA tuples
+    # For semantic segmentation subplot
     unique_ids = np.unique(semantic_id)
-    # Build the color list in the order of unique_ids
-    colors = [np.array(label_to_color[index_to_label[idx]]) / 255.0 for idx in unique_ids]
-    listed_cmap = matplotlib.colors.ListedColormap(colors)
-    # Set boundaries so each unique id gets its own color
+    seg_colors = [colors[idx] for idx in unique_ids]
+    listed_cmap = matplotlib.colors.ListedColormap(seg_colors)
     boundaries = np.append(unique_ids, unique_ids[-1]+1)
     norm = matplotlib.colors.BoundaryNorm(boundaries, listed_cmap.N)
     ax5.imshow(semantic_id, cmap=listed_cmap, norm=norm, interpolation='nearest')
     ax5.set_title('Semantic Segmentation', fontsize=14, fontweight='bold')
     ax5.axis('off')
 
-    ax6 = axs[1, 2]
-    labels = list(label_to_color.keys())
-    colors = [np.array(label_to_color[label]) / 255.0 for label in labels]
-    n_labels = len(labels)
-    n_cols = 3  # Number of columns in the table
-    n_rows = int(np.ceil(n_labels / n_cols))
-
-    # Prepare cell text and colors for the table
-    cell_text = []
-    cell_colors = []
+    # --- Semantic mapping table subplot (second row, last column) ---
+    table_data = []
+    cell_colours = []
+    for idx in range(num_classes):
+        if idx not in id_to_class:
+            continue
+        class_name = id_to_class[idx]
+        table_data.append([class_name, idx])
+        rgb = colors[idx][:3]  # Only RGB, ignore alpha
+        cell_colours.append([rgb, [1, 1, 1]])  # Color only class name cell
+    n_cols = 2  # Number of columns you want
+    n_items = len(table_data)
+    n_rows = math.ceil(n_items / n_cols)
+    # Pad table_data and cell_colours to fill the grid
+    pad_len = n_rows * n_cols - n_items
+    table_data_padded = table_data + [["", ""]] * pad_len
+    cell_colours_padded = cell_colours + [[[1,1,1], [1,1,1]]] * pad_len
+    # Reshape into grid (each row is a list of [class, id, class, id, ...])
+    table_grid = []
+    colour_grid = []
     for row in range(n_rows):
-        row_text = []
-        row_colors = []
+        row_cells = []
+        row_colours = []
         for col in range(n_cols):
-            idx = row * n_cols + col
-            if idx < n_labels:
-                row_text.append(labels[idx])
-                row_colors.append(colors[idx])
-            else:
-                row_text.append("")  # Empty cell
-                row_colors.append([1, 1, 1, 0])  # Transparent/white
-        cell_text.append(row_text)
-        cell_colors.append(row_colors)
-
-    table = ax6.table(cellText=cell_text,
-                      cellColours=cell_colors,
-                    #   colLabels=[f'Label {i+1}' for i in range(n_cols)],
-                      loc='center')
-    table.auto_set_font_size(False)
-    table.set_fontsize(8)
-    table.scale(1, 1.5)
-    ax6.set_title('Semantic Mapping', fontsize=14, fontweight='bold')
+            idx = row + col * n_rows
+            row_cells.extend(table_data_padded[idx])
+            row_colours.extend(cell_colours_padded[idx])
+        table_grid.append(row_cells)
+        colour_grid.append(row_colours)
+    # Build column labels (no longer needed)
+    # col_labels_multi = []
+    # for i in range(n_cols):
+    #     col_labels_multi += [f'Class Name {i+1}', f'ID {i+1}']
+    ax6 = axs[1, 2]
     ax6.axis('off')
+    table = ax6.table(
+        cellText=table_grid,
+        # colLabels=col_labels_multi,  # Remove column labels
+        cellColours=colour_grid,
+        loc='center',
+        cellLoc='center',
+        colLoc='center'
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1.2, 1.5)
+    # Style grid as before (skip header row styling)
+    for (row, col), cell in table.get_celld().items():
+        # Highlight UNLABELLED row
+        if row > 0 and any('UNLABELLED' == table_grid[row-1][c*2] for c in range(n_cols)):
+            cell.set_edgecolor('red')
+            cell.set_linewidth(2)
+        cell.set_linewidth(0.7)
+        cell.set_edgecolor('gray')
+    table.auto_set_column_width(list(range(n_cols*2)))
 
     plt.tight_layout()
     plt.show()
@@ -331,56 +354,84 @@ def plot_all(label_path, rgb_path, instance_seg_path, mapping_path):
     # --- Semantic segmentation subplot (second row) ---
     ax5 = axs[1, 1]
     semantic_id = (inst_img >> 8) & 0xFF
-    index_to_label, label_to_color = load_semantic_mapping(mapping_path)
+    # Read semantic mapping and build id-to-class mapping
+    import matplotlib
+    with open(mapping_path, 'r') as f:
+        semantic_mapping = json.load(f)
+    id_to_class = {v: k for k, v in semantic_mapping.items()}
+    max_id = max(id_to_class.keys())
+    num_classes = max_id + 1
+    cmap = matplotlib.colormaps['tab20']
+    colors = [cmap(i % cmap.N) for i in range(num_classes)]  # RGBA tuples
+    # For semantic segmentation subplot
     unique_ids = np.unique(semantic_id)
-    # Build the color list in the order of unique_ids
-    colors = [np.array(label_to_color[index_to_label[idx]]) / 255.0 for idx in unique_ids]
-    listed_cmap = matplotlib.colors.ListedColormap(colors)
-    # Set boundaries so each unique id gets its own color
+    seg_colors = [colors[idx] for idx in unique_ids]
+    listed_cmap = matplotlib.colors.ListedColormap(seg_colors)
     boundaries = np.append(unique_ids, unique_ids[-1]+1)
     norm = matplotlib.colors.BoundaryNorm(boundaries, listed_cmap.N)
     ax5.imshow(semantic_id, cmap=listed_cmap, norm=norm, interpolation='nearest')
     ax5.set_title('Semantic Segmentation', fontsize=14, fontweight='bold')
     ax5.axis('off')
 
-    ax6 = axs[1, 2]
-    labels = list(label_to_color.keys())
-    colors = [np.array(label_to_color[label]) / 255.0 for label in labels]
-    n_labels = len(labels)
-    n_cols = 3  # Number of columns in the table
-    n_rows = int(np.ceil(n_labels / n_cols))
-
-    # Prepare cell text and colors for the table
-    cell_text = []
-    cell_colors = []
+    # --- Semantic mapping table subplot (second row, last column) ---
+    table_data = []
+    cell_colours = []
+    for idx in range(num_classes):
+        if idx not in id_to_class:
+            continue
+        class_name = id_to_class[idx]
+        table_data.append([class_name, idx])
+        rgb = colors[idx][:3]  # Only RGB, ignore alpha
+        cell_colours.append([rgb, [1, 1, 1]])  # Color only class name cell
+    n_cols = 2  # Number of columns you want
+    n_items = len(table_data)
+    n_rows = math.ceil(n_items / n_cols)
+    # Pad table_data and cell_colours to fill the grid
+    pad_len = n_rows * n_cols - n_items
+    table_data_padded = table_data + [["", ""]] * pad_len
+    cell_colours_padded = cell_colours + [[[1,1,1], [1,1,1]]] * pad_len
+    # Reshape into grid (each row is a list of [class, id, class, id, ...])
+    table_grid = []
+    colour_grid = []
     for row in range(n_rows):
-        row_text = []
-        row_colors = []
+        row_cells = []
+        row_colours = []
         for col in range(n_cols):
-            idx = row * n_cols + col
-            if idx < n_labels:
-                row_text.append(labels[idx])
-                row_colors.append(colors[idx])
-            else:
-                row_text.append("")  # Empty cell
-                row_colors.append([1, 1, 1, 0])  # Transparent/white
-        cell_text.append(row_text)
-        cell_colors.append(row_colors)
-
-    table = ax6.table(cellText=cell_text,
-                      cellColours=cell_colors,
-                      loc='center')
-    table.auto_set_font_size(False)
-    table.set_fontsize(8)
-    table.scale(1, 1.5)
-    ax6.set_title('Semantic Mapping', fontsize=14, fontweight='bold')
+            idx = row + col * n_rows
+            row_cells.extend(table_data_padded[idx])
+            row_colours.extend(cell_colours_padded[idx])
+        table_grid.append(row_cells)
+        colour_grid.append(row_colours)
+    # Build column labels (no longer needed)
+    # col_labels_multi = []
+    # for i in range(n_cols):
+    #     col_labels_multi += [f'Class Name {i+1}', f'ID {i+1}']
+    ax6 = axs[1, 2]
     ax6.axis('off')
+    table = ax6.table(
+        cellText=table_grid,
+        # colLabels=col_labels_multi,  # Remove column labels
+        cellColours=colour_grid,
+        loc='center',
+        cellLoc='center',
+        colLoc='center'
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1.2, 1.5)
+    # Style grid as before (skip header row styling)
+    for (row, col), cell in table.get_celld().items():
+        # Highlight UNLABELLED row
+        if row > 0 and any('UNLABELLED' == table_grid[row-1][c*2] for c in range(n_cols)):
+            cell.set_edgecolor('red')
+            cell.set_linewidth(2)
+        cell.set_linewidth(0.7)
+        cell.set_edgecolor('gray')
+    table.auto_set_column_width(list(range(n_cols*2)))
 
-    axs[0, 2].axis('off')
+    # axs[0, 2].axis('off')
     plt.tight_layout()
     plt.show()
-
-
 
 
 if __name__ == "__main__":
@@ -394,7 +445,7 @@ if __name__ == "__main__":
     label_path = os.path.join(base, "object_detection", f"{index}.txt")
     rgb_path = os.path.join(base, "uw_rgb", f"{index}.png")
     instance_seg_path = os.path.join(base, "instance_segmentation", f"{index}.png")
-    mapping_path = os.path.join(base, "semantic_segmentation", "semantic_mapping.json")
+    mapping_path = os.path.join(base, "semantic_mapping.json")
     debug = parser.parse_args().debug
     if debug == True:
         debug_path = os.path.join(base, "debug", f"{index}.png")

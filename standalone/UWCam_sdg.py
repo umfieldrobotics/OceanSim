@@ -5,16 +5,17 @@ config = {
         "headless": True,
         "extra_args": [
             "--/persistent/renderer/rtpt/enabled=True",              # This enables RTX realtime preview renderer
-            # "--/log/level=error",                                    # These will shut isaac sim the fuck up 
-            # "--/log/fileLogLevel=error", 
-            # "--/log/outputStreamLevel=error"
+            "--/log/level=error",                                    # These will shut isaac sim the fuck up 
+            "--/log/fileLogLevel=error", 
+            "--/log/outputStreamLevel=error"
             ]
     },
-    "total_captures" : 10,
+    "total_captures" : 15,
     "camera_collider_radius": 0.2,
-    # "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
-    "env_url": "D:/haoyu/Assets/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
-    "objects_url": "D:/haoyu/Assets/ObjectAssets_simready",
+    "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
+    # "env_url": "D:/haoyu/Assets/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
+    "objects_url": "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready",
+    # "objects_url": "D:/haoyu/Assets/ObjectAssets_simready",
     "rt_subframes": 16,
     "resolution": (1024, 1024),
     "masked_objects_ratio": 0.92,
@@ -29,9 +30,11 @@ config = {
             # Type of the writer to use (e.g. PoseWriter, BasicWriter, etc.) and the kwargs to pass to the writer init
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "D:/haoyu/SDG/",
-                # "output_dir": "/home/haoyu/Desktop/viz/",
-                "colorize_instance_segmentation": True,
+                # "output_dir": "D:/haoyu/SDG/",
+                "output_dir": "/home/haoyu/Desktop/viz/",
+                "colorize_instance_segmentation": False,
+                "veiling_visibility_threshold": 10,
+                "use_tight_bbox": True,
                 # "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
                 "debug_mode": True,
             },
@@ -175,12 +178,9 @@ def run_sdg(config: dict=config):
 
     # Create the cameras
     cameras = []
-    camera_xforms = []
-    stage.DefinePrim(f"/Cameras", "Scope")
+    stage.DefinePrim("/Cameras", "Scope")
     for i in range(num_cameras):
-        cam_path = f"/Cameras/cam_{i}"
-        camera_xforms.append(stage.DefinePrim(cam_path, "Xform"))
-        cam_prim = stage.DefinePrim(f"{cam_path}/cam_{i}", "Camera")
+        cam_prim = stage.DefinePrim(f"/Cameras/cam_{i}", "Camera")
         for key, value in camera_properties_kwargs.items():
             if cam_prim.HasAttribute(key):
                 if key == "clippingRange":
@@ -206,9 +206,8 @@ def run_sdg(config: dict=config):
     camera_colliders = []
     camera_collider_radius = config.get("camera_collider_radius", 0)
     if camera_collider_radius > 0:
-        for cam_xform in camera_xforms:
-            cam_xform_path = cam_xform.GetPath()
-            cam_collider = stage.DefinePrim(f"{cam_xform_path}/CollisionSphere", "Sphere")
+        for i, cam in enumerate(cameras):
+            cam_collider = stage.DefinePrim(f"/Cameras/cam_{i}/CollisionSphere_{i}", "Sphere")
             cam_collider.GetAttribute("radius").Set(camera_collider_radius)
             add_colliders(cam_collider)
             UsdGeom.Imageable(cam_collider).MakeInvisible()
@@ -217,7 +216,7 @@ def run_sdg(config: dict=config):
         print(f"[SDG] Created camera colliders with radius {camera_collider_radius}")
     
     # Add COU objects
-    objects, kitti_labels = add_COU_objects(objects_folder_path=objects_url, collider=True)
+    objects, kitti_labels = add_COU_objects(objects_folder_path=objects_url, physics=True)
     print(f"[SDG] {len(objects)} numbers of COU objects being added to the scene")
 
     # Resolve any centimeter-meter scale issues of the assets

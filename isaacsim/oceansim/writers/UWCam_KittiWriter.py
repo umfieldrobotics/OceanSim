@@ -110,6 +110,8 @@ class UWCam_KittiWriter(Writer):
         bbox_height_threshold: int = 25,
         bbox2d_partly_occluded_threshold: float = 0.5,
         bbox2d_fully_visible_threshold: float = 0.95,
+        veiling_visibility_threshold: float = None,
+        use_tight_bbox: bool = False,
         mapping_path: str = None,
         mapping_dict: dict = None,
         colorize_instance_segmentation: bool = False,
@@ -134,11 +136,13 @@ class UWCam_KittiWriter(Writer):
         self.backend = self._backend
         self._omit_semantic_type = omit_semantic_type
         self._bbox_height_threshold = bbox_height_threshold
+        self._use_tight_bbox = use_tight_bbox
         self._bbox2d_partly_occluded_threshold = bbox2d_partly_occluded_threshold
         self._bbox2d_fully_visible_threshold = bbox2d_fully_visible_threshold
         self._use_kitti_dir_names = use_kitti_dir_names
         self._cuboid_keypoints_order = cuboid_keypoints_order
         self._debug_mode = debug_mode
+        self._veiling_visibility_threshold = veiling_visibility_threshold
 
         if self._debug_mode:
             self._CUBOID_KEYPOINT_COLORS = ["white", "red", "green", "blue", "yellow", "cyan", "magenta", "orange", "purple"]
@@ -235,21 +239,25 @@ class UWCam_KittiWriter(Writer):
         uw_image = wp.empty(shape=data[rgb_annotator].shape, dtype=wp.uint8)
         uw_rgb_dir_name = "uw_image_02" if self._use_kitti_dir_names else "uw_rgb"
         uw_rgb_file_path = os.path.join(sub_dir, uw_rgb_dir_name, f"{self._frame_id}.png")
+
+        self._veiling = random.choice(list(self._UW_param["veiling"].values()))
+        self._backscatter = random.choice(list(self._UW_param["backscatter"].values()))
         wp.launch(
                 dim=data[rgb_annotator].shape[:2],
                 kernel=UW_render,
                 inputs=[
                     data[rgb_annotator],
                     data[dist_to_cam_annotator],
-                    random.choice(list(self._UW_param["veiling"].values())),
-                    random.choice(list(self._UW_param["backscatter"].values())),
-                    random.choice(list(self._UW_param["backscatter"].values())),
+                    self._veiling,
+                    self._backscatter,
+                    self._backscatter,
 
                 ],
                 outputs=[
                     uw_image
                 ]
             )  
+        self.uw_image_np = uw_image.numpy()
         self._backend.schedule(F.write_image, data=uw_image, path=uw_rgb_file_path)
 
     def _write_object_pose(self, data, sub_dir: str, bbox_3d_annotator: str, camera_param_annotator: str):
@@ -316,9 +324,12 @@ class UWCam_KittiWriter(Writer):
             box_loose = loose_id_to_bbox[id]
             
             label = []
+            
+            # Specify to use tight or loose bbox
+            box = box_tight if self._use_tight_bbox else box_loose
+            box_annotator = bbox_2d_tight_annotator if self._use_tight_bbox else bbox_2d_loose_annotator
 
-            # Skip boxes shorter than threshold pixels in height
-            if box_tight["y_max"] - box_tight["y_min"] < self._bbox_height_threshold:
+            if not self._is_bbox_valid(box):
                 continue
 
             area_tight = (box_tight["x_max"] - box_tight["x_min"]) * (box_tight["y_max"] - box_tight["y_min"])
@@ -333,25 +344,31 @@ class UWCam_KittiWriter(Writer):
                 occlusion_estimation = 2
 
 
+
             # Check if bounding boxes are in the viewport
-            if (
-                box_tight["x_min"] < 0
-                or box_tight["y_min"] < 0
-                or box_tight["x_max"] > rp_width
-                or box_tight["y_max"] > rp_height
-                or box_tight["x_min"] > rp_width
-                or box_tight["y_min"] > rp_height
-                or box_tight["y_max"] < 0
-                or box_tight["x_max"] < 0
-            ):
-                continue
-            
+            # if (
+            #     box["x_min"] < 0
+            #     or box["y_min"] < 0
+            #     or box["x_max"] > rp_width
+            #     or box["y_max"] > rp_height
+            #     or box["x_min"] > rp_width
+            #     or box["y_min"] > rp_height
+            #     or box["y_max"] < 0
+            #     or box["x_max"] < 0
+            # ):
+            #     continue
+
+
+            # if self._veiling_visibility_threshold is not None:
+            #     if not self._is_bbox_image_region_visible_by_veiling(self.uw_image_np, box, self._veiling_visibility_threshold):
+            #         continue
+
             # Only compute object's 3d information after the above test
             bbox3d_info = self._process_bounding_box_3d_single(bbox3d_id_to_bbox[id], data[camera_param_annotator])
             
 
             
-            semantic_label = data[bbox_2d_tight_annotator]["info"]["idToLabels"].get(box_tight["semanticId"])
+            semantic_label = data[box_annotator]["info"]["idToLabels"].get(box["semanticId"])
 
             if self._omit_semantic_type:
                 # omit semantic type
@@ -363,10 +380,10 @@ class UWCam_KittiWriter(Writer):
             label.append(f"{bbox3d_info['truncation_ratio']:.2f}")  # truncated
             label.append(occlusion_estimation)  # occluded (estimation, NOT ACCURATE!)
             label.append(f"{bbox3d_info['alpha']:.2f}")  # alpha 
-            label.append(box_tight["x_min"])  # x min
-            label.append(box_tight["y_min"])  # y min
-            label.append(box_tight["x_max"])  # x max
-            label.append(box_tight["y_max"])  # y max
+            label.append(box["x_min"])  # x min
+            label.append(box["y_min"])  # y min
+            label.append(box["x_max"])  # x max
+            label.append(box["y_max"])  # y max
             #NOTE: size is in world frame (meters) and this represents the size of the 3D bbox that does not rotate with the object
             #NOTE: To get the local frame (cm), use bbox3d_info["size_local"] and this represents the size of the 3D bbox that rotates with the object
             label.append(f"{bbox3d_info['size_world'][2]:.2f}")  # z_size represents height
@@ -650,16 +667,13 @@ class UWCam_KittiWriter(Writer):
         """
         Instance segmentation follows the format specified here: https://www.vision.rwth-aachen.de/page/mots
         """
-        sem_rgb_dir_name = "semantic_rgb" if self._use_kitti_dir_names else "semantic_segmentation"
         inst_dir_name = "instance" if self._use_kitti_dir_names else "instance_segmentation"
-        seg_filepath = os.path.join(sub_dir, "semantic", f"{self._frame_id}.png")
-        seg_col_filepath = os.path.join(sub_dir, sem_rgb_dir_name, f"{self._frame_id}.png")
-        seg_mapping_filepath = os.path.join(sub_dir, sem_rgb_dir_name, "semantic_mapping.json")
+        seg_filepath = os.path.join(sub_dir, "semantic_segmentation", f"{self._frame_id}.png")
+        seg_mapping_filepath = os.path.join(sub_dir, "semantic_mapping.json")
 
         inst_filepath = os.path.join(sub_dir, inst_dir_name, f"{self._frame_id}.png")
 
         inst_id_to_labels = data[inst_annotator]["info"]["idToSemantics"]
-        self._backend.schedule(F.write_image, data=data[sem_annotator]["data"], path=seg_col_filepath)
         self._backend.schedule(F.write_json, data=self.mapping_dict, path=seg_mapping_filepath)
 
         inst_seg_img = data[inst_annotator]["data"]
@@ -684,7 +698,6 @@ class UWCam_KittiWriter(Writer):
             }
 
         instance_ids = list(inst_id_to_labels.keys())
-        semantic_classes = list(self.mapping_dict.keys())
         inst_seg_uint32 = inst_seg_img.view(np.uint32).squeeze()
         inst_seg_img_renumbered = np.zeros((height, width), dtype=np.uint16)
         sem_seg_img_renumbered = np.zeros((height, width), dtype=np.uint8)
@@ -693,19 +706,22 @@ class UWCam_KittiWriter(Writer):
             is_unlabelled = semantic_class.lower() == "unlabelled"
             is_background = semantic_class.lower() == "background"
             is_in_mapping = semantic_class in self.mapping_dict
-            if not is_in_mapping or is_unlabelled or is_background:
+            bbox_tight = self._get_bbox_from_instance_id(inst_seg_uint32, iid)
+            is_valid = self._is_bbox_valid(bbox_tight)
+            if not is_in_mapping or is_unlabelled or is_background or not is_valid:
                 inst_seg_img_renumbered[inst_seg_uint32 == iid] = 0
             else:
                 cur_semantics = str(inst_id_to_labels[iid])
                 cur_idx.setdefault(cur_semantics, 0)
                 cur_idx[cur_semantics] += 1
-                semantics_renumbered = semantic_classes.index(semantic_class)
+                semantics_renumbered = self.mapping_dict.get(semantic_class, 0)
                 inst_seg_img_renumbered[inst_seg_uint32 == iid] = cur_idx[cur_semantics] + semantics_renumbered * 256
                 sem_seg_img_renumbered[inst_seg_uint32 == iid] = semantics_renumbered
 
         self._backend.schedule(F.write_image, data=inst_seg_img_renumbered, path=inst_filepath)
         self._backend.schedule(F.write_image, data=sem_seg_img_renumbered, path=seg_filepath)
-
+    
+        
     def _write_distance_to_camera(self, data, sub_dir: str, annotator: str):
         distance_to_camera_metres = data[annotator].numpy()
         distance_to_camera_metres = np.nan_to_num(distance_to_camera_metres, posinf=0.0)
@@ -749,6 +765,8 @@ class UWCam_KittiWriter(Writer):
     
     
     def write(self, data):
+        # NOTE: the writing order matters, the rgb is always processed first because the latter processing may depend on the UW_rgb image
+        # NOTE: for testing visibility
         render_products = [k for k in data.keys() if k.startswith("rp_")]
         if len(render_products) == 1:
             sub_dir = data[render_products[0]]["camera"].split("/")[-1]
@@ -970,3 +988,45 @@ class UWCam_KittiWriter(Writer):
         draw.line([origin_2d, x_axis_end_2d], fill="red", width=2)  # X-axis in red
         draw.line([origin_2d, y_axis_end_2d], fill="green", width=2)  # Y-axis in green
         draw.line([origin_2d, z_axis_end_2d], fill="blue", width=2)  # Z-axis in blue
+
+
+    def _is_bbox_valid(self, bbox_tight: dict):
+        if not bbox_tight:
+            return False
+        if not self._is_bbox_big_enough(bbox_tight, self._bbox_height_threshold):
+            return False
+        if not self._is_bbox_image_region_visible_by_veiling(self.uw_image_np, bbox_tight, self._veiling_visibility_threshold):
+            return False
+        if not self._is_bbox_in_scope(self.uw_image_np, bbox_tight):
+            return False
+        return True
+
+    def _is_bbox_in_scope(self, image: np.ndarray, bbox_tight: dict):
+        return bbox_tight["x_min"] >= 0 and bbox_tight["y_min"] >= 0 and bbox_tight["x_max"] < image.shape[1] and bbox_tight["y_max"] < image.shape[0]
+
+    # NOTE: This test will fail if objects are dense therefore visible object will appear in the bbox of invisible object
+    # TODO: Fix this in the future or use less dense objects SDG for now
+    def _is_bbox_image_region_visible_by_veiling(self, image: np.ndarray, bbox_tight: dict, threshold: float):
+        """
+        Returns True if the maximum color distance between pixels in the bbox and self._veiling is above threshold.
+        """
+        bbox_region = image[bbox_tight["y_min"]:bbox_tight["y_max"], bbox_tight["x_min"]:bbox_tight["x_max"], :3]  # Only RGB, ignore alpha if present
+        pixels = bbox_region.reshape(-1, 3)
+        veiling_rgb = np.array(self._veiling) * 255  # If self._veiling is in [0,1]
+        color_dists = np.linalg.norm(pixels - veiling_rgb, axis=1)
+        max_dist = np.max(color_dists)
+        return max_dist >= threshold
+
+    def _is_bbox_big_enough(self, bbox_tight: dict, threshold: float):
+        return (bbox_tight["x_max"] - bbox_tight["x_min"] >= threshold) and (bbox_tight["y_max"] - bbox_tight["y_min"] >= threshold)
+
+    def _get_bbox_from_instance_id(self, inst_seg_uint32: np.ndarray, iid: int):
+        """
+        Returns the tight bounding box [x_min, y_min, x_max, y_max] for the given instance id.
+        """
+        ys, xs = np.where(inst_seg_uint32 == iid)
+        if len(xs) == 0 or len(ys) == 0:
+            return None  # No pixels found for this iid
+        x_min, x_max = xs.min(), xs.max()
+        y_min, y_max = ys.min(), ys.max()
+        return {"x_min": x_min, "y_min": y_min, "x_max": x_max, "y_max": y_max}

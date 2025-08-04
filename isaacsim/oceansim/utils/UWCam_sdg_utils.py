@@ -60,45 +60,36 @@ DEFAULT_LABELS = {
 
 }
 
+#NOTE As demonstrated above, Kitti labels can be either semantic Ids or RGBA values,
+# We realize it is always more convenient to use Ids for replicating an existing dataset labelling.
+COU_LABELS = {
+    "UNLABELLED": 0,
+    "BACKGROUND": 0,
+    "scissors": 1,
+    "plastic_cup": 2,
+    "metal_rod": 3,
+    "fork": 4,
+    "bottle": 5,
+    "soda_can": 6,
+    "case": 7,
+    "plastic_bag": 8,
+    "cup": 9,
+    "goggles": 10,
+    "flipper": 11,
+    "loco": 12,
+    "aqua": 13,
+    "pipe": 14,
+    "snorkel": 15,
+    "spoon": 16,
+    "lure": 17,
+    "screwdriver": 18,
+    "car": 19,
+    "tripod": 20,
+    "rov": 21,
+    "knife": 22,
+    "dive_weight": 23,
+}
 
-# Predefined colors for better visual distinction
-# Using distinct colors that are visually different from each other
-COLOR_PALETTE = [
-        (255, 0, 0, 255),      # Red
-        (0, 255, 0, 255),      # Green
-        (0, 0, 255, 255),      # Blue
-        (255, 255, 0, 255),    # Yellow
-        (255, 0, 255, 255),    # Magenta
-        (0, 255, 255, 255),    # Cyan
-        (128, 0, 0, 255),      # Dark Red
-        (0, 128, 0, 255),      # Dark Green
-        (0, 0, 128, 255),      # Dark Blue
-        (128, 128, 0, 255),    # Olive
-        (128, 0, 128, 255),    # Purple
-        (0, 128, 128, 255),    # Teal
-        (255, 128, 0, 255),    # Orange
-        (128, 255, 0, 255),    # Lime
-        (0, 255, 128, 255),    # Spring Green
-        (128, 0, 255, 255),    # Violet
-        (255, 0, 128, 255),    # Pink
-        (0, 128, 255, 255),    # Sky Blue
-        (255, 128, 128, 255),  # Light Red
-        (128, 255, 128, 255),  # Light Green
-        (128, 128, 255, 255),  # Light Blue
-        (255, 255, 128, 255),  # Light Yellow
-        (255, 128, 255, 255),  # Light Magenta
-        (128, 255, 255, 255),  # Light Cyan
-        (192, 192, 192, 255),  # Silver
-        (128, 64, 0, 255),     # Brown
-        (64, 128, 0, 255),     # Dark Green
-        (0, 64, 128, 255),     # Dark Blue
-        (128, 0, 64, 255),     # Dark Purple
-        (64, 0, 128, 255),     # Dark Violet
-        (0, 128, 64, 255),     # Dark Teal
-        (128, 64, 128, 255),   # Medium Purple
-        (64, 128, 128, 255),   # Medium Teal
-        (128, 128, 64, 255),   # Medium Olive
-    ]
 
 COU_OBJECTS_FOLDER_PATH = "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready/"
 
@@ -159,10 +150,11 @@ def parse_object_folder(objects_folder_path):
 
 
 def add_COU_objects(
-                objects_folder_path=COU_OBJECTS_FOLDER_PATH, 
+                objects_folder_path=COU_OBJECTS_FOLDER_PATH,
+                override_semantic_mapping=COU_LABELS,
                 root_path="SDG_objects",
                 name_prefix="", 
-                collider=False,
+                physics=False,
                 ) -> tuple[list[Usd.Prim], dict[str, tuple[int, int, int, int]]]:
     stage = omni.usd.get_context().get_stage()
     stage.DefinePrim(f"/{root_path}", "Scope")
@@ -174,12 +166,17 @@ def add_COU_objects(
             prim_path = omni.usd.get_stage_next_free_path(stage, f"/{root_path}/{name_prefix}{category}", False)
 
             prim = add_reference_to_stage(usd_path=usd_file, prim_path=prim_path)
-            if collider:
-                add_colliders(prim, approximation_type="boundingCube")
+            if physics:
+                add_colliders(prim)
+                add_rigid_body_dynamics(prim, disable_gravity=True)
             remove_all_semantics(prim, recursive=True)
             add_update_semantics(prim, category)
             assets.append(prim)
-    return assets, generate_kitti_labels(categories)
+    
+    if override_semantic_mapping is not None:
+        return assets, override_semantic_mapping
+    else:
+        return assets, generate_kitti_labels(categories)
     
 
 # needed for loading textures correctly
@@ -523,35 +520,23 @@ def run_simulation(num_frames: int, render: bool = True) -> None:
 
 def generate_kitti_labels(categories):
     """
-    Automatically generates KITTI labels based on subfolder names.
+    Automatically generates KITTI label IDs based on subfolder names.
     
     Returns:
-        dict: A dictionary with category names as keys and RGBA color tuples as values.
+        dict: A dictionary with category names as keys and unique integer IDs as values.
     """
-    
-    # Create KITTI labels dictionary
+    # Assign fixed IDs for special classes
     kitti_labels = {
-        "UNLABELLED": (0, 0, 0, 0),
-        "BACKGROUND": (0, 0, 0, 0),
+        "UNLABELLED": 0,
+        "BACKGROUND": 1,
     }
-    
-    # Add each category with a unique color
+    # Start assigning IDs after the reserved ones
+    next_id = 2
     categories_list = sorted(categories.keys())
-    for i, category in enumerate(categories_list):
-        if i < len(COLOR_PALETTE):
-            kitti_labels[category] = COLOR_PALETTE[i]
-        else:
-            # Generate a color if we run out of predefined colors
-            # Use a hash-based approach for consistent colors
-            import hashlib
-            hash_obj = hashlib.md5(category.encode())
-            hash_bytes = hash_obj.digest()
-            r = hash_bytes[0]
-            g = hash_bytes[1]
-            b = hash_bytes[2]
-            kitti_labels[category] = (r, g, b, 255)
-    
-    
+    for category in categories_list:
+        if category not in kitti_labels:
+            kitti_labels[category] = next_id
+            next_id += 1
     return kitti_labels
 
 
