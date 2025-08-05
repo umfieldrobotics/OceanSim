@@ -11,9 +11,24 @@ We suggest that make sure the extension isaacsim.ros2.bridge is being setup to "
 
 
 ## Usage:
+### ros2 control:
 We provided an exmaple util located at `isaacsim/oceansim/utils/ros2_control.py` for user to consult and develop on.
 
 This util extends the control mode to ros control in the **sensor_example** extension. 
+
+### ros2 publish uw image:
+We add ros2 publish uw image function in the UW_Camera class, located at `isaacsim/oceansim/sensors/UW_Camera.py`.
+
+For testing, we provide a ros2 subscriber example located at `isaacsim/oceansim/utils/ros2_image_subscriber.py`.
+
+Test steps:
+1. check the Underwater Camera checkbox in the **sensor_example** extension.
+2. run the simulation.
+3. open a terminal and run the ros2_image_subscriber.py.
+```
+cd /path/to/oceansim/utils
+python3 ros2_image_subscriber.py
+```
 
 ## Acknowledgement:
 Great appreciation to [Tang-JingWei](https://github.com/Tang-JingWei) for contributng the ros bridge example for OceanSim.
