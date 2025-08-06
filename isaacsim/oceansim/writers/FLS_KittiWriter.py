@@ -1,123 +1,74 @@
 import csv
 import io
-from typing import List, Union
+import json
+import os
+from typing import List
+
 import carb
 import numpy as np
-import warp as wp
-from pxr import Gf
 from omni.syntheticdata.scripts.SyntheticData import SyntheticData
 import omni.replicator.core.scripts.functional as F
 from omni.replicator.core import AnnotatorRegistry, BackendDispatch
 from omni.replicator.core.scripts.writers import Writer
-from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
 from isaacsim.replicator.writers.scripts.utils import calculate_truncation_ratio_simple
+
+# Import sonar rendering kernel
+from isaacsim.oceansim.utils.ImagingSonar_kernels import *
+from pxr import Gf
 import isaacsim.core.utils.rotations as rotations_utils
-import yaml
-import os
-import json
+
 from PIL import Image, ImageDraw
 from functools import partial
-
-# NOTE: This is an unintuitive import for a writer class since we should expect a deterministic output
-# The good thing is we can use seed to make it deterministic
 import random
 
-__version__ = "0.1.0"
 
-DULUTH_PARAM_DICT = {
-    "veiling": {
-        "duluth": wp.vec3f(0.19, 0.30, 0.0)
-        }, 
-    "backscatter": {
-        "duluth": wp.vec3f(0.53, 0.68, 0.99)
-        }
-    }
-
-    
-UW_PARAM_DICT = {
-    "veiling": {
-            "deep_sea": wp.vec3f(0.0, 0.0, 0.28),
-            # "shallow_water": torch.tensor([0.05, 0.11, 0.7]),
-            "akdeniz": wp.vec3f(0.14, 0.3, 0.5),
-            "river": wp.vec3f(0.294, 0.4, 0.263),
-            "mud": wp.vec3f(0.259, 0.259, 0.024),
-            "mhl": wp.vec3f(0.0, 0.3021, 0.239),
-            "murky": wp.vec3f(0.275, 0.212, 0.071),
-        },
-    "backscatter": {
-            "Type I": wp.vec3f(0.905, 0.961, 0.982),
-            "Type IA": wp.vec3f(0.804, 0.954, 0.975),
-            "Type IB": wp.vec3f(0.830, 0.940, 0.968),
-            "Type II": wp.vec3f(0.800, 0.925, 0.940),
-            "Type III": wp.vec3f(0.750, 0.885, 0.890),
-            "Type 1": wp.vec3f(0.750, 0.885, 0.875),
-            "Type 3": wp.vec3f(0.710, 0.820, 0.800),
-            "Type 5": wp.vec3f(0.670, 0.730, 0.670),
-            "Type 7": wp.vec3f(0.620, 0.610, 0.590),
-            "Type 9": wp.vec3f(0.550, 0.460, 0.290),
-    }
-}
+__version__ = "0.0.1"
 
 
-class UWCam_KittiWriter(Writer):
-    """Writer outputting data in the ``KITTI`` annotation format:
-    http://www.cvlibs.net/datasets/kitti/
-
-    .. note::
-        Development work to provide full-support is ongoing.
-
-    Supported Annotations:
-    - RGB
-    - Object Detection (partial 2D support, see notes)
-    - Depth
-    - Semantic Segmentation
-    - Instance Segmentation
-
-    Args:
-        output_dir: Output directory to which ``KITTI`` annotations will be saved.
-        semantic_types: List of semantic types to consider. If ``None``, only consider semantic types ``"class"``.
-        omit_semantic_type: If ``True``, only record the semantic data (ie. ``class: car`` becomes ``car``).
-        bbox_height_threshold: The minimum valid bounding box height, in pixels. Value must be positive integers.
-        partly_occluded_threshold: Minimum occlusion factor for bounding boxes to be considered partly occluded.
-        fully_visible_threshold: Minimum occlusion factor for bounding boxes to be considered fully visible.
-        mapping_path: File path to JSON to use as the label to color mapping for ``KITTI``. ex: ``{'car':(155, 255, 74, 255)}``
-            If no ``mapping_path`` is supplied, the default semantics specified in the KITTI spec will be used. Note
-            that semantics not specified in the mapping will be labelled as "unlabelled". The mapping may include both
-            "unlabelled" and "background" labels to specify how each is colored when ``colorize_instance_segmentation``
-            is ``True``
-        mapping_dict: Dictionary of labels and their colors in (R,G,B,A). ex: ``{"my_semantic": (12, 07, 83, 255)}``
-            mapping_dict and mapping_path cannot both be specified.
-        colorize_instance_segmentation: If ``True``, save an additional colorized instance segmentation image to the
-            ``instance_rgb`` directory
-        use_kitti_dir_names: If ``True``, use standard ``KITTI`` directory names: ``rgb`` -> ``image_02``,
-            ``semantic_segmentation`` -> ``semantic``, ``instance_segmentation`` -> ``instance``, ``object_detection`` -> ``label_02``
-
-    .. note::
-        - Object Detection
-        - Bounding boxes with a height smaller than 25 pixels are discarded
-        - **Supported:** bounding box extents, semantic labels
-        - **Partial Support:** occluded (occlusion is estimated from the area ratio of tight / loose bounding boxes)
+class FLS_KittiWriter(Writer):
+    """
+    .. my note::
+        - occlusion in sonar image can not be achieved now 
+        (future: process occlusion can only be done without parallelism ie. can not be on cuda, 
+        otherwise to do in cuda, we have to initialize a really big memory by extending one dimention equal to the total number of semantics )
+        - dimensions and locations of the object should be possible. 
+        by Transferring 3D bbox information to local frame 
     """
 
     def __init__(
         self,
         output_dir: str,
+        # configuration of sonar renderings
+        sonar_param: dict = {
+                    "max_range": 3, 
+                    "min_range": 0.2,
+                    "hori_fov": 130, # Notice: on camera end, hori_fov and vert_fov is required to 
+                    "vert_fov": 20,  # compute camera AR and vert_res given arbitrary hori_res
+                    "range_res": 0.005, 
+                    "angular_res": 0.25,
+                    "normalizing_method": "range",
+                    "query_prop": "reflectivity", 
+                    "attenuation": 0.1,
+                    "gau_noise_param": 0.2,
+                    "ray_noise_param": 0.05,
+                    "intensity_offset": 0.0,
+                    "intensity_gain": 1.0,
+                    "central_peak": 2,
+                    "central_std": 0.001,
+                    "hori_res": 5000
+                    },
+        # extra config for data writing
         s3_bucket: str = None,
         s3_region: str = None,
         s3_endpoint: str = None,
         semantic_types: List[str] = None,
-        omit_semantic_type: bool = True,
-        bbox_height_threshold: int = 25,
-        bbox2d_partly_occluded_threshold: float = 0.5,
-        bbox2d_fully_visible_threshold: float = 0.95,
-        veiling_visibility_threshold: float = None,
-        use_tight_bbox: bool = False,
+        omit_semantic_type: bool = False,
         mapping_path: str = None,
         mapping_dict: dict = None,
-        colorize_instance_segmentation: bool = False,
+        colorize_instance_segmentation: bool = True,
+        include_unlabelled: bool = True,
         semantic_filter_predicate: str = None,
         use_kitti_dir_names: bool = False,
-        UW_param: Union[str, dict] = UW_PARAM_DICT,
         cuboid_keypoints_order: list = ["Center", "LDB", "LDF", "LUB", "LUF", "RDB", "RDF", "RUB", "RUF"],
         debug_mode: bool = False,
     ):
@@ -135,36 +86,17 @@ class UWCam_KittiWriter(Writer):
             self._backend = BackendDispatch(output_dir=output_dir)
         self.backend = self._backend
         self._omit_semantic_type = omit_semantic_type
-        self._bbox_height_threshold = bbox_height_threshold
-        self._use_tight_bbox = use_tight_bbox
-        self._bbox2d_partly_occluded_threshold = bbox2d_partly_occluded_threshold
-        self._bbox2d_fully_visible_threshold = bbox2d_fully_visible_threshold
         self._use_kitti_dir_names = use_kitti_dir_names
-        self._cuboid_keypoints_order = cuboid_keypoints_order
+        self.colorize_instance_segmentation = colorize_instance_segmentation
+        self.include_unlabelled = include_unlabelled
+        self._device = str(wp.get_preferred_device())
         self._debug_mode = debug_mode
-        self._veiling_visibility_threshold = veiling_visibility_threshold
+        self._cuboid_keypoints_order = cuboid_keypoints_order
 
-        if self._debug_mode:
+        if debug_mode:
             self._CUBOID_KEYPOINT_COLORS = ["white", "red", "green", "blue", "yellow", "cyan", "magenta", "orange", "purple"]
             self._CUBOID_EDGE_COLORS = {"front": "red", "back": "blue", "connecting": "green"}
             self._debug_data = {}
-
-        if isinstance(UW_param, str):
-            with open(UW_param, 'r') as file:
-                try:
-                    # Load the YAML content
-                    self._UW_param = yaml.safe_load(file)
-                    print(f"Loaded render parameters {self._UW_param} from {UW_param}")
-                except yaml.YAMLError as exc:
-                    carb.log_error(f"Error reading render parameter YAML from {UW_param} file: {exc}")
-                    self._UW_param = UW_PARAM_DICT
-                    carb.log_error(f"Fallback to default: {self._UW_param}")
-        else:
-            self._UW_param = UW_param
-            print(f"Using render param {self._UW_param}")
-        
-        self._device = str(wp.get_preferred_device())
-        self.colorize_instance_segmentation = colorize_instance_segmentation
 
         if mapping_path and mapping_dict:
             raise ValueError("Cannot have both mapping_path and mapping_dict specified")
@@ -196,23 +128,293 @@ class UWCam_KittiWriter(Writer):
             SyntheticData.Get().set_instance_mapping_semantic_filter(semantic_filter_predicate)
 
         self.annotators = [
+            # We don't need these three annotators for they are for camera rendering 
+            "rgb",
+            # We need pointcloud data as the result of rayquest
             AnnotatorRegistry.get_annotator(
-                "rgb", device=self._device
+                "pointcloud", init_params={"includeUnlabelled": include_unlabelled}, device=self._device
             ),
-            "bounding_box_2d_tight_fast",
-            "bounding_box_2d_loose_fast",
             AnnotatorRegistry.get_annotator(
                 "semantic_segmentation", init_params={"mapping": self._get_anno_semantic_mapping()}
             ),
             AnnotatorRegistry.get_annotator(
                 "instance_segmentation_fast", init_params={"colorize": colorize_instance_segmentation}
             ),
-            AnnotatorRegistry.get_annotator(
-                "distance_to_camera", device=self._device
-            ),
-            "bounding_box_3d_fast", 
             "camera_params",
+            "bounding_box_3d_fast"
         ]
+
+        self._initialize_sonar_renderer(sonar_param)
+
+
+    def _initialize_sonar_renderer(self, sonar_param:dict):
+        '''Takes in sonar parameters to allocate memory on cuda and load up kernels.
+        Must call this function before rendering sonar images.
+        Args:
+            sonar_param (dict) : Sonar parameters
+        '''
+        # Boilerplate to intake params
+        # Below params are used to define the sonar grid
+        self.max_range = sonar_param['max_range']
+        self.min_range = sonar_param['min_range']
+        self.range_res = sonar_param['range_res']
+        self.hori_fov = sonar_param['hori_fov']
+        self.vert_fov = sonar_param['vert_fov']
+        self.angular_res = np.deg2rad(sonar_param['angular_res'])
+        # Below params are used to define sonar noise and rendering method
+        self.query_prop = sonar_param['query_prop']
+        self.attenuation = sonar_param['attenuation']
+        self.gau_noise_param = sonar_param['gau_noise_param']
+        self.ray_noise_param = sonar_param['ray_noise_param']
+        self.intensity_offset = sonar_param['intensity_offset']
+        self.intensity_gain = sonar_param['intensity_gain']
+        self.central_peak = sonar_param['central_peak']
+        self.central_std = sonar_param['central_std']
+
+        # Allocate memeory on cuda
+        
+        # Generate sonar grid  r and azi meshgrid
+        self.min_azi = np.deg2rad(90-self.hori_fov/2)
+        r, azi = np.meshgrid(np.arange(self.min_range,self.max_range,self.range_res),
+                                       np.arange(np.deg2rad(90-self.hori_fov/2), np.deg2rad(90+self.hori_fov/2), self.angular_res),
+                                       indexing='ij')
+        self.r = wp.array(r, shape=r.shape, dtype=wp.float32)
+        self.azi = wp.array(azi, shape=r.shape, dtype=wp.float32)
+       
+        # Accumulated intensity per bin
+        self.bin_sum = wp.empty(shape=self.r.shape, dtype=wp.float32)
+        # Accumulated ray count per bin
+        self.bin_count = wp.empty(shape=self.r.shape, dtype=wp.int32)
+        # Minimum zenith bookkeeper to only keep the highest ray semantics
+        self.bin_min_zenith = wp.full(shape=self.r.shape, value=wp.PI, dtype=wp.float32)
+        # semantics per bin (only support 1 semantics per bin, no occlusion)
+        self.bin_semantics = wp.empty(shape=self.r.shape, dtype=wp.uint8)
+        # Instance per bin
+        self.bin_instances = wp.empty(shape=self.r.shape, dtype=wp.uint8)
+        # Resulted sonar data per bin (cartesian_x of bin in local frame, cartesian_y, normalized intensity value)
+        self.sonar_data = wp.empty(shape=self.r.shape, dtype=wp.vec3)
+        # Rendered sonar image
+        self.sonar_image = wp.empty(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
+        # Rendered sonar semantics
+        self.sonar_semantics_image = wp.empty(shape=(self.r.shape[0], self.r.shape[1], 4), dtype=wp.uint8)
+        # Corresponding kernel for different method to nomalize 
+        if sonar_param['normalizing_method'] == "all":
+            self._max_intensity = wp.zeros(shape=(1,), dtype=wp.float32)
+            self._compute_max_intensity = compute_max_intensity_all
+            self._make_sonar_map = make_sonar_map_all
+        elif sonar_param['normalizing_method'] == "range":
+            self._max_intensity = wp.zeros(shape=(self.r.shape[0],), dtype=wp.float32)
+            self._compute_max_intensity = compute_max_intensity_range
+            self._make_sonar_map = make_sonar_map_range      
+        
+        # Sonar noise
+        self.gau_noise = wp.empty(shape=self.r.shape, dtype=wp.float32)
+        self.range_dependent_ray_noise = wp.empty(shape=self.r.shape, dtype=wp.float32)
+        
+        # Sonar grid information
+        self.sonar_grid = sonarGrid()
+        self.sonar_grid.x_offset = self.min_range
+        self.sonar_grid.y_offset = self.min_azi
+        self.sonar_grid.x_res = self.range_res
+        self.sonar_grid.y_res = self.angular_res
+        self.sonar_grid.x_num = self.r.shape[0]
+        self.sonar_grid.y_num = self.r.shape[1]
+        
+
+    
+    def _render_sonar(self, 
+                      data, 
+                      pointcloud_annot: str, 
+                      cameraParams_annot: str, 
+                      semantic_seg_annot: str):
+
+        pcl = data[pointcloud_annot]["data"][0]  # shape :(1,N,3) <class 'warp.types.array'>
+        normals = data[pointcloud_annot]['info']['pointNormals'][0] # shape :(1,N,4) <class 'warp.types.array'>
+        semantics = data[pointcloud_annot]['info']['pointSemantic'][0] # shape: (1, N) <class 'warp.types.array'>
+        instances = data[pointcloud_annot]['info']['pointInstance'][0] # shape: (1, N) <class 'warp.types.array'>
+        viewTransform = data[cameraParams_annot]['cameraViewTransform'].reshape(4,4).T # 4 by 4 np.ndarray extrinsic matrix
+        idToLabels = data[semantic_seg_annot]["info"]["idToLabels"] # dict 
+        def make_indexToProp_array(idToLabels: dict, query_property: str) -> np.ndarray:
+            """ A utility function helps to convert idToLabels into indexToProp array
+            This manipulation facilitates warp computation framework
+            indexToProp is an 1-dim array where the values associated with the query property 
+            are placed at the index corresponding to the key
+            First two entry are always zero because {'0': {'class': 'BACKGROUND'}, '1': {'class': 'UNLABELLED'}}
+            eg: indexToProp = [0, 0, 0.1, 1 .....] 
+            """
+            max_id = max(idToLabels.keys(), default=-1)
+            # TODO we can initilize a big chunk of memory (>number of objects) for indexToPro_array 
+            # in the beginning and overwrite during looping 
+            indexToProp_array = np.ones((int(max_id)+1,))
+            for id in idToLabels.keys():
+                for property in idToLabels.get(id):
+                    if property == query_property:
+                        indexToProp_array[int(id)] = idToLabels.get(id).get(property)
+            return indexToProp_array
+
+        num_points = pcl.shape[0]
+        # Load these small numpy arrays to cuda
+        indexToRefl_np = make_indexToProp_array(idToLabels=idToLabels,
+                                                query_property=self.query_prop)
+        indexToRefl = wp.array(data=indexToRefl_np, dtype=wp.float32)
+        viewTransform = wp.mat44(viewTransform)
+        
+        
+        # Compute intensity for each ray query     
+        intensity = wp.empty(shape=(num_points,), dtype=wp.float32)
+        wp.launch(kernel=compute_intensity,
+                dim=num_points,
+                inputs=[
+                    pcl,
+                    normals,
+                    viewTransform,
+                    semantics,
+                    indexToRefl,
+                    self.attenuation,
+                ],
+                outputs=[
+                    intensity
+                ]
+                )
+                
+        # Transform pointcloud from world cooridates to sonar local and convert to spherical coord
+        pcl_bin_idx = wp.empty(shape=(num_points, ), dtype=wp.vec2ui)
+        pcl_local_spher = wp.empty(shape=(num_points,), dtype=wp.vec3) 
+        wp.launch(kernel=world2local,
+                dim=num_points,
+                inputs=[
+                    viewTransform,
+                    pcl
+                ],
+                    outputs=[
+                    pcl_local_spher
+                    ]
+                )
+        # Collapse three dimensional intensity data to 2D
+        # Simply sum intensity return and compute number of return that falls into the same bin
+        # Zero out intensity in each bin (do not omit this, this is necessary)
+        self.bin_sum.zero_()
+        self.bin_count.zero_()
+
+        self.bin_min_zenith.fill_(wp.PI)
+        self.bin_semantics.zero_()
+        self.bin_instances.zero_()
+        wp.launch(kernel=bin_process,
+                dim=num_points,
+                inputs=[
+                    pcl_local_spher,
+                    intensity,
+                    semantics,
+                    self.sonar_grid
+                ],
+                outputs=[
+                    self.bin_sum,
+                    self.bin_count,
+                    pcl_bin_idx,
+                    self.bin_min_zenith
+                ]
+                )
+        
+        wp.launch(kernel=bin_segmentation_process,
+                dim=num_points,
+                inputs=[
+                    pcl_local_spher,
+                    semantics,
+                    instances,
+                    pcl_bin_idx,
+                    self.bin_min_zenith
+                ],
+                outputs=[
+                    self.bin_semantics,
+                    self.bin_instances
+                ]
+                )
+        
+        # Calculate multiplicative gaussian noise
+        
+        wp.launch(
+            kernel=normal_2d,
+            dim=self.bin_sum.shape,
+            inputs=[
+                self._frame_id,   # use frame id for RNG seed increment
+                0.0,
+                self.gau_noise_param
+            ],
+            outputs=[
+                self.gau_noise
+            ]
+        )
+
+        # Calculate additive rayleigh noise (range dependent and mimic central beam)
+
+        wp.launch(
+            kernel=range_dependent_rayleigh_2d,
+            dim=self.bin_sum.shape,
+            inputs=[
+                self._frame_id,   # use frame num for RNG seed increment
+                self.r,
+                self.azi,
+                self.max_range,
+                self.ray_noise_param,
+                self.central_peak,
+                self.central_std,
+            ],
+            outputs=[
+                self.range_dependent_ray_noise
+
+            ]
+        )
+
+        
+        self._max_intensity.fill_(-wp.inf)
+        # Normalizing intensity at each bin either by global maximum or rangewise maximum
+        wp.launch(
+            dim=self.bin_sum.shape,
+            kernel=self._compute_max_intensity,
+            inputs=[
+                self.bin_sum,
+            ],
+            outputs=[
+                self._max_intensity 
+            ]
+        )
+
+        # Apply noise, normalize, and convert (r, azi) to (x,y) for plotting
+        wp.launch(
+            kernel=self._make_sonar_map,
+            dim=self.sonar_data.shape,
+            inputs=[
+                self.r,
+                self.azi,
+                self.bin_sum,
+                self._max_intensity,
+                self.gau_noise,
+                self.range_dependent_ray_noise,
+                self.intensity_offset,
+                self.intensity_gain
+            ],
+            outputs=[
+                self.sonar_data
+            ]
+            )
+    
+        wp.launch(
+            dim=self.sonar_data.shape,
+            kernel=make_sonar_image,
+            inputs=[
+                self.sonar_data
+            ],
+            outputs=[
+                self.sonar_image
+            ]
+        )
+        wp.synchronize()
+
+    def _write_sonar_image(self, sub_dir: str):
+        sonar_dir_name = "sonar_image_02" if self._use_kitti_dir_names else "sonar_image"
+        sonar_file_path = os.path.join(sub_dir, sonar_dir_name, f"{self._frame_id}.png")
+        self._backend.schedule(F.write_image, data=self.sonar_image, path=sonar_file_path)
+
 
 
     def _get_anno_semantic_mapping(self):
@@ -231,34 +433,6 @@ class UWCam_KittiWriter(Writer):
                 anno_semantic_mapping[f"class:{k}"] = v
         return json.dumps(anno_semantic_mapping)
 
-    def _write_rgb(self, data, sub_dir: str, rgb_annotator: str, dist_to_cam_annotator:str, UW_param: list):
-
-        if self._debug_mode:
-            self._debug_data["raw_rgb"] = data[rgb_annotator].numpy()
-
-        uw_image = wp.empty(shape=data[rgb_annotator].shape, dtype=wp.uint8)
-        uw_rgb_dir_name = "uw_image_02" if self._use_kitti_dir_names else "uw_rgb"
-        uw_rgb_file_path = os.path.join(sub_dir, uw_rgb_dir_name, f"{self._frame_id}.png")
-
-        self._veiling = random.choice(list(self._UW_param["veiling"].values()))
-        self._backscatter = random.choice(list(self._UW_param["backscatter"].values()))
-        wp.launch(
-                dim=data[rgb_annotator].shape[:2],
-                kernel=UW_render,
-                inputs=[
-                    data[rgb_annotator],
-                    data[dist_to_cam_annotator],
-                    self._veiling,
-                    self._backscatter,
-                    self._backscatter,
-
-                ],
-                outputs=[
-                    uw_image
-                ]
-            )  
-        self.uw_image_np = uw_image.numpy()
-        self._backend.schedule(F.write_image, data=uw_image, path=uw_rgb_file_path)
 
     def _write_object_pose(self, data, sub_dir: str, bbox_3d_annotator: str, camera_param_annotator: str):
         objs_data = self._process_bounding_boxes_3d(data[bbox_3d_annotator], data[camera_param_annotator])
@@ -266,124 +440,6 @@ class UWCam_KittiWriter(Writer):
         pose_file_path = os.path.join(sub_dir, pose_dir_name, f"{self._frame_id}.json")
         self._backend.schedule(F.write_json, path=pose_file_path, data=objs_data, indent=2)
 
-
-    def _write_object_detection(
-        self,
-        data,
-        sub_dir: str,
-        render_product_annotator: str,
-        bbox_2d_tight_annotator: str,
-        bbox_2d_loose_annotator: str,
-        bbox_3d_annotator: str,
-        camera_param_annotator: str,
-    ):
-        r"""
-        Saves the labels for the object detection data in Kitti format.
-
-        Unsupported fields: alpha, rotation_y, truncated (all set to default values of 0.0)
-
-        Notes on occlusion:
-        # This estimation relies on the ratio between loose (unoccluded) and tight bounding boxes
-        # and may produce unexpected results in certain cases:
-        #
-        #        //           XXXX                 //  XXXX
-        #  _____//____/_______XXXX          ______//___XXXX______
-        # )   __          __  XXXX         )   __      XXXX_     \
-        # |__/  \________/  \_XXXX         |__/  \_____XXXX \____|
-        # ___\__/________\__/_XXXX__      ____\_ /_____XXXX_/______
-        # PARTLY OCCLUDED (OK!)           FULLY VISIBLE (INCORRECT)
-        """
-        label_set = []
-
-        rp_width = data[render_product_annotator]["resolution"][0]
-        rp_height = data[render_product_annotator]["resolution"][1]
-
-        bbox_tight = data[bbox_2d_tight_annotator]["data"]
-        bbox_loose = data[bbox_2d_loose_annotator]["data"]
-        bbox_3d = data[bbox_3d_annotator]["data"]
-
-        bbox_tight_bbox_ids = data[bbox_2d_tight_annotator]["info"]["bboxIds"]
-        bbox_loose_bbox_ids = data[bbox_2d_loose_annotator]["info"]["bboxIds"]
-        bbox_3d_bbox_ids = data[bbox_3d_annotator]["info"]["bboxIds"]
-        
-        tight_id_to_bbox = {bbox_tight_id: bbox_tight_data for bbox_tight_id, bbox_tight_data in zip(bbox_tight_bbox_ids, bbox_tight)}
-        loose_id_to_bbox = {bbox_loose_id: bbox_loose_data for bbox_loose_id, bbox_loose_data in zip(bbox_loose_bbox_ids, bbox_loose)}
-        bbox3d_id_to_bbox = {bbox_3d_id: bbox_3d_data for bbox_3d_id, bbox_3d_data in zip(bbox_3d_bbox_ids, bbox_3d)}
-
-
-        # For box in tight and bbox_3d, find the corresponding index of box in loose
-        shared_ids = np.intersect1d(
-                bbox_tight_bbox_ids,
-                np.intersect1d(bbox_loose_bbox_ids, bbox_3d_bbox_ids)
-                )
-        
-
-
-        for id in shared_ids:
-            box_tight = tight_id_to_bbox[id]
-            box_loose = loose_id_to_bbox[id]
-            
-            label = []
-            
-            # Specify to use tight or loose bbox
-            box = box_tight if self._use_tight_bbox else box_loose
-            box_annotator = bbox_2d_tight_annotator if self._use_tight_bbox else bbox_2d_loose_annotator
-
-            if not self._is_bbox_valid(box):
-                continue
-
-            area_tight = (box_tight["x_max"] - box_tight["x_min"]) * (box_tight["y_max"] - box_tight["y_min"])
-            area_loose = (box_loose["x_max"] - box_loose["x_min"]) * (box_loose["y_max"] - box_loose["y_min"])
-            area_ratio = area_tight / (area_loose + 1e-5)
-
-            if area_ratio >= self._bbox2d_fully_visible_threshold:
-                occlusion_estimation = 0
-            elif area_ratio >= self._bbox2d_partly_occluded_threshold:
-                occlusion_estimation = 1
-            else:
-                occlusion_estimation = 2
-
-
-            # Only compute object's 3d information after the above test
-            bbox3d_info = self._process_bounding_box_3d_single(bbox3d_id_to_bbox[id], data[camera_param_annotator])
-            
-
-            
-            semantic_label = data[box_annotator]["info"]["idToLabels"].get(box["semanticId"])
-
-            if self._omit_semantic_type:
-                # omit semantic type
-                semantic_label = semantic_label.get("class", "Unlabelled")
-            
-
-            # Adding Kitti Data,  NOTE: Only class and 2d bbox coordinates are filled in
-            label.append(semantic_label)  # semantic
-            label.append(f"{bbox3d_info['truncation_ratio']:.2f}")  # truncated
-            label.append(occlusion_estimation)  # occluded (estimation, NOT ACCURATE!)
-            label.append(f"{bbox3d_info['alpha']:.2f}")  # alpha 
-            label.append(box["x_min"])  # x min
-            label.append(box["y_min"])  # y min
-            label.append(box["x_max"])  # x max
-            label.append(box["y_max"])  # y max
-            #NOTE: size is in world frame (meters) and this represents the size of the 3D bbox that does not rotate with the object
-            #NOTE: To get the local frame (cm), use bbox3d_info["size_local"] and this represents the size of the 3D bbox that rotates with the object
-            label.append(f"{bbox3d_info['size_world'][2]:.2f}")  # z_size represents height
-            label.append(f"{bbox3d_info['size_world'][1]:.2f}")  # y_size represents width
-            label.append(f"{bbox3d_info['size_world'][0]:.2f}")  # x_size represents length
-            # location of the xform origin in camera frame (NOTE: not the object centroid which is bbox3d_info["center_camera_frame"])
-            label.extend([f"{v:.3f}" for v in bbox3d_info["location_camera_frame"]])
-            label.append(f"{bbox3d_info['rotation_y']:.2f}")  # rotation_y
-
-            label_set.append(label)
-
-        det_dir_name = "label_02" if self._use_kitti_dir_names else "object_detection"
-        kitti_filepath = os.path.join(sub_dir, det_dir_name, f"{self._frame_id}.txt")
-        buf = io.StringIO()
-
-        writer = csv.writer(buf, delimiter=" ")
-        writer.writerows(label_set)
-
-        self._backend.schedule(self._backend.write_blob, data=bytes(buf.getvalue(), "utf-8"), path=kitti_filepath)
     
     
     def _process_bounding_box_3d_single(self, bounding_box_3d_data: dict, camera_params: dict) ->dict :
@@ -515,6 +571,9 @@ class UWCam_KittiWriter(Writer):
             obj_visibility = 1.0 - abs(float(bbox["occlusionRatio"]))
 
             obj["label"] = id_to_labels[bbox["semanticId"]]
+            # Skip ground objects
+            if obj["label"] == "ground":
+                continue
             obj["prim_path"] = bounding_box_3d["info"]["primPaths"][i]
             obj["visibility"] = round(obj_visibility, 3)
 
@@ -644,7 +703,7 @@ class UWCam_KittiWriter(Writer):
             labels_dict = json.load(f)
         return labels_dict
 
-    def _write_segmentation(self, data, sub_dir: str, sem_annotator: str, inst_annotator: str):
+    def _write_sonar_segmentation(self, data, sub_dir: str, inst_annotator: str):
         """
         Instance segmentation follows the format specified here: https://www.vision.rwth-aachen.de/page/mots
         """
@@ -657,14 +716,14 @@ class UWCam_KittiWriter(Writer):
         inst_id_to_labels = data[inst_annotator]["info"]["idToSemantics"]
         self._backend.schedule(F.write_json, data=self.mapping_dict, path=seg_mapping_filepath)
 
-        inst_seg_img = data[inst_annotator]["data"]
-        height, width = inst_seg_img.shape[:2]
+        inst_seg = self.bin_instances.numpy()
+        height, width = inst_seg.shape[:2]
 
         if self.colorize_instance_segmentation:
             inst_col_filepath = os.path.join(sub_dir, "instance_rgb", f"{self._frame_id}.png")
-            inst_seg_img_colorized = inst_seg_img.view(np.uint8)
-            inst_seg_img_colorized = inst_seg_img_colorized.reshape(height, width, -1)
-            self._backend.schedule(F.write_image, data=inst_seg_img_colorized, path=inst_col_filepath)
+            # inst_seg_img_colorized = inst_seg_img.view(np.uint8)
+            # inst_seg_img_colorized = inst_seg_img_colorized.reshape(height, width, -1)
+            self._backend.schedule(F.write_image, data=inst_seg, path=inst_col_filepath)
 
         # Re-label instances to be sequentially numbered
         # The instance segmentation is a 16bit png where the lower 8 bit contain the semantic ID and the higher 8 bits
@@ -679,7 +738,6 @@ class UWCam_KittiWriter(Writer):
             }
 
         instance_ids = list(inst_id_to_labels.keys())
-        inst_seg_uint32 = inst_seg_img.view(np.uint32).squeeze()
         inst_seg_img_renumbered = np.zeros((height, width), dtype=np.uint16)
         sem_seg_img_renumbered = np.zeros((height, width), dtype=np.uint8)
         for i, iid in enumerate(instance_ids):
@@ -687,28 +745,20 @@ class UWCam_KittiWriter(Writer):
             is_unlabelled = semantic_class.lower() == "unlabelled"
             is_background = semantic_class.lower() == "background"
             is_in_mapping = semantic_class in self.mapping_dict
-            bbox_tight = self._get_bbox_from_instance_id(inst_seg_uint32, iid)
-            is_valid = self._is_bbox_valid(bbox_tight)
-            if not is_in_mapping or is_unlabelled or is_background or not is_valid:
-                inst_seg_img_renumbered[inst_seg_uint32 == iid] = 0
+            if not is_in_mapping or is_unlabelled or is_background:
+                inst_seg_img_renumbered[inst_seg == iid] = 0
             else:
                 cur_semantics = str(inst_id_to_labels[iid])
                 cur_idx.setdefault(cur_semantics, 0)
                 cur_idx[cur_semantics] += 1
                 semantics_renumbered = self.mapping_dict.get(semantic_class, 0)
-                inst_seg_img_renumbered[inst_seg_uint32 == iid] = cur_idx[cur_semantics] + semantics_renumbered * 256
-                sem_seg_img_renumbered[inst_seg_uint32 == iid] = semantics_renumbered
+                inst_seg_img_renumbered[inst_seg == iid] = cur_idx[cur_semantics] + semantics_renumbered * 256
+                sem_seg_img_renumbered[inst_seg == iid] = semantics_renumbered
 
         self._backend.schedule(F.write_image, data=inst_seg_img_renumbered, path=inst_filepath)
         self._backend.schedule(F.write_image, data=sem_seg_img_renumbered, path=seg_filepath)
     
         
-    def _write_distance_to_camera(self, data, sub_dir: str, annotator: str):
-        distance_to_camera_metres = data[annotator].numpy()
-        distance_to_camera_metres = np.nan_to_num(distance_to_camera_metres, posinf=0.0)
-        distance_to_camera_uint16 = (distance_to_camera_metres * 256).astype(np.uint16)
-        file_path = os.path.join(sub_dir, "depth", f"{self._frame_id}.png")
-        self._backend.schedule(F.write_image, data=distance_to_camera_uint16, path=file_path)
     
     def _write_camera_param(self, data, sub_dir: str, annotator:str):
         
@@ -742,67 +792,42 @@ class UWCam_KittiWriter(Writer):
 
         file_path = os.path.join(sub_dir, "camera_param", f"{self._frame_id}.json")
         self._backend.schedule(F.write_json, data=camera_data, path=file_path)
-    
-    
-    
+
     def write(self, data):
-        # NOTE: the writing order matters, the rgb is always processed first because the latter processing may depend on the UW_rgb image
-        # NOTE: for testing visibility
         render_products = [k for k in data.keys() if k.startswith("rp_")]
         if len(render_products) == 1:
             sub_dir = data[render_products[0]]["camera"].split("/")[-1]
-            self._write_rgb(data, sub_dir, "rgb", "distance_to_camera", self._UW_param)
-            self._write_segmentation(data, sub_dir, "semantic_segmentation", "instance_segmentation_fast")
-            self._write_object_detection(
-                data, 
-                sub_dir, 
-                render_products[0], 
-                "bounding_box_2d_tight_fast", 
-                "bounding_box_2d_loose_fast", 
-                "bounding_box_3d_fast",
-                "camera_params"
-            )
-            self._write_distance_to_camera(data, sub_dir, "distance_to_camera")
+            self._render_sonar(data, "pointcloud", "camera_params", "semantic_segmentation")
+            self._write_sonar_image(sub_dir)
+            self._write_sonar_segmentation(data, sub_dir,  "instance_segmentation_fast")
             self._write_camera_param(data, sub_dir, "camera_params")
+
             if self._debug_mode:
-                # NOTE: To use the debug mode, you have to write the object pose to get some debug info
+                self._debug_data["raw_rgb"] = data["rgb"]
                 self._write_object_pose(data, sub_dir, "bounding_box_3d_fast", "camera_params")
                 self._write_debug_data(sub_dir)
-
         else:
-            for render_product in render_products:
-                render_product_name = render_product[3:]
-                sub_dir = os.path.join(render_product_name, data[render_product]["camera"].split("/")[-1])
-                self._write_rgb(
-                    data, 
-                    sub_dir, 
-                    f"rgb-{render_product_name}", 
-                    f"distance_to_camera-{render_product_name}", 
-                    self._UW_param
-                )
-                self._write_segmentation(
-                    data,
-                    sub_dir,
-                    f"semantic_segmentation-{render_product_name}",
-                    f"instance_segmentation_fast-{render_product_name}",
-                )
-                self._write_object_detection(
-                    data,
-                    sub_dir,
-                    render_product,
-                    f"bounding_box_2d_tight_fast-{render_product_name}",
-                    f"bounding_box_2d_loose_fast-{render_product_name}",
-                    f"bounding_box_3d_fast-{render_product_name}",
-                    f"camera_params-{render_product_name}"
-                )
-                self._write_distance_to_camera(data, sub_dir, f"distance_to_camera-{render_product_name}")
-                self._write_camera_param(data, sub_dir, f"camera_params-{render_product_name}")
-                if self._debug_mode:
-                    self._write_object_pose(data, sub_dir, f"bounding_box_3d_fast-{render_product_name}", f"camera_params-{render_product_name}")
-                    self._write_debug_data(sub_dir)
+            pass
+            # for render_product in render_products:
+            #     render_product_name = render_product[3:]
+            #     sub_dir = os.path.join(render_product_name, data[render_product]["camera"].split("/")[-1])
+                # self._write_rgb(data, sub_dir, f"rgb-{render_product_name}")
+                # self._write_segmentation(
+                #     data,
+                #     sub_dir,
+                #     f"semantic_segmentation-{render_product_name}",
+                #     f"instance_segmentation_fast-{render_product_name}",
+                # )
+                # self._write_object_detection(
+                #     data,
+                #     sub_dir,
+                #     render_product,
+                #     f"bounding_box_2d_tight_fast-{render_product_name}",
+                #     f"bounding_box_2d_loose_fast-{render_product_name}",
+                # )
+                # self._write_distance_to_camera(data, sub_dir, f"distance_to_camera-{render_product_name}")
 
         self._frame_id += 1
-    
 
     #########################################################
     ########### Below are debug functions ###################
@@ -1011,3 +1036,4 @@ class UWCam_KittiWriter(Writer):
         x_min, x_max = xs.min(), xs.max()
         y_min, y_max = ys.min(), ys.max()
         return {"x_min": x_min, "y_min": y_min, "x_max": x_max, "y_max": y_max}
+
