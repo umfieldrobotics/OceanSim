@@ -12,28 +12,28 @@ config = {
     },
     "total_captures" : 15,
     "camera_collider_radius": 0.2,
-    "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
-    # "env_url": "D:/haoyu/Assets/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
-    "objects_url": "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready",
-    # "objects_url": "D:/haoyu/Assets/ObjectAssets_simready",
+    # "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
+    "env_url": "C:/Users/mahaoyu/Desktop/pebble_floor/padded_pebble_floor_water.usd",
+    # "objects_url": "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready",
+    "objects_url": "C:/Users/mahaoyu/Desktop/ObjectAssets_simready",
     "rt_subframes": 16,
-    "resolution": (1024, 1024),
+    "resolution": [1024, 1024],
     "masked_objects_ratio": 0.92,
     "camera_properties_kwargs": {
         # "focalLength": 24.0,
         # "focusDistance": 400,
         # "fStop": 0.0,
-        "clippingRange": (0.01, 100),
+        "clippingRange": [0.01, 100],
     },
     "writers": [
         {
             # Type of the writer to use (e.g. PoseWriter, BasicWriter, etc.) and the kwargs to pass to the writer init
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                # "output_dir": "D:/haoyu/SDG/",
-                "output_dir": "/home/haoyu/Desktop/viz/",
+                "output_dir": "C:/Users/mahaoyu/Desktop/SDG/",
+                # "output_dir": "/home/haoyu/Desktop/viz/",
                 "colorize_instance_segmentation": False,
-                "veiling_visibility_threshold": 10,
+                "veiling_visibility_threshold": 12,
                 "use_tight_bbox": True,
                 # "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
                 "debug_mode": True,
@@ -43,7 +43,7 @@ config = {
     "obj_workspace": [-1.5, -2.3, 1.15, 1.5, 3.7, 1.65],
     "cam_workspace" : [-1.5, -2.3, 1.25, 1.5, 3.7, 1.5],
     "disable_render_products": False,
-    "debug_mode": True,
+    "debug_mode": False,
     "path_tracing": False,
 }
 

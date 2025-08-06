@@ -28,9 +28,12 @@
             # Type of the writer to use (e.g. PoseWriter, BasicWriter, etc.) and the kwargs to pass to the writer init
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "C:/Users/mahaoyu/Desktop/SDG/sand_many",
+                "output_dir": "Z:/ocean-sim/sim2real/SDG/SDG_17_30_8_4_2025/sand_many",
                 # "output_dir": "/home/haoyu/Desktop/viz/",
-                "colorize_instance_segmentation": True,
+                "colorize_instance_segmentation": False,
+                "veiling_visibility_threshold": 12,
+                "use_tight_bbox": True,
+                # "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
                 "debug_mode": False,
             },
         }
