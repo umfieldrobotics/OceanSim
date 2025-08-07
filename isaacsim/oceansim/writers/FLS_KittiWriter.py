@@ -39,24 +39,9 @@ class FLS_KittiWriter(Writer):
         self,
         output_dir: str,
         # configuration of sonar renderings
-        sonar_param: dict = {
-                    "max_range": 3, 
-                    "min_range": 0.2,
-                    "hori_fov": 130, # Notice: on camera end, hori_fov and vert_fov is required to 
-                    "vert_fov": 20,  # compute camera AR and vert_res given arbitrary hori_res
-                    "range_res": 0.005, 
-                    "angular_res": 0.25,
-                    "normalizing_method": "range",
-                    "query_prop": "reflectivity", 
-                    "attenuation": 0.1,
-                    "gau_noise_param": 0.2,
-                    "ray_noise_param": 0.05,
-                    "intensity_offset": 0.0,
-                    "intensity_gain": 1.0,
-                    "central_peak": 2,
-                    "central_std": 0.001,
-                    "hori_res": 5000
-                    },
+        sonar_param: dict,
+        # configuration of reflectivity mapping
+        reflectivity_mapping: dict = None,
         # extra config for data writing
         s3_bucket: str = None,
         s3_region: str = None,
@@ -65,7 +50,6 @@ class FLS_KittiWriter(Writer):
         omit_semantic_type: bool = False,
         mapping_path: str = None,
         mapping_dict: dict = None,
-        colorize_instance_segmentation: bool = True,
         include_unlabelled: bool = True,
         semantic_filter_predicate: str = None,
         use_kitti_dir_names: bool = False,
@@ -84,15 +68,15 @@ class FLS_KittiWriter(Writer):
             )
         else:
             self._backend = BackendDispatch(output_dir=output_dir)
+        self._output_dir = output_dir
+        self.sonar_param = sonar_param
         self.backend = self._backend
         self._omit_semantic_type = omit_semantic_type
         self._use_kitti_dir_names = use_kitti_dir_names
-        self.colorize_instance_segmentation = colorize_instance_segmentation
-        self.include_unlabelled = include_unlabelled
+        self._include_unlabelled = include_unlabelled
         self._device = str(wp.get_preferred_device())
         self._debug_mode = debug_mode
         self._cuboid_keypoints_order = cuboid_keypoints_order
-
         if debug_mode:
             self._CUBOID_KEYPOINT_COLORS = ["white", "red", "green", "blue", "yellow", "cyan", "magenta", "orange", "purple"]
             self._CUBOID_EDGE_COLORS = {"front": "red", "back": "blue", "connecting": "green"}
@@ -112,7 +96,14 @@ class FLS_KittiWriter(Writer):
                     "BACKGROUND": 1,
             }
             carb.log_info("Using default KITTI label mapping")
-
+        
+        if reflectivity_mapping:
+            self.reflectivity_mapping = reflectivity_mapping
+        else:
+            self.reflectivity_mapping = {
+                "UNLABELLED": 0.0,
+                "BACKGROUND": 0.0,
+            }
         # Specify the semantic types that will be included in output
         if semantic_types is not None:
             if semantic_filter_predicate is None:
@@ -129,23 +120,28 @@ class FLS_KittiWriter(Writer):
 
         self.annotators = [
             # We don't need these three annotators for they are for camera rendering 
-            "rgb",
+            AnnotatorRegistry.get_annotator(
+                "rgb", 
+                device="cpu", 
+                do_array_copy=False
+            ),
             # We need pointcloud data as the result of rayquest
             AnnotatorRegistry.get_annotator(
-                "pointcloud", init_params={"includeUnlabelled": include_unlabelled}, device=self._device
+                "pointcloud", init_params={"includeUnlabelled": include_unlabelled}, 
+                device=self._device, 
+                do_array_copy=False
             ),
             AnnotatorRegistry.get_annotator(
                 "semantic_segmentation", init_params={"mapping": self._get_anno_semantic_mapping()}
             ),
             AnnotatorRegistry.get_annotator(
-                "instance_segmentation_fast", init_params={"colorize": colorize_instance_segmentation}
+                "instance_segmentation_fast", init_params={"colorize": False}
             ),
             "camera_params",
             "bounding_box_3d_fast"
         ]
 
         self._initialize_sonar_renderer(sonar_param)
-
 
     def _initialize_sonar_renderer(self, sonar_param:dict):
         '''Takes in sonar parameters to allocate memory on cuda and load up kernels.
@@ -233,33 +229,16 @@ class FLS_KittiWriter(Writer):
         semantics = data[pointcloud_annot]['info']['pointSemantic'][0] # shape: (1, N) <class 'warp.types.array'>
         instances = data[pointcloud_annot]['info']['pointInstance'][0] # shape: (1, N) <class 'warp.types.array'>
         viewTransform = data[cameraParams_annot]['cameraViewTransform'].reshape(4,4).T # 4 by 4 np.ndarray extrinsic matrix
-        idToLabels = data[semantic_seg_annot]["info"]["idToLabels"] # dict 
-        def make_indexToProp_array(idToLabels: dict, query_property: str) -> np.ndarray:
-            """ A utility function helps to convert idToLabels into indexToProp array
-            This manipulation facilitates warp computation framework
-            indexToProp is an 1-dim array where the values associated with the query property 
-            are placed at the index corresponding to the key
-            First two entry are always zero because {'0': {'class': 'BACKGROUND'}, '1': {'class': 'UNLABELLED'}}
-            eg: indexToProp = [0, 0, 0.1, 1 .....] 
-            """
-            max_id = max(idToLabels.keys(), default=-1)
-            # TODO we can initilize a big chunk of memory (>number of objects) for indexToPro_array 
-            # in the beginning and overwrite during looping 
-            indexToProp_array = np.ones((int(max_id)+1,))
-            for id in idToLabels.keys():
-                for property in idToLabels.get(id):
-                    if property == query_property:
-                        indexToProp_array[int(id)] = idToLabels.get(id).get(property)
-            return indexToProp_array
+        idToLabels = data[semantic_seg_annot]["info"]["idToLabels"] # dict {id (str): {class(str): label(str)}}
+
 
         num_points = pcl.shape[0]
         # Load these small numpy arrays to cuda
-        indexToRefl_np = make_indexToProp_array(idToLabels=idToLabels,
-                                                query_property=self.query_prop)
+        indexToRefl_np = self._make_indexToProp_array(idToLabels=idToLabels, labelsToProp=self.reflectivity_mapping)
         indexToRefl = wp.array(data=indexToRefl_np, dtype=wp.float32)
         viewTransform = wp.mat44(viewTransform)
         
-        
+
         # Compute intensity for each ray query     
         intensity = wp.empty(shape=(num_points,), dtype=wp.float32)
         wp.launch(kernel=compute_intensity,
@@ -286,7 +265,7 @@ class FLS_KittiWriter(Writer):
                     viewTransform,
                     pcl
                 ],
-                    outputs=[
+                outputs=[
                     pcl_local_spher
                     ]
                 )
@@ -299,6 +278,7 @@ class FLS_KittiWriter(Writer):
         self.bin_min_zenith.fill_(wp.PI)
         self.bin_semantics.zero_()
         self.bin_instances.zero_()
+
         wp.launch(kernel=bin_process,
                 dim=num_points,
                 inputs=[
@@ -314,7 +294,7 @@ class FLS_KittiWriter(Writer):
                     self.bin_min_zenith
                 ]
                 )
-        
+
         wp.launch(kernel=bin_segmentation_process,
                 dim=num_points,
                 inputs=[
@@ -365,8 +345,7 @@ class FLS_KittiWriter(Writer):
             ]
         )
 
-        
-        self._max_intensity.fill_(-wp.inf)
+        self._max_intensity.zero_()
         # Normalizing intensity at each bin either by global maximum or rangewise maximum
         wp.launch(
             dim=self.bin_sum.shape,
@@ -408,7 +387,25 @@ class FLS_KittiWriter(Writer):
                 self.sonar_image
             ]
         )
-        wp.synchronize()
+
+    def _make_indexToProp_array(self, idToLabels: dict, labelsToProp: dict) -> np.ndarray:
+            """ A utility function helps to convert idToLabels into indexToProp array
+            Saving property to the index of the array is important because warp kernel can not accept hash table
+            indexToProp is an 1-dim array where the values associated with the query property 
+            are placed at the index corresponding to the key(id)
+            First two entry are always zero because {'0': {'class': 'BACKGROUND'}, '1': {'class': 'UNLABELLED'}}
+            eg: indexToProp = [0, 0, 0.1, 1 .....] 
+            """
+            max_id = max(map(int, idToLabels.keys()), default=-1)
+            # TODO For semantics mixing of objects in sonar dilemma,
+            # we can initilize a big chunk of memory (>number of objects) for indexToProp_array 
+            # in the beginning and overwrite during looping 
+            # This is not a good idea because it will waste memory
+            indexToProp_array = np.zeros((int(max_id)+1,))
+            for id, label in idToLabels.items():
+                indexToProp_array[int(id)] = labelsToProp.get(label["class"], 1.0)
+            return indexToProp_array
+
 
     def _write_sonar_image(self, sub_dir: str):
         sonar_dir_name = "sonar_image_02" if self._use_kitti_dir_names else "sonar_image"
@@ -703,27 +700,22 @@ class FLS_KittiWriter(Writer):
             labels_dict = json.load(f)
         return labels_dict
 
+
     def _write_sonar_segmentation(self, data, sub_dir: str, inst_annotator: str):
         """
         Instance segmentation follows the format specified here: https://www.vision.rwth-aachen.de/page/mots
         """
         inst_dir_name = "instance" if self._use_kitti_dir_names else "instance_segmentation"
         seg_filepath = os.path.join(sub_dir, "semantic_segmentation", f"{self._frame_id}.png")
-        seg_mapping_filepath = os.path.join(sub_dir, "semantic_mapping.json")
 
         inst_filepath = os.path.join(sub_dir, inst_dir_name, f"{self._frame_id}.png")
 
         inst_id_to_labels = data[inst_annotator]["info"]["idToSemantics"]
-        self._backend.schedule(F.write_json, data=self.mapping_dict, path=seg_mapping_filepath)
 
         inst_seg = self.bin_instances.numpy()
         height, width = inst_seg.shape[:2]
 
-        if self.colorize_instance_segmentation:
-            inst_col_filepath = os.path.join(sub_dir, "instance_rgb", f"{self._frame_id}.png")
-            # inst_seg_img_colorized = inst_seg_img.view(np.uint8)
-            # inst_seg_img_colorized = inst_seg_img_colorized.reshape(height, width, -1)
-            self._backend.schedule(F.write_image, data=inst_seg, path=inst_col_filepath)
+
 
         # Re-label instances to be sequentially numbered
         # The instance segmentation is a 16bit png where the lower 8 bit contain the semantic ID and the higher 8 bits
@@ -731,11 +723,7 @@ class FLS_KittiWriter(Writer):
         # Semantic segmentation is saved as a 3 channel image where each channel is the same 8 bit semantic ID
         # Instance IDs start from 1
         cur_idx = {}
-        if self.colorize_instance_segmentation:
-            # convert ids to uint32
-            inst_id_to_labels = {
-                (iid[0] | iid[1] << 8 | iid[2] << 16 | iid[3] << 24): v for iid, v in inst_id_to_labels.items()
-            }
+
 
         instance_ids = list(inst_id_to_labels.keys())
         inst_seg_img_renumbered = np.zeros((height, width), dtype=np.uint16)
@@ -755,11 +743,13 @@ class FLS_KittiWriter(Writer):
                 inst_seg_img_renumbered[inst_seg == iid] = cur_idx[cur_semantics] + semantics_renumbered * 256
                 sem_seg_img_renumbered[inst_seg == iid] = semantics_renumbered
 
-        self._backend.schedule(F.write_image, data=inst_seg_img_renumbered, path=inst_filepath)
-        self._backend.schedule(F.write_image, data=sem_seg_img_renumbered, path=seg_filepath)
+        self._backend.schedule(F.write_image, data=np.fliplr(inst_seg_img_renumbered), path=inst_filepath)
+        self._backend.schedule(F.write_image, data=np.fliplr(sem_seg_img_renumbered), path=seg_filepath)
     
-        
-    
+    def _write_semantic_mapping_and_sonar_param(self, sub_dir: str):
+        self._backend.schedule(F.write_json, data=self.mapping_dict, path=os.path.join(sub_dir, "semantic_mapping.json"))
+        self._backend.schedule(F.write_json, data={"sonar_param":self.sonar_param, "reflectivity":self.reflectivity_mapping}, path=os.path.join(sub_dir, "sonar_param.json"))
+
     def _write_camera_param(self, data, sub_dir: str, annotator:str):
         
         camera_params = data[annotator]
@@ -806,27 +796,25 @@ class FLS_KittiWriter(Writer):
                 self._debug_data["raw_rgb"] = data["rgb"]
                 self._write_object_pose(data, sub_dir, "bounding_box_3d_fast", "camera_params")
                 self._write_debug_data(sub_dir)
+            
+            self._write_semantic_mapping_and_sonar_param(sub_dir)
         else:
-            pass
-            # for render_product in render_products:
-            #     render_product_name = render_product[3:]
-            #     sub_dir = os.path.join(render_product_name, data[render_product]["camera"].split("/")[-1])
-                # self._write_rgb(data, sub_dir, f"rgb-{render_product_name}")
-                # self._write_segmentation(
-                #     data,
-                #     sub_dir,
-                #     f"semantic_segmentation-{render_product_name}",
-                #     f"instance_segmentation_fast-{render_product_name}",
-                # )
-                # self._write_object_detection(
-                #     data,
-                #     sub_dir,
-                #     render_product,
-                #     f"bounding_box_2d_tight_fast-{render_product_name}",
-                #     f"bounding_box_2d_loose_fast-{render_product_name}",
-                # )
-                # self._write_distance_to_camera(data, sub_dir, f"distance_to_camera-{render_product_name}")
+            for render_product in render_products:
+                render_product_name = render_product[3:]
+                sub_dir = os.path.join(render_product_name, data[render_product]["camera"].split("/")[-1])
+                self._render_sonar(data, f"pointcloud-{render_product_name}", f"camera_params-{render_product_name}", f"semantic_segmentation-{render_product_name}")
+                self._write_sonar_image(sub_dir)
+                self._write_sonar_segmentation(data, sub_dir,  f"instance_segmentation_fast-{render_product_name}")
+                self._write_camera_param(data, sub_dir, f"camera_params-{render_product_name}")
 
+                if self._debug_mode:
+                    self._debug_data["raw_rgb"] = data[f"rgb-{render_product_name}"]
+                    self._write_object_pose(data, sub_dir, f"bounding_box_3d_fast-{render_product_name}", f"camera_params-{render_product_name}")
+                    self._write_debug_data(sub_dir)
+
+                self._write_semantic_mapping_and_sonar_param(sub_dir)
+        
+        
         self._frame_id += 1
 
     #########################################################

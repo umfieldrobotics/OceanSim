@@ -88,6 +88,7 @@ COU_LABELS = {
     "rov": 21,
     "knife": 22,
     "dive_weight": 23,
+    "ground": 24,
 }
 
 
@@ -520,6 +521,7 @@ def generate_kitti_labels(categories):
         if category not in kitti_labels:
             kitti_labels[category] = next_id
             next_id += 1
+    kitti_labels.update({"ground": next_id})
     return kitti_labels
 
 

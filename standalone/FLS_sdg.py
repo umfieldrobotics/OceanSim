@@ -10,8 +10,11 @@ config = {
             "--/log/outputStreamLevel=error"
             ]
     },
-    "total_captures" : 15,
-    "rt_subframes": 16,
+    "total_captures" : 10,
+    "rt_subframes": 4,
+    # NOTE: Because each sonar writer requires a camera with different FOV settings, the total camera generated in the scene is num_cameras * num_writers
+    # NOTE: For this reason, the total number of captures is num_cameras * total_captures * num_writers
+    "num_cameras": 1, 
     "camera_collider_radius": 0.2,
     "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor.usd",
     # "env_url": "D:/haoyu/Assets/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
@@ -43,6 +46,34 @@ config = {
                     "central_std": 0.001,
                     "hori_res": 5000
                     },
+                "reflectivity_mapping" : {
+                        "UNLABELLED": 0,
+                        "BACKGROUND": 0,
+                        "scissors": 7.0,
+                        "plastic_cup": 7.0,
+                        "metal_rod": 7.0,
+                        "fork": 7.0,
+                        "bottle": 7.0,
+                        "soda_can": 7.0,
+                        "case": 7.0,
+                        "plastic_bag": 7.0,
+                        "cup": 7.0,
+                        "goggles": 7.0,
+                        "flipper": 7.0,
+                        "loco": 7.0,
+                        "aqua": 7.0,
+                        "pipe": 7.0,
+                        "snorkel": 7.0,
+                        "spoon": 7.0,
+                        "lure": 7.0,
+                        "screwdriver": 7.0,
+                        "car": 7.0,
+                        "tripod": 7.0,
+                        "rov": 7.0,
+                        "knife": 7.0,
+                        "dive_weight": 7.0,
+                        "ground": 1.0,
+                },
                 "debug_mode": True,
             },
         }
@@ -187,20 +218,34 @@ def run_sdg(config: dict=config):
 
 
     writer_configs = config.get("writers", [{}])
-    num_cameras = len(writer_configs)
+    num_cameras = config.get("num_cameras", 0)
     cameras = []
     render_products = []
     writers = []
     camera_colliders = []
     camera_collider_radius = config.get("camera_collider_radius", 0)
     
-    if num_cameras > 0:
+    if writer_configs[0]:
         for i, writer_config in enumerate(writer_configs):
             sonar_param = writer_config.get("kwargs", {}).get("sonar_param", {})
-            cam_prim, resolution = create_sonar_compatible_camera(sonar_param, f"/Sonars/sonar_{i}")
+            tmp_rp_list = []
+            for k in range(num_cameras):
+                cam_prim, resolution = create_sonar_compatible_camera(sonar_param, f"/Sonars/sonar_{i}_{k}")
 
-            rp = rep.create.render_product(cam_prim.GetPath(), resolution, name=f"rp_sonar_{i}")
-            
+                rp = rep.create.render_product(cam_prim.GetPath(), resolution, name=f"rp_sonar_{i}_{k}")
+                tmp_rp_list.append(rp)
+                
+
+                if camera_collider_radius > 0:
+                    cam_collider = stage.DefinePrim(f"/Sonars/sonar_{i}_{k}/CollisionSphere_{i}_{k}", "Sphere")
+                    cam_collider.GetAttribute("radius").Set(camera_collider_radius)
+                    add_colliders(cam_collider)
+                    UsdGeom.Imageable(cam_collider).MakeInvisible()
+
+                cameras.append(cam_prim)
+                render_products.append(rp)
+                camera_colliders.append(cam_collider)
+
             writer_type = writer_config.get("type", None)
             writer = rep.writers.get(writer_type)
             writer_kwargs = writer_config.get("kwargs", {})
@@ -211,20 +256,10 @@ def run_sdg(config: dict=config):
                     writer_kwargs["output_dir"] = out_dir
             if writer:
                 writer.initialize(**writer_kwargs, mapping_dict=kitti_labels)
-                writer.attach(rp)
-
-            if camera_collider_radius > 0:
-                cam_collider = stage.DefinePrim(f"/Sonars/sonar_{i}/CollisionSphere_{i}", "Sphere")
-                cam_collider.GetAttribute("radius").Set(camera_collider_radius)
-                add_colliders(cam_collider)
-                UsdGeom.Imageable(cam_collider).MakeInvisible()
-
-            cameras.append(cam_prim)
-            render_products.append(rp)
+                writer.attach(tmp_rp_list)
             writers.append(writer)
-            camera_colliders.append(cam_collider)
 
-        print(f"[SDG] {num_cameras} sonars being added to the scene with colliders: {camera_collider_radius > 0}")
+        print(f"[SDG] {len(writers)} writers initialized with {num_cameras} cameras, colliders: {camera_collider_radius > 0}")
 
         
 

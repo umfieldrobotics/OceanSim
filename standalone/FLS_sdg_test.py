@@ -10,11 +10,8 @@ def plot_sonar_sdg(base, index=0):
     # File paths
     sonar_path = os.path.join(base, 'sonar_image', f'{index}.png')
     instance_seg_path = os.path.join(base, 'instance_segmentation', f'{index}.png')
-    semantic_seg_path = os.path.join(base, 'semantic_segmentation', f'{index}.png')
     debug_path = os.path.join(base, 'debug', f'{index}.png')
-    instance_rgb_path = os.path.join(base, 'instance_rgb', f'{index}.png')
     mapping_path = os.path.join(base, 'semantic_mapping.json')
-
     fig, axs = plt.subplots(2, 3, figsize=(18, 12))
     axs = np.atleast_2d(axs)
 
@@ -38,15 +35,62 @@ def plot_sonar_sdg(base, index=0):
         ax2.set_title('Debug Image (Not Found)', fontsize=14, fontweight='bold')
     ax2.axis('off')
 
-    # --- Instance RGB Image ---
+    # --- Max Intensity Color Strip at ax3 ---
     ax3 = axs[0, 2]
-    if os.path.exists(instance_rgb_path):
-        rgb_img = mpimg.imread(instance_rgb_path)
-        ax3.imshow(rgb_img)
-        ax3.set_title('Instance RGB', fontsize=14, fontweight='bold')
+    max_intensity_path = os.path.join(base, 'max_intensity', f'{index}.npy')
+    if os.path.exists(max_intensity_path):
+        max_intensity = np.load(max_intensity_path)
+        # Create a 2D image by repeating the 1D array vertically
+        color_strip = np.tile(max_intensity, (50, 1))  # 50 rows, adjust as needed
+        im = ax3.imshow(color_strip, aspect='auto', cmap='viridis')
+        ax3.set_title('Max Intensity Color Strip', fontsize=14, fontweight='bold')
+        plt.colorbar(im, ax=ax3, fraction=0.046, pad=0.04)
+        ax3.set_xlabel('Pixel Index')
+        ax3.set_ylabel('Repeated Rows')
     else:
-        ax3.set_title('Instance RGB (Not Found)', fontsize=14, fontweight='bold')
-    ax3.axis('off')
+        ax3.set_title('Max Intensity (Not Found)', fontsize=14, fontweight='bold')
+    ax3.axis('on')
+
+    # --- Sonar Parameters Table at ax3 ---
+    ax3 = axs[0, 2]
+    sonar_param_path = os.path.join(base, 'sonar_param.json')
+    if os.path.exists(sonar_param_path):
+        with open(sonar_param_path, 'r') as f:
+            sonar_param_json = json.load(f)
+        sonar_param = sonar_param_json.get('sonar_param', {})
+        table_data = [[str(k), str(v)] for k, v in sonar_param.items()]
+        col_labels = ['Parameter', 'Value']
+        n_rows = len(table_data)
+        # Alternating row colors
+        row_colors = [['#f2f2f2', 'white'][i % 2] for i in range(n_rows)]
+        cell_colours = [[row_colors[i], row_colors[i]] for i in range(n_rows)]
+        ax3.axis('off')
+        table = ax3.table(
+            cellText=table_data,
+            colLabels=col_labels,
+            cellColours=cell_colours,
+            loc='center',
+            cellLoc='center',
+            colLoc='center',
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(13)
+        table.scale(1.3, 1.3)
+        # Bold header row and center align
+        for (row, col), cell in table.get_celld().items():
+            cell.set_linewidth(0.7)
+            cell.set_edgecolor('gray')
+            cell.set_fontsize(13)
+            if row == 0:
+                cell.set_text_props(ha='center', va='center', weight='bold')
+            else:
+                cell.set_text_props(ha='center', va='center')
+            if row == 0 and col in [0, 1]:
+                cell.set_facecolor('#d9ead3')  # header color
+        table.auto_set_column_width([0, 1])
+        ax3.set_title('Sonar Parameters', fontsize=15, fontweight='bold', pad=12)
+    else:
+        ax3.set_title('Sonar Parameters (Not Found)', fontsize=14, fontweight='bold')
 
     # --- Instance Segmentation ---
     ax4 = axs[1, 0]
@@ -160,8 +204,30 @@ def plot_sonar_sdg(base, index=0):
         ax6.set_title('Semantic Mapping Table (Not Found)', fontsize=14, fontweight='bold')
         ax6.axis('off')
 
+    # --- Pointcloud Plot (Open3D) ---
+    pcl_path = os.path.join(base, 'pcl', f'{index}.npy')
+    try:
+        import open3d as o3d
+        import threading
+        o3d_available = True
+    except ImportError:
+        o3d_available = False
+    def show_o3d(pcl_path):
+        if os.path.exists(pcl_path):
+            pcl = np.load(pcl_path)
+            if pcl.shape[1] >= 3 and o3d_available:
+                pcd = o3d.geometry.PointCloud()
+                pcd.points = o3d.utility.Vector3dVector(pcl[:, :3])
+                origin = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0, 0, 0])
+                o3d.visualization.draw_geometries([pcd, origin], window_name='Open3D Pointcloud')
+    if os.path.exists(pcl_path) and o3d_available:
+        t = threading.Thread(target=show_o3d, args=(pcl_path,))
+        t.start()
+
     plt.tight_layout()
-    plt.show()
+    plt.show()  # blocking, keeps matplotlib window open
+    if os.path.exists(pcl_path) and o3d_available:
+        t.join()  # wait for Open3D window to close if still open
 
 if __name__ == "__main__":
     import argparse
