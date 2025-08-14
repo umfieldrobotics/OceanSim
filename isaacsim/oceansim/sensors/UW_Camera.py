@@ -11,7 +11,7 @@ import yaml
 import carb
 
 # Custom import
-from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
+from isaacsim.oceansim.utils.UWrenderer_utils import *
 
 
 class UW_Camera(Camera):
@@ -56,7 +56,6 @@ class UW_Camera(Camera):
         self._prim_path = prim_path
         self._res = resolution
         self._writing = False
-
         super().__init__(prim_path, name, frequency, dt, resolution, position, orientation, translation, render_product_path)
 
     def initialize(self, 
@@ -81,9 +80,13 @@ class UW_Camera(Camera):
     
         """
         self._id = 0
+        self._time = 0.0
+        self._timeSpeed = 2.0
+
         self._viewport = viewport
         self._device = wp.get_preferred_device()
         self._uw_image = wp.empty(shape=(self._resolution[1], self._resolution[0], 4), dtype=wp.uint8)
+        self._caustics = wp.empty(shape=(self._resolution[1], self._resolution[0], 4), dtype=wp.uint8)
         super().initialize(physics_sim_view)
 
         if UW_yaml_path is not None:
@@ -107,7 +110,11 @@ class UW_Camera(Camera):
         
         self._rgba_annot = rep.AnnotatorRegistry.get_annotator('LdrColor', device=str(self._device))
         self._depth_annot = rep.AnnotatorRegistry.get_annotator('distance_to_camera', device=str(self._device))
-
+        self._worldPosAnnot = rep.AnnotatorRegistry.get_annotator('PtWorldPos', device=str(self._device))
+        self._worldNormalAnnot = rep.AnnotatorRegistry.get_annotator('PtWorldNormal', device=str(self._device))
+        # TODO: use these two annotators to calculate the caustics
+        
+        self._worldPosAnnot.attach(self._render_product_path)
         self._rgba_annot.attach(self._render_product_path)
         self._depth_annot.attach(self._render_product_path)
 
@@ -127,12 +134,21 @@ class UW_Camera(Camera):
             - Saves image to disk if writing_dir was specified
         """
         if self._rgba_annot.get_data().size !=0:
+            worldPos = self._worldPosAnnot.get_data()
+            print(worldPos)
+            wp.launch(
+                kernel=water_caustics,
+                dim=self.get_resolution(),  # (x, y)
+                inputs=[self._caustics, self._resolution[0], self._resolution[1], self._time, self._timeSpeed],
+            )
+                        
             wp.launch(
                 dim=np.flip(self.get_resolution()),
-                kernel=UW_render,
+                kernel=UW_render_2,
                 inputs=[
                     self._rgba_annot.get_data(),
                     self._depth_annot.get_data(),
+                    self._caustics,
                     self._backscatter_value,
                     self._atten_coeff,
                     self._backscatter_coeff
@@ -149,6 +165,7 @@ class UW_Camera(Camera):
                 print(f'[{self._name}] [{self._id}] Rendered image saved to {self._writing_backend.output_dir}')
 
             self._id += 1
+            self._time += self.get_dt()
 
     def make_viewport(self):
         """Create a viewport window for real-time visualization.
