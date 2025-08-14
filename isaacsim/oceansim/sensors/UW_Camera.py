@@ -2,7 +2,7 @@
 import omni.replicator.core as rep
 from omni.replicator.core.scripts.functional import write_image
 import omni.ui as ui
-
+import json
 # Isaac sim import
 from isaacsim.sensors.camera import Camera
 import numpy as np
@@ -110,13 +110,13 @@ class UW_Camera(Camera):
         
         self._rgba_annot = rep.AnnotatorRegistry.get_annotator('LdrColor', device=str(self._device))
         self._depth_annot = rep.AnnotatorRegistry.get_annotator('distance_to_camera', device=str(self._device))
-        self._worldPosAnnot = rep.AnnotatorRegistry.get_annotator('PtWorldPos', device=str(self._device))
-        self._worldNormalAnnot = rep.AnnotatorRegistry.get_annotator('PtWorldNormal', device=str(self._device))
-        # TODO: use these two annotators to calculate the caustics
+        self._normalAnnot = rep.AnnotatorRegistry.get_annotator('normals', device=str(self._device))
+        self._cameraParamAnnot = rep.AnnotatorRegistry.get_annotator("CameraParams")
         
-        self._worldPosAnnot.attach(self._render_product_path)
+        self._normalAnnot.attach(self._render_product_path)
         self._rgba_annot.attach(self._render_product_path)
         self._depth_annot.attach(self._render_product_path)
+        self._cameraParamAnnot.attach(self._render_product_path)
 
         if self._viewport:
             self.make_viewport()
@@ -126,6 +126,7 @@ class UW_Camera(Camera):
             self._writing_backend = rep.BackendDispatch({"paths": {"out_dir": writing_dir}})
         
         print(f'[{self._name}] Initialized successfully. Data writing: {self._writing}')
+        self._world_points = wp.empty(shape=(self._resolution[1], self._resolution[0], 3), dtype=wp.float32)
     
     def render(self):
         """Process and display a single frame with underwater effects.
@@ -134,21 +135,73 @@ class UW_Camera(Camera):
             - Saves image to disk if writing_dir was specified
         """
         if self._rgba_annot.get_data().size !=0:
-            worldPos = self._worldPosAnnot.get_data()
-            print(worldPos)
+
+
+
             wp.launch(
                 kernel=water_caustics,
                 dim=self.get_resolution(),  # (x, y)
                 inputs=[self._caustics, self._resolution[0], self._resolution[1], self._time, self._timeSpeed],
             )
-                        
+
+
+            # Launch depth to world kernel once (this doesn't change)
             wp.launch(
-                dim=np.flip(self.get_resolution()),
-                kernel=UW_render_2,
+                kernel=depth_to_world_pos,
+                dim=self.get_resolution(),  # Launch dimensions (width, height)
+                inputs=[
+                    self._depth_annot.get_data(),
+                    wp.array(self._cameraParamAnnot.get_data()["cameraViewTransform"].reshape(4, 4),dtype=wp.float32),
+                    np.deg2rad(60),
+                    self.get_aspect_ratio(),
+                ],
+                outputs=[self._world_points],
+                device=str(self._device)
+            )
+            wp.launch(
+                kernel=blend_caustics,
+                dim=self.get_resolution(),
                 inputs=[
                     self._rgba_annot.get_data(),
-                    self._depth_annot.get_data(),
+                    self._world_points,
+                    self._normalAnnot.get_data(),
                     self._caustics,
+                    wp.vec3f(0.0, 0.0, 1.0),
+                    1.0,       # blend_weight
+                    1,       # uv_scale_x (horizontal scaling)
+                    1.5,       # uv_scale_y (vertical scaling)
+                    0.0,       # depth_min
+                    10000.0,   # depth_max
+                    self._resolution[0],         # tex_w
+                    self._resolution[1],         # tex_h
+                ],
+                outputs=[self._uw_image],
+                device=str(self._device)
+            )
+            # wp.launch(
+            #     kernel=blend_caustics_with_geometry,
+            #     dim=self.get_resolution(),
+            #     inputs=[
+            #         self._rgba_annot.get_data(),
+            #         self._depth_annot.get_data(),
+            #         self._normalAnnot.get_data(),
+            #         self._caustics,
+            #         wp.vec3f(0.0, 0.0, 1.0),
+            #         0.3,
+            #         0.0,
+            #         10000.0,
+            #     ],
+            #     outputs=[
+            #         self._uw_image
+            #     ]
+            # )  
+            wp.launch(
+                dim=self.get_resolution(),
+                kernel=UW_render_2,
+                inputs=[
+                    self._uw_image,
+                    self._depth_annot.get_data(),
+                    # self._caustics,
                     self._backscatter_value,
                     self._atten_coeff,
                     self._backscatter_coeff

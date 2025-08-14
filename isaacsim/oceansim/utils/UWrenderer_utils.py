@@ -37,23 +37,23 @@ def UW_render(raw_image: wp.array(ndim=3, dtype=wp.uint8),
 @wp.kernel
 def UW_render_2(raw_image: wp.array(ndim=3, dtype=wp.uint8),
              depth_image: wp.array(ndim=2, dtype=wp.float32),
-             caustics: wp.array(ndim=3, dtype=wp.uint8),
+            #  caustics: wp.array(ndim=3, dtype=wp.uint8),
              backscatter_value: wp.vec3,
              atten_coeff: wp.vec3,
              backscatter_coeff: wp.vec3,
              uw_image: wp.array(ndim=3, dtype=wp.uint8)):
     i,j = wp.tid()
-    raw_RGB = wp.vec3(wp.float32(raw_image[i,j,0]), wp.float32(raw_image[i,j,1]), wp.float32(raw_image[i,j,2]), dtype=wp.float32)
-    caustics_RGB = wp.vec3(wp.float32(caustics[i,j,0]), wp.float32(caustics[i,j,1]), wp.float32(caustics[i,j,2]), dtype=wp.float32)
-    raw_RGB = raw_RGB + 0.7 * caustics_RGB
-    depth = depth_image[i,j]
+    raw_RGB = wp.vec3(wp.float32(raw_image[j,i,0]), wp.float32(raw_image[j,i,1]), wp.float32(raw_image[j,i,2]), dtype=wp.float32)
+    # caustics_RGB = wp.vec3(wp.float32(caustics[j,i,0]), wp.float32(caustics[j,i,1]), wp.float32(caustics[j,i,2]), dtype=wp.float32)
+    # raw_RGB = raw_RGB + 0.7 * caustics_RGB
+    depth = depth_image[j,i]
     exp_atten = vec3_exp(- depth * atten_coeff)
     exp_back = vec3_exp(- depth * backscatter_coeff)
     UW_RGB = vec3_mul(raw_RGB, exp_atten) + vec3_mul(backscatter_value * wp.float32(255), (wp.vec3f(1.0,1.0,1.0) - exp_back) )
-    uw_image[i,j,0] = wp.uint8(wp.clamp(UW_RGB[0], wp.float32(0), wp.float32(255)))
-    uw_image[i,j,1] = wp.uint8(wp.clamp(UW_RGB[1], wp.float32(0), wp.float32(255)))
-    uw_image[i,j,2] = wp.uint8(wp.clamp(UW_RGB[2], wp.float32(0), wp.float32(255)))
-    uw_image[i,j,3] = raw_image[i,j,3]
+    uw_image[j,i,0] = wp.uint8(wp.clamp(UW_RGB[0], wp.float32(0), wp.float32(255)))
+    uw_image[j,i,1] = wp.uint8(wp.clamp(UW_RGB[1], wp.float32(0), wp.float32(255)))
+    uw_image[j,i,2] = wp.uint8(wp.clamp(UW_RGB[2], wp.float32(0), wp.float32(255)))
+    uw_image[j,i,3] = raw_image[j,i,3]
 
 @wp.func
 def fract(x: float):
@@ -130,6 +130,159 @@ def water_caustics(
     out_img[y, x, 1] = col
     out_img[y, x, 2] = col
     out_img[y, x, 3] = wp.uint8(255)
+
+@wp.kernel
+def blend_caustics_PyTX(
+    rgb_img: wp.array(ndim=3, dtype=wp.uint8),       # (H,W,3)
+    depth_img: wp.array(ndim=2, dtype=wp.float32),        # (H,W)
+    normals_img: wp.array(ndim=3, dtype=wp.float32),   # (H,W,3)
+    caustics_img: wp.array(ndim=3, dtype=wp.uint8),     # (H,W) grayscale
+    sun_dir: wp.vec3f,                         # normalized
+    blend_weight: float,
+    min_depth: float,
+    max_depth: float,
+    out_img: wp.array(ndim=3, dtype=wp.uint8)        # (H,W,3)
+):
+    x, y = wp.tid()  # 2D thread indices
+
+    rgb = wp.vec3(wp.float32(rgb_img[y, x, 0]), wp.float32(rgb_img[y, x, 1]), wp.float32(rgb_img[y, x, 2]), dtype=wp.float32)
+    depth = depth_img[y, x]
+    nml = wp.vec3(wp.float32(normals_img[y, x, 0]), wp.float32(normals_img[y, x, 1]), wp.float32(normals_img[y, x, 2]), dtype=wp.float32)
+    caustic_val = wp.vec3(wp.float32(caustics_img[y, x, 0]), wp.float32(caustics_img[y, x, 1]), wp.float32(caustics_img[y, x, 2]), dtype=wp.float32)
+
+    # Lambert term
+    dot_normals = wp.max(wp.dot(nml, sun_dir), 0.0)
+
+    # Depth weighting
+    norm_depth = (depth - min_depth) / (max_depth - min_depth + 1e-8)
+    depth_weight = 1.0 - norm_depth
+
+    # Final blend factor
+    blend_factor = blend_weight * dot_normals * depth_weight
+
+    blended = rgb * (1.0 - blend_factor) + caustic_val * blend_factor
+    out_img[y, x, 0] = wp.uint8(wp.clamp(blended[0], 0.0, 255.0))
+    out_img[y, x, 1] = wp.uint8(wp.clamp(blended[1], 0.0, 255.0))
+    out_img[y, x, 2] = wp.uint8(wp.clamp(blended[2], 0.0, 255.0))
+    out_img[y, x, 3] = wp.uint8(255)
+
+@wp.kernel
+def blend_caustics(
+    rgb_aov: wp.array(ndim=3, dtype=wp.uint8),       # (H, W, 3 or 4) base color RGBA
+    world_pos_aov: wp.array(ndim=3, dtype=wp.float32), # (H, W, 3) world positions
+    world_nml_aov: wp.array(ndim=3, dtype=wp.float32), # (H, W, 3) world normals
+    caustics_aov: wp.array(ndim=3, dtype=wp.uint8),  # (H, W, 3 or 4) caustics RGBA
+    sun_dir: wp.vec3f,                               # light dir (world space)
+    blend_weight: float,                             # base blend weight [0..1]
+    uv_scale_x: float,                               # tiling scale for caustics U direction
+    uv_scale_y: float,                               # tiling scale for caustics V direction
+    depth_min: float,                                # min depth for normalization
+    depth_max: float,                                # max depth for normalization
+    tex_w: int,                                      # caustics width
+    tex_h: int,                                      # caustics height
+    out_aov: wp.array(ndim=3, dtype=wp.uint8)        # (H, W, 4) output RGBA
+):
+    x, y = wp.tid()  # 2D launch index
+    
+
+
+    # Read base color (handle both RGB and RGBA)
+    base_col = wp.vec3(wp.float32(rgb_aov[y, x, 0]), wp.float32(rgb_aov[y, x, 1]), wp.float32(rgb_aov[y, x, 2]), dtype=wp.float32)
+
+    # Read world pos & normal
+    pos = wp.vec3(world_pos_aov[y, x, 0], world_pos_aov[y, x, 1], world_pos_aov[y, x, 2])
+    nml = wp.normalize(wp.vec3(world_nml_aov[y, x, 0], world_nml_aov[y, x, 1], world_nml_aov[y, x, 2]))
+
+    # Lambert shading factor (expects sun_dir to point from surface toward light)
+    sun = wp.normalize(sun_dir)
+    ndotl = wp.max(wp.dot(nml, sun), 0.0)
+
+    # Depth-based weight
+    denom = depth_max - depth_min + 1e-8
+    norm_depth = wp.clamp((pos.z - depth_min) / denom, 0.0, 1.0)
+    depth_weight = 1.0 - norm_depth
+
+    # Blend factor
+    blend_factor = wp.clamp(blend_weight * ndotl * depth_weight, 0.0, 1.0)
+
+    # World-space planar UV projection (XZ plane) with separate scaling
+    u = pos.x * uv_scale_x
+    v = pos.z * uv_scale_y
+    u = u - wp.floor(u)
+    v = v - wp.floor(v)
+
+    # Map to texture coordinates
+    tx = wp.int32(wp.clamp(wp.floor(u * wp.float32(tex_w - 1)), 0.0, wp.float32(tex_w - 1)))
+    ty = wp.int32(wp.clamp(wp.floor(v * wp.float32(tex_h - 1)), 0.0, wp.float32(tex_h - 1)))
+
+    # Sample caustics texture (explicit channels)
+    tex_r = wp.float32(caustics_aov[ty, tx, 0])
+    tex_g = wp.float32(caustics_aov[ty, tx, 1])
+    tex_b = wp.float32(caustics_aov[ty, tx, 2])
+    tex_a = wp.float32(caustics_aov[ty, tx, 3]) / 255.0
+    tex_rgb = wp.vec3(tex_r, tex_g, tex_b, dtype=wp.float32)
+
+    # Scale caustics intensity by blend factor
+    caustics_intensity = wp.clamp(tex_a * blend_factor, 0.0, 1.0)
+    
+    # Add caustics to base color (additive blending)
+    out_rgb = base_col + tex_rgb * caustics_intensity
+
+    out_aov[y, x, 0] = wp.uint8(wp.clamp(out_rgb[0], 0.0, 255.0))
+    out_aov[y, x, 1] = wp.uint8(wp.clamp(out_rgb[1], 0.0, 255.0))
+    out_aov[y, x, 2] = wp.uint8(wp.clamp(out_rgb[2], 0.0, 255.0))
+    out_aov[y, x, 3] = wp.uint8(255)
+
+
+@wp.kernel
+def depth_to_world_pos(
+    depth: wp.array(ndim=2, dtype=wp.float32),           # (H, W) depth values
+    view_transform: wp.array(ndim=2, dtype=wp.float32),  # (4, 4) view transform matrix
+    fov_y: float,                                        # Field of view in Y direction (radians)
+    aspect_ratio: float,                                 # Width/Height ratio
+    world_points: wp.array(ndim=3, dtype=wp.float32)     # (H, W, 3) output world positions
+):
+    x, y = wp.tid()  # 2D launch index (x=column, y=row)
+    
+    h = depth.shape[0]
+    w = depth.shape[1]
+    
+    # Read depth value
+    depth_val = depth[y, x]
+    
+    # Skip invalid depth
+    if depth_val <= 0.0 or not wp.isfinite(depth_val):
+        world_points[y, x, 0] = 0.0
+        world_points[y, x, 1] = 0.0
+        world_points[y, x, 2] = 0.0
+        return
+    
+    # Convert pixel coordinates to normalized device coordinates [-1, 1]
+    u_ndc = (wp.float32(x) - wp.float32(w) * 0.5) / (wp.float32(w) * 0.5)
+    v_ndc = (wp.float32(y) - wp.float32(h) * 0.5) / (wp.float32(h) * 0.5)
+    
+    # Convert to camera space using perspective projection
+    tan_half_fov = wp.tan(fov_y * 0.5)
+    
+    x_cam = u_ndc * depth_val * tan_half_fov * aspect_ratio
+    y_cam = -v_ndc * depth_val * tan_half_fov  # Flip Y for upward +Y
+    z_cam = -depth_val  # Forward is -Z
+    
+    # Create homogeneous camera space point
+    cam_point = wp.vec4(x_cam, y_cam, z_cam, 1.0)
+    
+    # Transform to world space using view transform matrix
+    # cam_point is a column vector, so we multiply: world_transform * cam_point
+    world_x = view_transform[0, 0] * cam_point[0] + view_transform[0, 1] * cam_point[1] + view_transform[0, 2] * cam_point[2] + view_transform[0, 3] * cam_point[3]
+    world_y = view_transform[1, 0] * cam_point[0] + view_transform[1, 1] * cam_point[1] + view_transform[1, 2] * cam_point[2] + view_transform[1, 3] * cam_point[3]
+    world_z = view_transform[2, 0] * cam_point[0] + view_transform[2, 1] * cam_point[1] + view_transform[2, 2] * cam_point[2] + view_transform[2, 3] * cam_point[3]
+    
+    # Store world position
+    world_points[y, x, 0] = world_x
+    world_points[y, x, 1] = world_y
+    world_points[y, x, 2] = world_z
+
+
 
 
 
