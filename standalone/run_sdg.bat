@@ -2,13 +2,14 @@
 REM Batch script to run UWCam_sdg.py on all YAML configs in a specified config directory
 
 REM Get the directory of this batch file
-set "BASEDIR=C:\Users\mahaoyu\Code\isaacsim-4.5\"
+@REM set "BASEDIR=C:\Users\mahaoyu\Code\isaacsim-4.5\"
+set "BASEDIR=C:\Users\mahaoyu\Code\isaacsim\_build\windows-x86_64\release\"
 
 set "SCRIPT=%BASEDIR%extsUser\isaacsim.oceansim\standalone\UWCam_sdg.py"
 
 REM Use first argument as config directory, or default if not provided
 if "%~1"=="" (
-    set "CONFIG_DIR=%BASEDIR%extsUser\isaacsim.oceansim\standalone\UWCam_configs\objects_based"
+    set "CONFIG_DIR=%BASEDIR%extsUser\isaacsim.oceansim\standalone\UWCam_configs\empty"
 ) else (
     REM If argument is an absolute path (starts with drive letter or \\), use as is; otherwise, make it relative to BASEDIR
     echo %~1 | findstr /B /I "[A-Z]:\\ \\" >nul

@@ -2,9 +2,12 @@
 config = {
     "launch_config": {
         "renderer": "RealTimePathTracing",
-        "headless": True,
+        "headless": False,
         "extra_args": [
-            "--/persistent/renderer/rtpt/enabled=True",              # This enables RTX realtime preview renderer
+            # "--/persistent/renderer/rtpt/enabled=True",             # This enables RTX 2.0 for Isaac 4.5
+            "--/persistent/rtx/modes/rt2/enabled=True",              # This enables RTX 2.0 for Isaac 5.0
+            "--/persistent/rtx/modes/pt/enabled=True",              # This enables Path Tracing for Isaac 5.0
+            "--/persistent/rtx/modes/rt/enabled=True",              # This enables Ray Tracing for Isaac 5.0
             "--/log/level=error",                                    # These will shut isaac sim the fuck up 
             "--/log/fileLogLevel=error", 
             "--/log/outputStreamLevel=error"
