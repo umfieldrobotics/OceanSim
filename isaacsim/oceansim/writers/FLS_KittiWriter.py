@@ -224,10 +224,10 @@ class FLS_KittiWriter(Writer):
                       cameraParams_annot: str, 
                       semantic_seg_annot: str):
 
-        pcl = data[pointcloud_annot]["data"][0]  # shape :(1,N,3) <class 'warp.types.array'>
-        normals = data[pointcloud_annot]['info']['pointNormals'][0] # shape :(1,N,4) <class 'warp.types.array'>
-        semantics = data[pointcloud_annot]['info']['pointSemantic'][0] # shape: (1, N) <class 'warp.types.array'>
-        instances = data[pointcloud_annot]['info']['pointInstance'][0] # shape: (1, N) <class 'warp.types.array'>
+        pcl = data[pointcloud_annot]["data"]  # shape :(1,N,3) <class 'warp.types.array'>
+        normals = data[pointcloud_annot]['info']['pointNormals'] # shape :(1,N,4) <class 'warp.types.array'>
+        semantics = data[pointcloud_annot]['info']['pointSemantic'] # shape: (1, N) <class 'warp.types.array'>
+        instances = data[pointcloud_annot]['info']['pointInstance'] # shape: (1, N) <class 'warp.types.array'>
         viewTransform = data[cameraParams_annot]['cameraViewTransform'].reshape(4,4).T # 4 by 4 np.ndarray extrinsic matrix
         idToLabels = data[semantic_seg_annot]["info"]["idToLabels"] # dict {id (str): {class(str): label(str)}}
 
