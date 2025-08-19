@@ -135,8 +135,13 @@ class UW_Camera(Camera):
             - Saves image to disk if writing_dir was specified
         """
         if self._rgba_annot.get_data().size !=0:
-
-
+            
+            # base_dir = "/home/haoyu/Desktop/viz"
+            # np.save(f"{base_dir}/cameraViewTransform.npy", self._cameraParamAnnot.get_data()["cameraViewTransform"].reshape(4, 4))
+            # np.save(f"{base_dir}/cameraProjection.npy", self._cameraParamAnnot.get_data()["cameraProjection"].reshape(4, 4))
+            # np.save(f"{base_dir}/depth.npy", self._depth_annot.get_data().numpy())
+            # np.save(f"{base_dir}/normals.npy", self._normalAnnot.get_data().numpy())
+            # np.save(f"{base_dir}/rgba.npy", self._rgba_annot.get_data().numpy())
 
             wp.launch(
                 kernel=water_caustics,
@@ -151,9 +156,10 @@ class UW_Camera(Camera):
                 dim=self.get_resolution(),  # Launch dimensions (width, height)
                 inputs=[
                     self._depth_annot.get_data(),
-                    wp.array(self._cameraParamAnnot.get_data()["cameraViewTransform"].reshape(4, 4),dtype=wp.float32),
-                    np.deg2rad(60),
-                    self.get_aspect_ratio(),
+                    wp.mat44(self._cameraParamAnnot.get_data()["cameraProjection"].reshape(4, 4)),
+                    wp.mat44(self._cameraParamAnnot.get_data()["cameraViewTransform"].reshape(4, 4)),
+                    self.get_resolution()[0],
+                    self.get_resolution()[1]
                 ],
                 outputs=[self._world_points],
                 device=str(self._device)
@@ -168,8 +174,8 @@ class UW_Camera(Camera):
                     self._caustics,
                     wp.vec3f(0.0, 0.0, 1.0),
                     1.0,       # blend_weight
-                    1,       # uv_scale_x (horizontal scaling)
-                    1.5,       # uv_scale_y (vertical scaling)
+                    1.0,       # uv_scale_x (horizontal scaling)
+                    1.0,       # uv_scale_y (vertical scaling)
                     0.0,       # depth_min
                     10000.0,   # depth_max
                     self._resolution[0],         # tex_w
@@ -179,7 +185,7 @@ class UW_Camera(Camera):
                 device=str(self._device)
             )
             # wp.launch(
-            #     kernel=blend_caustics_with_geometry,
+            #     kernel=blend_caustics_PyTX,
             #     dim=self.get_resolution(),
             #     inputs=[
             #         self._rgba_annot.get_data(),
