@@ -135,8 +135,9 @@ class UW_Camera(Camera):
             - Saves image to disk if writing_dir was specified
         """
         if self._rgba_annot.get_data().size !=0:
-
-
+            
+            # Extract camera position from view transform matrix
+            # For view transform: camera_pos = -view_matrix[3,0:3] (last row, first 3 elements)
 
             wp.launch(
                 kernel=water_caustics,
@@ -201,7 +202,6 @@ class UW_Camera(Camera):
                 inputs=[
                     self._uw_image,
                     self._depth_annot.get_data(),
-                    # self._caustics,
                     self._backscatter_value,
                     self._atten_coeff,
                     self._backscatter_coeff

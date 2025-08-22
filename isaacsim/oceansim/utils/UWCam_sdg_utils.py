@@ -108,7 +108,7 @@ import omni.replicator.core as rep
 import omni.timeline
 import omni.usd
 import carb.settings
-from isaacsim.core.utils.semantics import add_update_semantics, remove_all_semantics
+from isaacsim.core.utils.semantics import  remove_labels, add_labels, upgrade_prim_semantics_to_labels
 from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.storage.native import get_assets_root_path
 from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics
@@ -169,8 +169,11 @@ def add_COU_objects(
             if physics:
                 add_colliders(prim)
                 add_rigid_body_dynamics(prim, disable_gravity=True)
-            remove_all_semantics(prim, recursive=True)
-            add_update_semantics(prim, category)
+
+            remove_labels(prim)  # Remove all
+            upgrade_prim_semantics_to_labels(prim)
+            add_labels(prim, [category.lower()])
+
             assets.append(prim)
     
     if override_semantic_mapping is not None:
@@ -178,6 +181,56 @@ def add_COU_objects(
     else:
         return assets, generate_kitti_labels(categories)
     
+def assign_scene_semantics_based_on_ref(override_semantic_mapping: dict[str, int] | None = None) -> dict[str, int]:
+    """
+    Assigns semantics to the scene based on the referenced asset path.
+    """
+    semantic_mapping = {
+        "UNLABELLED": 0,
+        "BACKGROUND": 0,
+    }
+    i = 1
+    stage = omni.usd.get_context().get_stage()
+
+    # This predicate is used to find the prims that have references and are within the static mesh or foliage type folder
+    def predicate(prim):
+        primName = str(prim.GetName())
+        return (primName.startswith("SM") or primName.startswith("FoliageType")) and prim.HasAuthoredReferences()
+
+    # Traverse through all the prims in the stage and query the referenced asset path to get the object type
+    for prim in stage.Traverse():            
+        if predicate(prim):
+            ref_and_layers = omni.usd.get_composed_references_from_prim(prim, False)
+            ref, layer = ref_and_layers[0]
+            asset_path = ref.assetPath
+            filename = asset_path.split("/")[-1]
+            if filename.startswith('SM_'):
+                # Remove 'SM_' prefix and file extension
+                object_part = filename[3:].replace('.usd', '')
+                
+                # Split by underscore and remove the number at the end
+                parts = object_part.split('_')
+                
+                # Remove the last part if it's a number
+                if parts[-1].isdigit():
+                    parts = parts[:-1]
+                
+                # Join the remaining parts to get the full object type
+                object_type = '_'.join(parts).lower()
+                # This upgrade the old semantic schema to the new one
+                upgrade_prim_semantics_to_labels(prim)
+                # This adds the semantics using the newest schema
+                add_labels(prim, [object_type])
+                # This adds the semantics to the semantic mapping
+                if object_type not in semantic_mapping:
+                    semantic_mapping[object_type] = i
+                    i += 1
+    if override_semantic_mapping is not None:
+        return override_semantic_mapping
+    else:
+        return semantic_mapping
+
+
 
 # needed for loading textures correctly
 def set_transform_attributes(

@@ -234,55 +234,44 @@ def blend_caustics(
     out_aov[y, x, 3] = wp.uint8(255)
 
 
+@wp.func
+def intrinsics_from_proj(P:wp.mat44f, width:int, height:int):
+    fx = P[0,0] * wp.float32(width) / 2.0
+    fy = P[1,1] * wp.float32(height) / 2.0
+    cx = (1.0 - P[0,2]) * wp.float32(width) / 2.0
+    cy = (1.0 + P[1,2]) * wp.float32(height) / 2.0
+    return fx, fy, cx, cy
+
+
 @wp.kernel
 def depth_to_world_pos(
-    depth: wp.array(ndim=2, dtype=wp.float32),           # (H, W) depth values
-    view_transform: wp.array(ndim=2, dtype=wp.float32),  # (4, 4) view transform matrix
-    fov_y: float,                                        # Field of view in Y direction (radians)
-    aspect_ratio: float,                                 # Width/Height ratio
-    world_points: wp.array(ndim=3, dtype=wp.float32)     # (H, W, 3) output world positions
+    depth: wp.array(ndim=2, dtype=wp.float32),           # (H, W) depth buffer in world units
+    proj_matrix: wp.mat44,     # (4, 4) projection matrix
+    view_matrix: wp.mat44,     # (4, 4) camera->world matrix
+    world_points: wp.array(ndim=3, dtype=wp.float32),
+    H: int,
+    W: int
 ):
-    x, y = wp.tid()  # 2D launch index (x=column, y=row)
-    
-    h = depth.shape[0]
-    w = depth.shape[1]
-    
-    # Read depth value
-    depth_val = depth[y, x]
-    
-    # Skip invalid depth
-    if depth_val <= 0.0 or not wp.isfinite(depth_val):
-        world_points[y, x, 0] = 0.0
-        world_points[y, x, 1] = 0.0
-        world_points[y, x, 2] = 0.0
-        return
-    
-    # Convert pixel coordinates to normalized device coordinates [-1, 1]
-    u_ndc = (wp.float32(x) - wp.float32(w) * 0.5) / (wp.float32(w) * 0.5)
-    v_ndc = (wp.float32(y) - wp.float32(h) * 0.5) / (wp.float32(h) * 0.5)
-    
-    # Convert to camera space using perspective projection
-    tan_half_fov = wp.tan(fov_y * 0.5)
-    
-    x_cam = u_ndc * depth_val * tan_half_fov * aspect_ratio
-    y_cam = -v_ndc * depth_val * tan_half_fov  # Flip Y for upward +Y
-    z_cam = -depth_val  # Forward is -Z
-    
-    # Create homogeneous camera space point
-    cam_point = wp.vec4(x_cam, y_cam, z_cam, 1.0)
-    
-    # Transform to world space using view transform matrix
-    # cam_point is a column vector, so we multiply: world_transform * cam_point
-    world_x = view_transform[0, 0] * cam_point[0] + view_transform[0, 1] * cam_point[1] + view_transform[0, 2] * cam_point[2] + view_transform[0, 3] * cam_point[3]
-    world_y = view_transform[1, 0] * cam_point[0] + view_transform[1, 1] * cam_point[1] + view_transform[1, 2] * cam_point[2] + view_transform[1, 3] * cam_point[3]
-    world_z = view_transform[2, 0] * cam_point[0] + view_transform[2, 1] * cam_point[1] + view_transform[2, 2] * cam_point[2] + view_transform[2, 3] * cam_point[3]
-    
-    # Store world position
-    world_points[y, x, 0] = world_x
-    world_points[y, x, 1] = world_y
-    world_points[y, x, 2] = world_z
-
-
+    x, y = wp.tid()
+    d = depth[y, x]
+    # Check validity using mathematical operations (avoid branching)
+    is_valid = wp.float32(d > 0.0 and wp.isfinite(d))
+    # Since depth is in world units, we can use it directly to reconstruct world position
+    # Extract camera parameters from projection matrix
+    fx, fy, cx, cy = intrinsics_from_proj(proj_matrix, W, H)
+    # Pixel → ray direction in camera space
+    cam_x = (wp.float32(x) - cx) / fx
+    cam_y = -(wp.float32(y) - cy) / fy  # flip Y if needed
+    cam_z = -1.0  # forward in OpenGL convention
+    ray_vec = wp.normalize(wp.vec3(cam_x, cam_y, cam_z))
+    # Scale ray by depth (world units)
+    cam_pos = ray_vec * d
+    # Camera → world
+    world_pos_h = view_matrix @ wp.vec4(cam_pos[0], cam_pos[1], cam_pos[2], 1.0)
+    # Store world-space position (zero out if invalid depth)
+    world_points[y, x, 0] = world_pos_h[0] * is_valid
+    world_points[y, x, 1] = world_pos_h[1] * is_valid
+    world_points[y, x, 2] = world_pos_h[2] * is_valid
 
 
 
