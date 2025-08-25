@@ -8,21 +8,21 @@ config = {
             "--/persistent/rtx/modes/rt2/enabled=True",              # This enables RTX 2.0 for Isaac 5.0
             "--/persistent/rtx/modes/pt/enabled=True",              # This enables Path Tracing for Isaac 5.0
             "--/persistent/rtx/modes/rt/enabled=True",              # This enables Ray Tracing for Isaac 5.0
-            "--/log/level=error",                                    # These will shut isaac sim the fuck up 
-            "--/log/fileLogLevel=error", 
-            "--/log/outputStreamLevel=error"
+            # "--/log/level=error",                                    # These will shut isaac sim the fuck up 
+            # "--/log/fileLogLevel=error", 
+            # "--/log/outputStreamLevel=error"
             ]
     },
     "total_captures" : 15,
-    "camera_collider_radius": 0.2,
+    "camera_collider_radius": 1,
     # "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
     # "env_url": "C:/Users/mahaoyu/Desktop/pebble_floor/padded_pebble_floor_water.usd",
-    "env_url": "/frog-drive/projects/OceanSim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
-    "objects_url": "/frog-drive/projects/OceanSim/sim2real/ObjectAssets_simready",
+    "env_url": "C:/Users/mahaoyu/Desktop/Collected_OceanRealm/OceanRealm.usd",
+    # "objects_url": "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready",
     # "objects_url": "C:/Users/mahaoyu/Desktop/ObjectAssets_simready",
     "rt_subframes": 16,
     "resolution": [1024, 1024],
-    "masked_objects_ratio": 0.0,
+    "masked_objects_ratio": 0.92,
     "camera_properties_kwargs": {
         # "focalLength": 24.0,
         # "focusDistance": 400,
@@ -34,23 +34,20 @@ config = {
             # Type of the writer to use (e.g. PoseWriter, BasicWriter, etc.) and the kwargs to pass to the writer init
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                # "output_dir": "C:/Users/mahaoyu/Desktop/SDG/",
-                "output_dir": "/home/nsieh/Desktop/SDG/",
+                "output_dir": "C:/Users/mahaoyu/Desktop/SDG/",
                 # "output_dir": "/home/haoyu/Desktop/viz/",
                 "colorize_instance_segmentation": False,
-                "veiling_visibility_threshold": 12,
+                "veiling_visibility_threshold": 0,
                 "use_tight_bbox": True,
                 # "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
                 "debug_mode": True,
-                "enable_distance_filter": True,   # Enable distance filtering
-                "max_distance": 2.0,             # Set distance threshold
             },
         }
     ],
     "obj_workspace": [-1.5, -2.3, 1.15, 1.5, 3.7, 1.65],
-    "cam_workspace" : [-1.5, -2.3, 1.25, 1.5, 3.7, 1.5],
+    "cam_workspace" : [-40, -40, 5, 20, 20, 17],
     "disable_render_products": False,
-    "debug_mode": False,
+    "debug_mode": True,
     "path_tracing": False,
 }
 
@@ -98,7 +95,6 @@ simulation_app = SimulationApp(launch_config=launch_config)
 
 # load up OceanSim
 import isaacsim.core.utils.extensions as extensions_utils
-
 value = extensions_utils.enable_extension(extension_name='isaacsim.oceansim')
 if value:
     print("[SDG] OceanSim loaded successfully")
@@ -223,9 +219,18 @@ def run_sdg(config: dict=config):
     
         print(f"[SDG] Created camera colliders with radius {camera_collider_radius}")
     
-    # Add COU objects
-    objects, kitti_labels = add_COU_objects(objects_folder_path=objects_url, physics=True)
-    print(f"[SDG] {len(objects)} numbers of COU objects being added to the scene")
+    # Scene based SDG doesn't need to add objects 
+    if objects_url:
+        objects, kitti_labels = add_COU_objects(objects_folder_path=objects_url, physics=True)
+        print(f"[SDG] {len(objects)} numbers of COU objects being added to the scene")
+    else:
+        # Assign the semantics to the scene based on the referenced asset path
+        objects = []
+        kitti_labels = assign_scene_semantics_based_on_ref()
+        # For now apply triangle mesh as collider to the scene 
+        # (NOTE, object based SDG uses convexHull and typically scene has a collider schema already)
+        add_colliders(stage.GetDefaultPrim(), approximation_type="none")
+        
 
     # Resolve any centimeter-meter scale issues of the assets
     resolve_scale_issues_with_metrics_assembler()
@@ -271,22 +276,7 @@ def run_sdg(config: dict=config):
 
         run_simulation(num_frames=1, render=False)
 
-        # Randomize the poses of the objects
-        randomize_poses(objects, location_range=obj_ws, rotation_range=(0, 360), scale_range=(0.75, 1.25))
-        
-        # Mask a random number of objects
-        if masked_objects_ratio == 1:
-            for obj in objects:
-                obj.GetAttribute("visibility").Set("invisible")
-            
-            randomize_camera_poses_rel_to_ws(cameras, objects, cam_ws, look_at_offset=(-0.0, 0.0))
-        else:
-            masked_objects = mask_random_objects(objects, ratio=masked_objects_ratio)
-            visible_objects = [obj for obj in objects if obj not in masked_objects]
-            
-            
-            # Randomize the poses of the cameras
-            randomize_camera_poses_rel_to_ws(cameras, visible_objects, cam_ws, look_at_offset=(-0.0, 0.0))
+        randomize_poses(cameras, location_range=cam_ws, rotation_range=(0, 0), scale_range=(1.0, 1.0))
         
         # Run simulation a bit for collider to settle
         run_simulation(num_frames=3, render=False)

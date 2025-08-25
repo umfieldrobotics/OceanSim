@@ -35,9 +35,10 @@ DULUTH_PARAM_DICT = {
 
     
 UW_PARAM_DICT = {
+    "scale_range": (0.1, 0.9),
     "veiling": {
             "deep_sea": wp.vec3f(0.0, 0.0, 0.28),
-            # "shallow_water": torch.tensor([0.05, 0.11, 0.7]),
+            # "shallow_water": wp.vec3f(0.05, 0.11, 0.7),
             "akdeniz": wp.vec3f(0.14, 0.3, 0.5),
             "river": wp.vec3f(0.294, 0.4, 0.263),
             "mud": wp.vec3f(0.259, 0.259, 0.024),
@@ -244,6 +245,7 @@ class UWCam_KittiWriter(Writer):
         uw_rgb_dir_name = "uw_image_02" if self._use_kitti_dir_names else "uw_rgb"
         uw_rgb_file_path = os.path.join(sub_dir, uw_rgb_dir_name, f"{self._frame_id}.png")
 
+        self._scale = random.uniform(self._UW_param["scale_range"][0], self._UW_param["scale_range"][1])
         self._veiling = random.choice(list(self._UW_param["veiling"].values()))
         self._backscatter = random.choice(list(self._UW_param["backscatter"].values()))
         wp.launch(
@@ -375,8 +377,8 @@ class UWCam_KittiWriter(Writer):
             box = box_tight if self._use_tight_bbox else box_loose
             box_annotator = bbox_2d_tight_annotator if self._use_tight_bbox else bbox_2d_loose_annotator
 
-            if not self._is_bbox_valid(box):
-                continue
+            # if not self._is_bbox_valid(box):
+            #     continue
 
             area_tight = (box_tight["x_max"] - box_tight["x_min"]) * (box_tight["y_max"] - box_tight["y_min"])
             area_loose = (box_loose["x_max"] - box_loose["x_min"]) * (box_loose["y_max"] - box_loose["y_min"])
@@ -733,6 +735,7 @@ class UWCam_KittiWriter(Writer):
         # Initialize output arrays
         inst_seg_img_renumbered = np.zeros((height, width), dtype=np.uint16)
         sem_seg_img_renumbered = np.zeros((height, width), dtype=np.uint8)
+<<<<<<< HEAD
         
         # Process each instance
         instance_counter = {}
@@ -745,6 +748,24 @@ class UWCam_KittiWriter(Writer):
                 action, instance_id, inst_seg_uint32, inst_seg_img_renumbered, 
                 sem_seg_img_renumbered, instance_counter, inst_id_to_labels
             )
+=======
+        for i, iid in enumerate(instance_ids):
+            semantic_class = inst_id_to_labels[iid].get("class", "unlabelled")
+            is_unlabelled = semantic_class.lower() == "unlabelled"
+            is_background = semantic_class.lower() == "background"
+            is_in_mapping = semantic_class in self.mapping_dict
+            # bbox_tight = self._get_bbox_from_instance_id(inst_seg_uint32, iid)
+            # is_valid = self._is_bbox_valid(bbox_tight)
+            if not is_in_mapping or is_unlabelled or is_background:
+                inst_seg_img_renumbered[inst_seg_uint32 == iid] = 0
+            else:
+                cur_semantics = str(inst_id_to_labels[iid])
+                cur_idx.setdefault(cur_semantics, 0)
+                cur_idx[cur_semantics] += 1
+                semantics_renumbered = self.mapping_dict.get(semantic_class, 0)
+                inst_seg_img_renumbered[inst_seg_uint32 == iid] = cur_idx[cur_semantics] + semantics_renumbered * 256
+                sem_seg_img_renumbered[inst_seg_uint32 == iid] = semantics_renumbered
+>>>>>>> fd4e5542ac568758fa56afa2237cac182595552c
 
         # Write output files
         self._backend.schedule(F.write_image, data=inst_seg_img_renumbered, path=inst_filepath)

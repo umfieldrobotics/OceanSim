@@ -4,7 +4,10 @@ config = {
         "renderer": "RealTimePathTracing",
         "headless": True,
         "extra_args": [
-            "--/persistent/renderer/rtpt/enabled=True",              # This enables RTX realtime preview renderer
+            # "--/persistent/renderer/rtpt/enabled=True",             # This enables RTX 2.0 for Isaac 4.5
+            "--/persistent/rtx/modes/rt2/enabled=True",              # This enables RTX 2.0 for Isaac 5.0
+            "--/persistent/rtx/modes/pt/enabled=True",              # This enables Path Tracing for Isaac 5.0
+            "--/persistent/rtx/modes/rt/enabled=True",              # This enables Ray Tracing for Isaac 5.0
             "--/log/level=error",                                    # These will shut isaac sim the fuck up 
             "--/log/fileLogLevel=error", 
             "--/log/outputStreamLevel=error"
@@ -16,18 +19,18 @@ config = {
     # NOTE: For this reason, the total number of captures is num_cameras * total_captures * num_writers
     "num_cameras": 1, 
     "camera_collider_radius": 0.2,
-    "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor.usd",
-    # "env_url": "D:/haoyu/Assets/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
-    "objects_url": "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready",
-    # "objects_url": "D:/haoyu/Assets/ObjectAssets_simready",
+    # "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor.usd",
+    "env_url": "C:/Users/mahaoyu/Desktop/pebble_floor/padded_pebble_floor.usd",
+    # "objects_url": "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready",
+    "objects_url": "C:/Users/mahaoyu/Desktop/ObjectAssets_simready",
     "masked_objects_ratio": 0.92,
     "writers": [
         {
             # Type of the writer to use (e.g. PoseWriter, BasicWriter, etc.) and the kwargs to pass to the writer init
             "type": "FLS_KittiWriter",
             "kwargs": {
-                # "output_dir": "D:/haoyu/SDG/",
-                "output_dir": "/home/haoyu/Desktop/viz/",
+                "output_dir": "C:/Users/mahaoyu/Desktop/SDG/",
+                # "output_dir": "/home/haoyu/Desktop/viz/",
                 "sonar_param": {
                     "max_range": 3, 
                     "min_range": 0.2,

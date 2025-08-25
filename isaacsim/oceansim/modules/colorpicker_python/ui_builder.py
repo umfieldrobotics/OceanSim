@@ -255,6 +255,41 @@ class UIBuilder:
         self.wrapped_ui_elements.append(self.file_name_field)
         self.wrapped_ui_elements.append(save_button)
         self.wrapped_ui_elements.append(save_viewport_button)
+
+
+        caustics_frame = CollapsableFrame('Caustics', collapsed=False)
+        self.frames.append(caustics_frame)
+        self._caustics_param_models = []
+        caustics_params_labels = [                        
+            "Blend Weight",
+            "Min Depth",
+            "Max Depth",
+            "UV Scale X",
+            "UV Scale Y",
+            "Time Speed",
+        ]
+        caustics_params_types = [
+            'float', 'float', 'float',
+            'float', 'float',
+            'float',
+        ]
+        caustics_params_default = [
+            0.5, 0.0, 100.0,
+            1.0, 1.0, 2.0,
+        ]
+        self._caustics_param = caustics_params_default
+        with caustics_frame:
+            with ui.VStack(spacing=10):
+
+                for i in range(6):
+                    param_model, param_slider = combo_floatfield_slider_builder(
+                        label=caustics_params_labels[i],
+                        type=caustics_params_types[i],
+                        default_val=caustics_params_default[i])
+                    self._caustics_param_models.append(param_model)
+                    param_model.add_value_changed_fn(self._on_caustics_param_changes)
+                    self._on_caustics_param_changes(param_model)
+
                 
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
@@ -346,7 +381,10 @@ class UIBuilder:
         Args:
             step (float): The dt of the current physics step
         """
-        self._scenario.update_scenario(step, self._param, self._water_surface_param)
+        self._scenario.update_scenario(step, 
+                                       self._param, 
+                                       self._water_surface_param, 
+                                       self._caustics_param)
 
     def _on_run_scenario_a_text(self):
         """
@@ -516,3 +554,13 @@ class UIBuilder:
     def _on_water_surface_param_changes(self, model):
         for i, param_model in zip(range(7), self._water_surface_param_models):
             self._water_surface_param[i] = param_model.get_value_as_float()    
+
+
+    def _on_caustics_param_changes(self, model):
+        for i, param_model in zip(range(5), self._caustics_param_models):
+            self._caustics_param[i] = param_model.get_value_as_float()    
+
+
+
+
+
