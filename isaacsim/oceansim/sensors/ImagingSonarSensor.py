@@ -241,9 +241,19 @@ class ImagingSonarSensor(Camera):
         # This would also reult error when no mesh within the sonar fov
         # Ignore scan that gives empty data stream
         if len(self.semanticSeg_annot.get_data()['info']['idToLabels']) !=0:
-            self.scan_data['pcl'] = self.pointcloud_annot.get_data(device=self._device)['data'][0]  # shape :(1,N,3) <class 'warp.types.array'>
-            self.scan_data['normals'] = self.pointcloud_annot.get_data(device=self._device)['info']['pointNormals'][0] # shape :(1,N,4) <class 'warp.types.array'>
-            self.scan_data['semantics'] = self.pointcloud_annot.get_data(device=self._device)['info']['pointSemantic'][0] # shape: (1, N) <class 'warp.types.array'>
+            pointcloud_data = self.pointcloud_annot.get_data(device=self._device)
+            pcl_raw = pointcloud_data['data']   
+            normals_raw = pointcloud_data['info']['pointNormals']
+            semantics_raw = pointcloud_data['info']['pointSemantic']
+            if pcl_raw.shape[1] == 0:
+                return False
+            pcl_np = pcl_raw.numpy().reshape(-1, 3)
+            normals_np = normals_raw.numpy().reshape(-1, 4)
+            semantics_np = semantics_raw.numpy().reshape(-1)
+            self.scan_data['pcl'] = wp.array(pcl_np, dtype=wp.float32, device=self._device)
+            self.scan_data['normals'] = wp.array(normals_np, dtype=wp.float32, device=self._device)
+            self.scan_data['semantics'] = wp.array(semantics_np, dtype=wp.uint32, device=self._device)
+            
             self.scan_data['viewTransform'] = self.cameraParams_annot.get_data()['cameraViewTransform'].reshape(4,4).T # 4 by 4 np.ndarray extrinsic matrix
             self.scan_data['idToLabels'] = self.semanticSeg_annot.get_data()['info']['idToLabels'] # dict 
             return True
