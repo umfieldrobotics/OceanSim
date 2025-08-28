@@ -37,18 +37,16 @@ def UW_render(raw_image: wp.array(ndim=3, dtype=wp.uint8),
 @wp.kernel
 def UW_render_2(raw_image: wp.array(ndim=3, dtype=wp.uint8),
              depth_image: wp.array(ndim=2, dtype=wp.float32),
-            #  caustics: wp.array(ndim=3, dtype=wp.uint8),
+             scale: float,
              backscatter_value: wp.vec3,
              atten_coeff: wp.vec3,
              backscatter_coeff: wp.vec3,
              uw_image: wp.array(ndim=3, dtype=wp.uint8)):
     i,j = wp.tid()
     raw_RGB = wp.vec3(wp.float32(raw_image[j,i,0]), wp.float32(raw_image[j,i,1]), wp.float32(raw_image[j,i,2]), dtype=wp.float32)
-    # caustics_RGB = wp.vec3(wp.float32(caustics[j,i,0]), wp.float32(caustics[j,i,1]), wp.float32(caustics[j,i,2]), dtype=wp.float32)
-    # raw_RGB = raw_RGB + 0.7 * caustics_RGB
     depth = depth_image[j,i]
-    exp_atten = vec3_exp(- depth * atten_coeff)
-    exp_back = vec3_exp(- depth * backscatter_coeff)
+    exp_atten = vec3_exp(- depth * atten_coeff * scale)
+    exp_back = vec3_exp(- depth * backscatter_coeff * scale)
     UW_RGB = vec3_mul(raw_RGB, exp_atten) + vec3_mul(backscatter_value * wp.float32(255), (wp.vec3f(1.0,1.0,1.0) - exp_back) )
     uw_image[j,i,0] = wp.uint8(wp.clamp(UW_RGB[0], wp.float32(0), wp.float32(255)))
     uw_image[j,i,1] = wp.uint8(wp.clamp(UW_RGB[1], wp.float32(0), wp.float32(255)))
@@ -208,6 +206,11 @@ def blend_caustics(
     # World-space planar UV projection (XZ plane) with separate scaling
     u = pos.x * uv_scale_x
     v = pos.z * uv_scale_y
+    
+    # Add aspect ratio correction to prevent stretching
+    aspect_ratio = wp.float32(tex_w) / wp.float32(tex_h)
+    u = u * aspect_ratio  # Scale U to match texture proportions
+    
     u = u - wp.floor(u)
     v = v - wp.floor(v)
 
@@ -263,8 +266,8 @@ def intrinsics_from_proj(P:wp.mat44f, width:int, height:int):
 @wp.kernel
 def depth_to_world_pos(
     depth: wp.array(ndim=2, dtype=wp.float32),           # (H, W) depth buffer in world units
-    proj_matrix: wp.mat44,     # (4, 4) projection matrix
-    view_matrix: wp.mat44,     # (4, 4) camera->world matrix
+    proj_matrix: wp.mat44f,     # (4, 4) projection matrix
+    view_matrix: wp.mat44f,     # (4, 4) camera->world matrix
     H: int,
     W: int,
     world_points: wp.array(ndim=3, dtype=wp.float32),

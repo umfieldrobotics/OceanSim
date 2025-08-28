@@ -37,5 +37,9 @@ name = "isaacsim.oceansim.modules.trajRecorder_python"
 [[python.module]]
 name = "isaacsim.oceansim.modules.terrainInstancer_python"
 
+
+[[python.module]]
+name = "isaacsim.oceansim.modules.robdriver_python"
+
 [[python.module]]
 name = "isaacsim.oceansim"

@@ -45,7 +45,9 @@ class Colorpicker_Scenario():
         self._viewport_rgba_annot.attach(self._viewport.render_product_path)
         self._viewport_depth_annot.attach(self._viewport.render_product_path)
         self.make_window()
-      
+        self.caustics = wp.zeros((self.height, self.width, 4), dtype=wp.uint8)
+        self.world_points = wp.zeros((self.height, self.width, 3), dtype=wp.float32)
+        self.uw_image = wp.zeros((self.height, self.width, 4), dtype=wp.uint8)
 
     def teardown_scenario(self):
         self._running_scenario = False
@@ -113,9 +115,7 @@ class Colorpicker_Scenario():
                 backscatter_value = wp.vec3f(*render_param[0:3])
                 atten_coeff = wp.vec3f(*render_param[6:9])
                 backscatter_coeff = wp.vec3f(*render_param[3:6])
-                caustics = wp.zeros_like(self.raw_rgba)
-                world_points = wp.zeros((self.width, self.height, 3), dtype=wp.float32)
-                self.uw_image = wp.zeros_like(self.raw_rgba)
+
                 # wp.launch(
                 #     dim=(self.raw_rgba.shape[0], self.raw_rgba.shape[1]),
                 #     kernel=UW_render,
@@ -131,9 +131,9 @@ class Colorpicker_Scenario():
                 #     ]
                 # )  
                 wp.launch(
-                kernel=water_caustics,
-                dim=(self.width, self.height),  # (x, y)
-                inputs=[caustics, self.width, self.height, self._time, caustics_param[5]],
+                    kernel=water_caustics,
+                    dim=(self.width, self.height),  # (x, y)
+                    inputs=[self.caustics, self.width, self.height, self._time, caustics_param[5]],
                 )
 
 
@@ -143,13 +143,12 @@ class Colorpicker_Scenario():
                     dim=(self.width, self.height),  # Launch dimensions (width, height)
                     inputs=[
                         self.depth_image,
-                        wp.mat44f(self.camera_param["cameraViewTransform"].reshape(4, 4)),
                         wp.mat44f(self.camera_param["cameraProjection"].reshape(4, 4)),
-                        world_points,
+                        wp.mat44f(self.camera_param["cameraViewTransform"].reshape(4, 4)),
                         self.width,
                         self.height
                     ],
-                    outputs=[],
+                    outputs=[self.world_points],
                     device=str(self._device)
                 )
                 wp.launch(
@@ -157,9 +156,9 @@ class Colorpicker_Scenario():
                     dim=(self.width, self.height),
                     inputs=[
                         self.raw_rgba,
-                        world_points,
+                        self.world_points,
                         self.normal_image,
-                        caustics,
+                        self.caustics,
                         wp.vec3f(0.0, 0.0, 1.0),
                         caustics_param[0],       # blend_weight
                         caustics_param[3],       # uv_scale_x (horizontal scaling)
@@ -172,6 +171,7 @@ class Colorpicker_Scenario():
                     outputs=[self.uw_image],
                     device=str(self._device)
                 )
+
 
                 wp.launch(
                 dim=(self.width, self.height),
@@ -188,7 +188,7 @@ class Colorpicker_Scenario():
                 ]
                 )  
                 
-                self.image_provider.set_bytes_data_from_gpu(caustics.ptr, [self.width, self.height])
+                self.image_provider.set_bytes_data_from_gpu(self.uw_image.ptr, [self.width, self.height])
 
     def make_window(self):
 

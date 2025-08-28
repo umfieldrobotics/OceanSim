@@ -2,7 +2,7 @@
 config = {
     "launch_config": {
         "renderer": "RealTimePathTracing",
-        "headless": False,
+        "headless": True,
         "extra_args": [
             # "--/persistent/renderer/rtpt/enabled=True",             # This enables RTX 2.0 for Isaac 4.5
             "--/persistent/rtx/modes/rt2/enabled=True",              # This enables RTX 2.0 for Isaac 5.0
@@ -13,19 +13,19 @@ config = {
             "--/log/outputStreamLevel=error"
             ]
     },
-    "total_captures" : 15,
-    "camera_collider_radius": 0.2,
+    "total_captures" : 4000,
+    "camera_collider_radius": 0.1,
     # "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
     "env_url": "C:/Users/mahaoyu/Desktop/pebble_floor/padded_pebble_floor_water.usd",
     # "objects_url": "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready",
     "objects_url": "C:/Users/mahaoyu/Desktop/ObjectAssets_simready",
     "rt_subframes": 16,
     "resolution": [1024, 1024],
-    "masked_objects_ratio": 0.92,
+    "masked_objects_ratio": 0.96,
     "camera_properties_kwargs": {
-        # "focalLength": 24.0,
-        # "focusDistance": 400,
-        # "fStop": 0.0,
+        "focalLength": 50.0,
+        "focusDistance": 400,
+        "fStop": 0.0,
         "clippingRange": [0.01, 100],
     },
     "writers": [
@@ -39,13 +39,14 @@ config = {
                 "veiling_visibility_threshold": 12,
                 "use_tight_bbox": True,
                 # "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
-                "debug_mode": True,
+                "debug_mode": False,
+                "enable_caustics": True,
             },
         }
     ],
     "obj_workspace": [-1.5, -2.3, 1.15, 1.5, 3.7, 1.65],
     "cam_workspace" : [-1.5, -2.3, 1.25, 1.5, 3.7, 1.5],
-    "disable_render_products": False,
+    "disable_render_products": True,
     "debug_mode": False,
     "path_tracing": False,
 }
@@ -263,12 +264,18 @@ def run_sdg(config: dict=config):
     capture_counter = 0
     while capture_counter < total_captures:
 
-
-        run_simulation(num_frames=1, render=False)
+        enable_global_volumetric_effects(enable=True, 
+                                        density_mult=random.uniform(1.75, 1.95), 
+                                        anisotropy_factor=-0.999, 
+                                        transmittance_distance=random.uniform(3000, 10000),
+                                        )
 
         # Randomize the poses of the objects
         randomize_poses(objects, location_range=obj_ws, rotation_range=(0, 360), scale_range=(0.75, 1.25))
         
+        # Run simulation a bit for objects to fall
+        run_simulation(num_frames=random.randint(3, 30), render=False)
+
         # Mask a random number of objects
         if masked_objects_ratio == 1:
             for obj in objects:
@@ -284,8 +291,7 @@ def run_sdg(config: dict=config):
             randomize_camera_poses_rel_to_ws(cameras, visible_objects, cam_ws, look_at_offset=(-0.0, 0.0))
         
         # Run simulation a bit for collider to settle
-        run_simulation(num_frames=3, render=False)
-
+        run_simulation(num_frames=2, render=False)
 
         # Check if the render products need to be enabled for the capture
         if disable_render_products:

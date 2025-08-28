@@ -9,7 +9,7 @@ from omni.syntheticdata.scripts.SyntheticData import SyntheticData
 import omni.replicator.core.scripts.functional as F
 from omni.replicator.core import AnnotatorRegistry, BackendDispatch
 from omni.replicator.core.scripts.writers import Writer
-from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
+from isaacsim.oceansim.utils.UWrenderer_utils import *
 from isaacsim.replicator.writers.scripts.utils import calculate_truncation_ratio_simple
 import isaacsim.core.utils.rotations as rotations_utils
 import yaml
@@ -25,6 +25,7 @@ import random
 __version__ = "0.1.0"
 
 DULUTH_PARAM_DICT = {
+    "scale_range": (0.5, 1.0),
     "veiling": {
         "duluth": wp.vec3f(0.19, 0.30, 0.0)
         }, 
@@ -35,7 +36,7 @@ DULUTH_PARAM_DICT = {
 
     
 UW_PARAM_DICT = {
-    "scale_range": (0.1, 0.9),
+    "scale_range": (0.2, 0.6),
     "veiling": {
             "deep_sea": wp.vec3f(0.0, 0.0, 0.28),
             # "shallow_water": wp.vec3f(0.05, 0.11, 0.7),
@@ -121,6 +122,7 @@ class UWCam_KittiWriter(Writer):
         UW_param: Union[str, dict] = UW_PARAM_DICT,
         cuboid_keypoints_order: list = ["Center", "LDB", "LDF", "LUB", "LUF", "RDB", "RDF", "RUB", "RUF"],
         debug_mode: bool = False,
+        enable_caustics: bool = False,
     ):
         self.version = __version__
         self._frame_id = 0
@@ -144,7 +146,7 @@ class UWCam_KittiWriter(Writer):
         self._cuboid_keypoints_order = cuboid_keypoints_order
         self._debug_mode = debug_mode
         self._veiling_visibility_threshold = veiling_visibility_threshold
-
+        self._enable_caustics = enable_caustics
         if self._debug_mode:
             self._CUBOID_KEYPOINT_COLORS = ["white", "red", "green", "blue", "yellow", "cyan", "magenta", "orange", "purple"]
             self._CUBOID_EDGE_COLORS = {"front": "red", "back": "blue", "connecting": "green"}
@@ -200,6 +202,9 @@ class UWCam_KittiWriter(Writer):
             AnnotatorRegistry.get_annotator(
                 "rgb", device=self._device
             ),
+            AnnotatorRegistry.get_annotator(
+                "normals", device=self._device
+            ),
             "bounding_box_2d_tight_fast",
             "bounding_box_2d_loose_fast",
             AnnotatorRegistry.get_annotator(
@@ -232,11 +237,11 @@ class UWCam_KittiWriter(Writer):
                 anno_semantic_mapping[f"class:{k}"] = v
         return json.dumps(anno_semantic_mapping)
 
-    def _write_rgb(self, data, sub_dir: str, rgb_annotator: str, dist_to_cam_annotator:str, UW_param: list):
+    def _write_rgb(self, data, sub_dir: str, rgb_annotator: str, dist_to_cam_annotator:str, camera_param_annotator:str, normals_annotator:str):
 
         if self._debug_mode:
             self._debug_data["raw_rgb"] = data[rgb_annotator].numpy()
-
+        width, height = data[rgb_annotator].shape[:2]
         uw_image = wp.empty(shape=data[rgb_annotator].shape, dtype=wp.uint8)
         uw_rgb_dir_name = "uw_image_02" if self._use_kitti_dir_names else "uw_rgb"
         uw_rgb_file_path = os.path.join(sub_dir, uw_rgb_dir_name, f"{self._frame_id}.png")
@@ -244,21 +249,89 @@ class UWCam_KittiWriter(Writer):
         self._scale = random.uniform(self._UW_param["scale_range"][0], self._UW_param["scale_range"][1])
         self._veiling = random.choice(list(self._UW_param["veiling"].values()))
         self._backscatter = random.choice(list(self._UW_param["backscatter"].values()))
-        wp.launch(
-                dim=data[rgb_annotator].shape[:2],
-                kernel=UW_render,
+        if self._enable_caustics:
+            _caustics_tex = wp.empty(shape=(height, width, 4), dtype=wp.uint8)
+            _world_pos = wp.empty(shape=(height, width, 3), dtype=wp.float32)
+
+            wp.launch(
+                kernel=water_caustics,
+                dim=(width, height),  # (x, y)
+                inputs=[_caustics_tex, width, height, self._frame_id, 2.0],
+            )
+
+
+            # Launch depth to world kernel once (this doesn't change)
+            wp.launch(
+                kernel=depth_to_world_pos,
+                dim=(width, height),  # Launch dimensions (width, height)
+                inputs=[
+                    data[dist_to_cam_annotator],
+                    wp.mat44(data[camera_param_annotator]["cameraProjection"].reshape(4, 4)),
+                    wp.mat44(data[camera_param_annotator]["cameraViewTransform"].reshape(4, 4)),
+                    width,
+                    height
+                ],
+                outputs=[_world_pos],
+                device=str(self._device)
+            )
+            wp.launch(
+                kernel=blend_caustics,
+                dim=(width, height),
                 inputs=[
                     data[rgb_annotator],
-                    data[dist_to_cam_annotator],
-                    self._veiling,
-                    self._backscatter,
-                    self._backscatter,
-
+                    _world_pos,
+                    data[normals_annotator],
+                    _caustics_tex,
+                    wp.vec3f(0.0, 0.0, 1.0),
+                    1.0,       # blend_weight
+                    random.uniform(0.5, 1.5),       # uv_scale_x (horizontal scaling)
+                    random.uniform(0.5, 1.5),       # uv_scale_y (vertical scaling)
+                    0.0,       # depth_min
+                    100.0,   # depth_max
+                    width,         # tex_w
+                    height,         # tex_h
                 ],
-                outputs=[
-                    uw_image
-                ]
-            )  
+                outputs=[uw_image],
+                device=str(self._device)
+            )
+
+
+        
+            wp.launch(
+                    dim=data[rgb_annotator].shape[:2],
+                    kernel=UW_render_2,
+                    inputs=[
+                        uw_image,
+                        data[dist_to_cam_annotator],
+                        self._scale,
+                        self._veiling,
+                        self._backscatter,
+                        self._backscatter,
+
+                    ],
+                    outputs=[
+                        uw_image
+                    ]
+                )  
+        else:
+            wp.launch(
+                    dim=data[rgb_annotator].shape[:2],
+                    kernel=UW_render_2,
+                    inputs=[
+                        data[rgb_annotator],
+                        data[dist_to_cam_annotator],
+                        self._scale,
+                        self._veiling,
+                        self._backscatter,
+                        self._backscatter,
+
+                    ],
+                    outputs=[
+                        uw_image
+                    ]
+                )  
+
+
         self.uw_image_np = uw_image.numpy()
         self._backend.schedule(F.write_image, data=uw_image, path=uw_rgb_file_path)
 
@@ -331,8 +404,8 @@ class UWCam_KittiWriter(Writer):
             box = box_tight if self._use_tight_bbox else box_loose
             box_annotator = bbox_2d_tight_annotator if self._use_tight_bbox else bbox_2d_loose_annotator
 
-            # if not self._is_bbox_valid(box):
-            #     continue
+            if not self._is_bbox_valid(box):
+                continue
 
             area_tight = (box_tight["x_max"] - box_tight["x_min"]) * (box_tight["y_max"] - box_tight["y_min"])
             area_loose = (box_loose["x_max"] - box_loose["x_min"]) * (box_loose["y_max"] - box_loose["y_min"])
@@ -344,6 +417,9 @@ class UWCam_KittiWriter(Writer):
                 occlusion_estimation = 1
             else:
                 occlusion_estimation = 2
+
+            if occlusion_estimation == 2:
+                continue
 
 
             # Only compute object's 3d information after the above test
@@ -689,9 +765,9 @@ class UWCam_KittiWriter(Writer):
             is_unlabelled = semantic_class.lower() == "unlabelled"
             is_background = semantic_class.lower() == "background"
             is_in_mapping = semantic_class in self.mapping_dict
-            # bbox_tight = self._get_bbox_from_instance_id(inst_seg_uint32, iid)
-            # is_valid = self._is_bbox_valid(bbox_tight)
-            if not is_in_mapping or is_unlabelled or is_background:
+            bbox_tight = self._get_bbox_from_instance_id(inst_seg_uint32, iid)
+            is_valid = self._is_bbox_valid(bbox_tight)
+            if not is_in_mapping or is_unlabelled or is_background or not is_valid:
                 inst_seg_img_renumbered[inst_seg_uint32 == iid] = 0
             else:
                 cur_semantics = str(inst_id_to_labels[iid])
@@ -753,7 +829,7 @@ class UWCam_KittiWriter(Writer):
         render_products = [k for k in data.keys() if k.startswith("rp_")]
         if len(render_products) == 1:
             sub_dir = data[render_products[0]]["camera"].split("/")[-1]
-            self._write_rgb(data, sub_dir, "rgb", "distance_to_camera", self._UW_param)
+            self._write_rgb(data, sub_dir, "rgb", "distance_to_camera", "camera_params", "normals")
             self._write_segmentation(data, sub_dir, "semantic_segmentation", "instance_segmentation_fast")
             self._write_object_detection(
                 data, 
@@ -780,7 +856,8 @@ class UWCam_KittiWriter(Writer):
                     sub_dir, 
                     f"rgb-{render_product_name}", 
                     f"distance_to_camera-{render_product_name}", 
-                    self._UW_param
+                    f'camera_params-{render_product_name}',
+                    f'normals-{render_product_name}'
                 )
                 self._write_segmentation(
                     data,

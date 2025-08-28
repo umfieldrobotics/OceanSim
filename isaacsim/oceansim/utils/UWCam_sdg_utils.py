@@ -168,7 +168,7 @@ def add_COU_objects(
             prim = add_reference_to_stage(usd_path=usd_file, prim_path=prim_path)
             if physics:
                 add_colliders(prim)
-                add_rigid_body_dynamics(prim, disable_gravity=True)
+                add_rigid_body_dynamics(prim, disable_gravity=False)
 
             remove_labels(prim)  # Remove all
             upgrade_prim_semantics_to_labels(prim)
@@ -230,8 +230,32 @@ def assign_scene_semantics_based_on_ref(override_semantic_mapping: dict[str, int
     else:
         return semantic_mapping
 
-
-
+def enable_global_volumetric_effects(enable: bool = True,
+                                      density_mult: float = 2.0,
+                                      anisotropy_factor: float = -0.999,
+                                      transmittance_distance: float = 10000,
+                                      ):
+    """Enable or disable global volumetric effects.
+            self._add_setting(SettingType.FLOAT, "Fog Height", "/rtx/raytracing/inscattering/atmosphereHeight", -2000, 100000, 10, tooltip="\nHeight in world units (centimeters) at which the medium ends. Useful for atmospheres with distant lights or dome lights.")
+        self._add_setting(SettingType.FLOAT, "Fog Height Fall Off", "/rtx/pathtracing/ptvol/fogHeightFallOff", 10, 2000, 1, tooltip="\nExponential decay of the fog above the Fog Height.")
+        self._add_setting(SettingType.FLOAT, "Maximum inscattering Distance", "/rtx/raytracing/inscattering/maxDistance", 10, 1000000,
+                          tooltip="\nMaximum depth in world units (centimeters) the voxel grid is allocated to."
+                                  "\nIf set to 10,000 with 10 depth slices, each slice will span 1,000 units (assuming a slice distribution exponent of 1)."
+                                  "\nIdeally this should be kept as low as possible without causing artifacts to make the most of the fixed number of depth slices.")
+        self._add_setting(SettingType.FLOAT, "Density Multiplier", "/rtx/raytracing/inscattering/densityMult", 0, 2, 0.001, tooltip="\nScales the fog density.")
+        self._add_setting(SettingType.FLOAT, "Transmittance Measurment Distance", "/rtx/raytracing/inscattering/transmittanceMeasurementDistance", 0.0001, 1000000, 10, tooltip="\nControls how far light can travel through fog. Lower values yield thicker fog.")
+        self._add_setting(SettingType.COLOR3, "Transmittance Color", "/rtx/raytracing/inscattering/transmittanceColor",
+                          tooltip="\nAssuming a white light, it represents its tint after traveling a number of units through"
+                                  "\nthe volume as specified in Transmittance Measurement Distance.")
+        self._add_setting(SettingType.COLOR3, "Single Scattering Albedo", "/rtx/raytracing/inscattering/singleScatteringAlbedo", tooltip="\nThe ratio of scattered-light to attenuated-light for an interaction with the volume. Values closer to 1 indicate high scattering.")
+        self._add_setting(SettingType.FLOAT, "Anisotropy Factor (g)", "/rtx/raytracing/inscattering/anisotropyFactor", -0.999, 0.999, 0.01,
+                          tooltip="\nAnisotropy of the volumetric phase function, or the degree of light scattering asymmetry."
+                                  "\n-1 is back-scattered, 0 is isotropic, 1 is forward-scattered.")
+    """
+    carb.settings.get_settings().set("/rtx/raytracing/globalVolumetricEffects/enabled", enable)
+    carb.settings.get_settings().set("/rtx/raytracing/inscattering/densityMult", density_mult)
+    carb.settings.get_settings().set("/rtx/raytracing/inscattering/anisotropyFactor", anisotropy_factor)
+    carb.settings.get_settings().set("/rtx/raytracing/inscattering/transmittanceMeasurementDistance", transmittance_distance)
 # needed for loading textures correctly
 def set_transform_attributes(
     prim: Usd.Prim,

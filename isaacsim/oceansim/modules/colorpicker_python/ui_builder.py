@@ -267,21 +267,29 @@ class UIBuilder:
             "UV Scale X",
             "UV Scale Y",
             "Time Speed",
+            "Decal Position X",
+            "Decal Position Y",
+            "Decal Position Z",
+            "Decal Scale",
         ]
         caustics_params_types = [
             'float', 'float', 'float',
             'float', 'float',
             'float',
+            'float', 'float', 'float',
+            'float',
         ]
         caustics_params_default = [
             0.5, 0.0, 100.0,
             1.0, 1.0, 2.0,
+            0.0, 0.0, 0.0,
+            1.0,
         ]
         self._caustics_param = caustics_params_default
         with caustics_frame:
             with ui.VStack(spacing=10):
 
-                for i in range(6):
+                for i in range(10):
                     param_model, param_slider = combo_floatfield_slider_builder(
                         label=caustics_params_labels[i],
                         type=caustics_params_types[i],
