@@ -16,9 +16,10 @@ config = {
     "total_captures" : 4000,
     "camera_collider_radius": 0.1,
     # "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
-    "env_url": "C:/Users/mahaoyu/Desktop/pebble_floor/padded_pebble_floor_water.usd",
-    # "objects_url": "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready",
-    "objects_url": "C:/Users/mahaoyu/Desktop/ObjectAssets_simready",
+    # "env_url": "C:/Users/mahaoyu/Desktop/pebble_floor/padded_pebble_floor_water.usd",
+    "env_url": "/frog-drive/projects/OceanSim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
+    "objects_url": "/frog-drive/projects/OceanSim/sim2real/ObjectAssets_simready",
+    # "objects_url": "C:/Users/mahaoyu/Desktop/ObjectAssets_simready",
     "rt_subframes": 16,
     "resolution": [1024, 1024],
     "masked_objects_ratio": 0.96,
@@ -33,14 +34,14 @@ config = {
             # Type of the writer to use (e.g. PoseWriter, BasicWriter, etc.) and the kwargs to pass to the writer init
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "C:/Users/mahaoyu/Desktop/SDG/",
+                # "output_dir": "C:/Users/mahaoyu/Desktop/SDG/",
+                "output_dir": "/home/nsieh/Desktop/SDG/",
                 # "output_dir": "/home/haoyu/Desktop/viz/",
                 "colorize_instance_segmentation": False,
                 "veiling_visibility_threshold": 12,
                 "use_tight_bbox": True,
                 # "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
-                "debug_mode": False,
-                "enable_caustics": True,
+                "debug_mode": True,
             },
         }
     ],
@@ -95,6 +96,7 @@ simulation_app = SimulationApp(launch_config=launch_config)
 
 # load up OceanSim
 import isaacsim.core.utils.extensions as extensions_utils
+
 value = extensions_utils.enable_extension(extension_name='isaacsim.oceansim')
 if value:
     print("[SDG] OceanSim loaded successfully")
