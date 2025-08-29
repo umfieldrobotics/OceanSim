@@ -42,7 +42,7 @@ def plot_all_debug(label_path, rgb_path, debug_path, instance_seg_path, mapping_
         label = obj['type']
         x, y, z = loc
         z = -z  # convert to z-forward
-        alpha = ry - np.atan2(x, z)
+        alpha = ry - np.arctan2(x, z)
         alpha = alpha % (2 * np.pi)
         alpha = alpha - 2 * np.pi if alpha > np.pi else alpha  # normalize to [-pi, pi]
         assert np.isclose(obj['alpha'], alpha, atol=1e-2) # 1e-2 because SDG saves :2f
@@ -249,7 +249,7 @@ def plot_all(label_path, rgb_path, instance_seg_path, mapping_path):
         label = obj['type']
         x, y, z = loc
         z = -z  # convert to z-forward
-        alpha = ry - np.atan2(x, z)
+        alpha = ry - np.arctan2(x, z)
         alpha = alpha % (2 * np.pi)
         alpha = alpha - 2 * np.pi if alpha > np.pi else alpha  # normalize to [-pi, pi]
         assert np.isclose(obj['alpha'], alpha, atol=1e-2) # 1e-2 because SDG saves :2f

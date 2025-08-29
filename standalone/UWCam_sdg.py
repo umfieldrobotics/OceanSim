@@ -13,20 +13,21 @@ config = {
             "--/log/outputStreamLevel=error"
             ]
     },
-    "total_captures" : 4000,
+    "total_captures" : 100,
     "camera_collider_radius": 0.1,
     # "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
-    "env_url": "C:/Users/mahaoyu/Desktop/pebble_floor/padded_pebble_floor_water.usd",
+    # "env_url": "C:/Users/mahaoyu/Desktop/pebble_floor_old/padded_pebble_floor_water.usd",
+    "env_url": "C:/Users/mahaoyu/Desktop/padded_pebble_water.usd",
     # "objects_url": "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready",
-    "objects_url": "C:/Users/mahaoyu/Desktop/ObjectAssets_simready",
+    "objects_url": "C:/Users/mahaoyu/Desktop/ObjectAssets_simready_2",
     "rt_subframes": 16,
     "resolution": [1024, 1024],
-    "masked_objects_ratio": 0.96,
+    "masked_objects_ratio": 0.5,
     "camera_properties_kwargs": {
         "focalLength": 50.0,
         "focusDistance": 400,
         "fStop": 0.0,
-        "clippingRange": [0.01, 100],
+        "clippingRange": [0.001, 100],
     },
     "writers": [
         {
@@ -36,7 +37,7 @@ config = {
                 "output_dir": "C:/Users/mahaoyu/Desktop/SDG/",
                 # "output_dir": "/home/haoyu/Desktop/viz/",
                 "colorize_instance_segmentation": False,
-                "veiling_visibility_threshold": 12,
+                "veiling_visibility_threshold": 12, # This is not used now
                 "use_tight_bbox": True,
                 # "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
                 "debug_mode": False,
@@ -44,8 +45,8 @@ config = {
             },
         }
     ],
-    "obj_workspace": [-1.5, -2.3, 1.15, 1.5, 3.7, 1.65],
-    "cam_workspace" : [-1.5, -2.3, 1.25, 1.5, 3.7, 1.5],
+    "obj_workspace": [-1.0, -1.0, 0.15, 1.0, 1.0, 0.85],
+    "cam_workspace" : [-1.0, -1.0, 0.3, 1.0, 1.0, 0.6],
     "disable_render_products": True,
     "debug_mode": False,
     "path_tracing": False,
@@ -258,8 +259,8 @@ def run_sdg(config: dict=config):
     print(f"[SDG] Created {len(writers)} writers")
 
 
-
-
+    materials = add_material(material_folder_path="C:/Users/mahaoyu/Desktop/materials")
+    scene_xform = stage.GetPrimAtPath("/World/padded_pebble")
 
     capture_counter = 0
     while capture_counter < total_captures:
@@ -269,6 +270,8 @@ def run_sdg(config: dict=config):
                                         anisotropy_factor=-0.999, 
                                         transmittance_distance=random.uniform(3000, 10000),
                                         )
+        if materials:
+            change_material(materials, scene_xform)
 
         # Randomize the poses of the objects
         randomize_poses(objects, location_range=obj_ws, rotation_range=(0, 360), scale_range=(0.75, 1.25))
