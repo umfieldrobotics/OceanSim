@@ -203,6 +203,7 @@ class UW_Camera(Camera):
                 inputs=[
                     self._uw_image,
                     self._depth_annot.get_data(),
+                    1.0,
                     self._backscatter_value,
                     self._atten_coeff,
                     self._backscatter_coeff

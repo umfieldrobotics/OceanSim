@@ -811,20 +811,6 @@ class UWCam_KittiWriter(Writer):
         # Initialize output arrays
         inst_seg_img_renumbered = np.zeros((height, width), dtype=np.uint16)
         sem_seg_img_renumbered = np.zeros((height, width), dtype=np.uint8)
-<<<<<<< HEAD
-        
-        # Process each instance
-        instance_counter = {}
-        for instance_id in inst_id_to_labels.keys():
-            action = self._determine_instance_action(
-                instance_id, inst_id_to_labels, inst_seg_uint32, distance_data, background_semantic_id
-            )
-            
-            self._apply_instance_action(
-                action, instance_id, inst_seg_uint32, inst_seg_img_renumbered, 
-                sem_seg_img_renumbered, instance_counter, inst_id_to_labels
-            )
-=======
         for i, iid in enumerate(instance_ids):
             semantic_class = inst_id_to_labels[iid].get("class", "unlabelled")
             is_unlabelled = semantic_class.lower() == "unlabelled"
@@ -841,7 +827,6 @@ class UWCam_KittiWriter(Writer):
                 semantics_renumbered = self.mapping_dict.get(semantic_class, 0)
                 inst_seg_img_renumbered[inst_seg_uint32 == iid] = cur_idx[cur_semantics] + semantics_renumbered * 256
                 sem_seg_img_renumbered[inst_seg_uint32 == iid] = semantics_renumbered
->>>>>>> fd4e5542ac568758fa56afa2237cac182595552c
 
         # Write output files
         self._backend.schedule(F.write_image, data=inst_seg_img_renumbered, path=inst_filepath)

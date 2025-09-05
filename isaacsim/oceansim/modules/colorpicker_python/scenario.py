@@ -179,6 +179,7 @@ class Colorpicker_Scenario():
                 inputs=[
                     self.uw_image,
                     self.depth_image,
+                    1.0,
                     backscatter_value,
                     atten_coeff,
                     backscatter_coeff
