@@ -11,14 +11,14 @@ We have tested OceanSim on Ubuntu 20.04, 22.04, and 24.04. We have also tested O
 ## Installation
 For Isaac Sim 5.0, we build from their [source code](https://github.com/isaac-sim/IsaacSim).
 
-For Isaac Sim 4.5, we follow the official [workstation installation guide](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_workstation.html).
+
 
 Clone this repository to your local machine. We recommend cloning the repository to the Isaac Sim workspace directory.
 ```bash
 cd /path/to/isaacsim/extsUser
 git clone https://github.com/umfieldrobotics/OceanSim.git
 ```
-Note: '/extsUser' folder is guaranteed that the extension is discoverable in the extension browser of Isaac Sim.
+`/extsUser` folder is guaranteed that the extension is discoverable in the extension browser of Isaac Sim.
 
 Download `OceanSim_assets` from [Google Drive](https://drive.google.com/drive/folders/1qg4-Y_GMiybnLc1BFjx0DsWfR0AgeZzA?usp=sharing) which contains USD assets of robot and environment.
 
@@ -28,8 +28,10 @@ Then, run the following to configure OceanSim to point to your asset path:
 cd /path/to/OceanSim
 python3 config/register_asset_path.py /path/to/OceanSim_assets
 ```
+For Isaac Sim 4.5, we follow the official [workstation installation guide](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_workstation.html).
 
-Launch Isaac Sim following this [guide](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_workstation.html#isaac-sim-short-app-selector).
+**NOTE**: The main branch is always the latest release and does not have backward compatibility due to Omniverse being a fast evolving ecosystem. 
+Please download previous release and the installation is exactly the same as above.
 
 ## Launching OceanSim
 There is no separate building process needed for OceanSim, as it is an extension. To load OceanSim: 
