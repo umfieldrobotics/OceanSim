@@ -13,7 +13,7 @@ config = {
             "--/log/outputStreamLevel=error"
             ]
     },
-    "total_captures" : 100,
+    "total_captures" : 5000,
     "camera_collider_radius": 0.1,
     # "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
     # "env_url": "C:/Users/mahaoyu/Desktop/pebble_floor_old/padded_pebble_floor_water.usd",
@@ -34,7 +34,8 @@ config = {
             # Type of the writer to use (e.g. PoseWriter, BasicWriter, etc.) and the kwargs to pass to the writer init
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "C:/Users/mahaoyu/Desktop/SDG/",
+                # "output_dir": "C:/Users/mahaoyu/Desktop/SDG/",
+                "output_dir": "Y:/projects/OceanSim/sim2real/SDG/SDG_8_28_2025/",
                 # "output_dir": "/home/haoyu/Desktop/viz/",
                 "colorize_instance_segmentation": False,
                 "veiling_visibility_threshold": 12, # This is not used now
@@ -45,8 +46,8 @@ config = {
             },
         }
     ],
-    "obj_workspace": [-1.0, -1.0, 0.15, 1.0, 1.0, 0.85],
-    "cam_workspace" : [-1.0, -1.0, 0.3, 1.0, 1.0, 0.6],
+    "obj_workspace": [-0.75, -0.75, 0.15, 0.75, 0.75, 0.6],
+    "cam_workspace" : [-1.0, -1.0, 0.3, 1.0, 1.0, 0.7],
     "disable_render_products": True,
     "debug_mode": False,
     "path_tracing": False,
@@ -266,9 +267,9 @@ def run_sdg(config: dict=config):
     while capture_counter < total_captures:
 
         enable_global_volumetric_effects(enable=True, 
-                                        density_mult=random.uniform(1.75, 1.95), 
-                                        anisotropy_factor=-0.999, 
-                                        transmittance_distance=random.uniform(3000, 10000),
+                                        density_mult=random.uniform(1.0, 1.95), 
+                                        anisotropy_factor=0.0, 
+                                        transmittance_distance=10000,
                                         )
         if materials:
             change_material(materials, scene_xform)

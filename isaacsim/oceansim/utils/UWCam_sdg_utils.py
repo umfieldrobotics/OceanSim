@@ -254,6 +254,7 @@ def enable_global_volumetric_effects(enable: bool = True,
                           tooltip="\nAnisotropy of the volumetric phase function, or the degree of light scattering asymmetry."
                                   "\n-1 is back-scattered, 0 is isotropic, 1 is forward-scattered.")
     """
+    # carb.settings.get_settings().set("/rtx/raytracing/inscattering/atmosphereHeight", -2000)
     carb.settings.get_settings().set("/rtx/raytracing/globalVolumetricEffects/enabled", enable)
     carb.settings.get_settings().set("/rtx/raytracing/inscattering/densityMult", density_mult)
     carb.settings.get_settings().set("/rtx/raytracing/inscattering/anisotropyFactor", anisotropy_factor)
