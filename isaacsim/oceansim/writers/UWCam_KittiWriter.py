@@ -149,6 +149,7 @@ class UWCam_KittiWriter(Writer):
         self._enable_distance_filter = enable_distance_filter
         self._max_distance = max_distance
         self._debug_mode = debug_mode
+        #TODO: figure out a better way to handle too difficult detection cases
         self._veiling_visibility_threshold = veiling_visibility_threshold
         self._enable_caustics = enable_caustics
         if self._debug_mode:
@@ -253,87 +254,88 @@ class UWCam_KittiWriter(Writer):
         self._scale = random.uniform(self._UW_param["scale_range"][0], self._UW_param["scale_range"][1])
         self._veiling = random.choice(list(self._UW_param["veiling"].values()))
         self._backscatter = random.choice(list(self._UW_param["backscatter"].values()))
-        if self._enable_caustics:
-            _caustics_tex = wp.empty(shape=(height, width, 4), dtype=wp.uint8)
-            _world_pos = wp.empty(shape=(height, width, 3), dtype=wp.float32)
+        uw_image = data[rgb_annotator]
+        # if self._enable_caustics:
+        #     _caustics_tex = wp.empty(shape=(height, width, 4), dtype=wp.uint8)
+        #     _world_pos = wp.empty(shape=(height, width, 3), dtype=wp.float32)
 
-            wp.launch(
-                kernel=water_caustics,
-                dim=(width, height),  # (x, y)
-                inputs=[_caustics_tex, width, height, self._frame_id, 2.0],
-            )
+        #     wp.launch(
+        #         kernel=water_caustics,
+        #         dim=(width, height),  # (x, y)
+        #         inputs=[_caustics_tex, width, height, self._frame_id, 2.0],
+        #     )
 
 
-            # Launch depth to world kernel once (this doesn't change)
-            wp.launch(
-                kernel=depth_to_world_pos,
-                dim=(width, height),  # Launch dimensions (width, height)
-                inputs=[
-                    data[dist_to_cam_annotator],
-                    wp.mat44(data[camera_param_annotator]["cameraProjection"].reshape(4, 4)),
-                    wp.mat44(data[camera_param_annotator]["cameraViewTransform"].reshape(4, 4)),
-                    width,
-                    height
-                ],
-                outputs=[_world_pos],
-                device=str(self._device)
-            )
-            wp.launch(
-                kernel=blend_caustics,
-                dim=(width, height),
-                inputs=[
-                    data[rgb_annotator],
-                    _world_pos,
-                    data[normals_annotator],
-                    _caustics_tex,
-                    wp.vec3f(0.0, 0.0, 1.0),
-                    1.0,       # blend_weight
-                    random.uniform(0.5, 1.5),       # uv_scale_x (horizontal scaling)
-                    random.uniform(0.5, 1.5),       # uv_scale_y (vertical scaling)
-                    0.0,       # depth_min
-                    100.0,   # depth_max
-                    width,         # tex_w
-                    height,         # tex_h
-                ],
-                outputs=[uw_image],
-                device=str(self._device)
-            )
+        #     # Launch depth to world kernel once (this doesn't change)
+        #     wp.launch(
+        #         kernel=depth_to_world_pos,
+        #         dim=(width, height),  # Launch dimensions (width, height)
+        #         inputs=[
+        #             data[dist_to_cam_annotator],
+        #             wp.mat44(data[camera_param_annotator]["cameraProjection"].reshape(4, 4)),
+        #             wp.mat44(data[camera_param_annotator]["cameraViewTransform"].reshape(4, 4)),
+        #             width,
+        #             height
+        #         ],
+        #         outputs=[_world_pos],
+        #         device=str(self._device)
+        #     )
+        #     wp.launch(
+        #         kernel=blend_caustics,
+        #         dim=(width, height),
+        #         inputs=[
+        #             data[rgb_annotator],
+        #             _world_pos,
+        #             data[normals_annotator],
+        #             _caustics_tex,
+        #             wp.vec3f(0.0, 0.0, 1.0),
+        #             1.0,       # blend_weight
+        #             random.uniform(0.5, 1.5),       # uv_scale_x (horizontal scaling)
+        #             random.uniform(0.5, 1.5),       # uv_scale_y (vertical scaling)
+        #             0.0,       # depth_min
+        #             100.0,   # depth_max
+        #             width,         # tex_w
+        #             height,         # tex_h
+        #         ],
+        #         outputs=[uw_image],
+        #         device=str(self._device)
+        #     )
 
 
         
-            wp.launch(
-                    dim=data[rgb_annotator].shape[:2],
-                    kernel=UW_render_2,
-                    inputs=[
-                        uw_image,
-                        data[dist_to_cam_annotator],
-                        self._scale,
-                        self._veiling,
-                        self._backscatter,
-                        self._backscatter,
+        #     wp.launch(
+        #             dim=data[rgb_annotator].shape[:2],
+        #             kernel=UW_render_2,
+        #             inputs=[
+        #                 uw_image,
+        #                 data[dist_to_cam_annotator],
+        #                 self._scale,
+        #                 self._veiling,
+        #                 self._backscatter,
+        #                 self._backscatter,
 
-                    ],
-                    outputs=[
-                        uw_image
-                    ]
-                )  
-        else:
-            wp.launch(
-                    dim=data[rgb_annotator].shape[:2],
-                    kernel=UW_render_2,
-                    inputs=[
-                        data[rgb_annotator],
-                        data[dist_to_cam_annotator],
-                        self._scale,
-                        self._veiling,
-                        self._backscatter,
-                        self._backscatter,
+        #             ],
+        #             outputs=[
+        #                 uw_image
+        #             ]
+        #         )  
+        # else:
+        #     wp.launch(
+        #             dim=data[rgb_annotator].shape[:2],
+        #             kernel=UW_render_2,
+        #             inputs=[
+        #                 data[rgb_annotator],
+        #                 data[dist_to_cam_annotator],
+        #                 self._scale,
+        #                 self._veiling,
+        #                 self._backscatter,
+        #                 self._backscatter,
 
-                    ],
-                    outputs=[
-                        uw_image
-                    ]
-                )  
+        #             ],
+        #             outputs=[
+        #                 uw_image
+        #             ]
+        #         )  
 
 
         self.uw_image_np = uw_image.numpy()
@@ -464,8 +466,6 @@ class UWCam_KittiWriter(Writer):
             else:
                 occlusion_estimation = 2
 
-            if occlusion_estimation == 2:
-                continue
 
 
             # Only compute object's 3d information after the above test
@@ -1263,8 +1263,8 @@ class UWCam_KittiWriter(Writer):
             return False
         if not self._is_bbox_big_enough(bbox_tight, self._bbox_height_threshold):
             return False
-        if not self._is_bbox_image_region_visible_by_veiling(self.uw_image_np, bbox_tight, self._veiling_visibility_threshold):
-            return False
+        # if not self._is_bbox_image_region_visible_by_veiling(self.uw_image_np, bbox_tight, self._veiling_visibility_threshold):
+        #     return False
         if not self._is_bbox_in_scope(self.uw_image_np, bbox_tight):
             return False
         # if not self._obj_beyond_max_distance:

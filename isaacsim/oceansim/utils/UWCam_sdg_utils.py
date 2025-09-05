@@ -100,6 +100,8 @@ import re
 from itertools import chain
 from collections import defaultdict
 import json
+from pathlib import Path
+
 
 import omni.kit.app
 import omni.kit.commands
@@ -111,7 +113,7 @@ import carb.settings
 from isaacsim.core.utils.semantics import  remove_labels, add_labels, upgrade_prim_semantics_to_labels
 from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.storage.native import get_assets_root_path
-from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics
+from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.core.utils.transformations import get_relative_transform
 
@@ -128,7 +130,7 @@ def find_usd_files_recursively(root_folder):
     usd_files = []
     for dirpath, dirnames, filenames in os.walk(root_folder):
         for filename in filenames:
-            if filename.lower().endswith('.usd'):
+            if filename.lower().endswith(('.usd', '.usdc', '.usdz')):
                 abs_path = os.path.abspath(os.path.join(dirpath, filename))
                 usd_files.append(abs_path)
     return usd_files
@@ -252,6 +254,7 @@ def enable_global_volumetric_effects(enable: bool = True,
                           tooltip="\nAnisotropy of the volumetric phase function, or the degree of light scattering asymmetry."
                                   "\n-1 is back-scattered, 0 is isotropic, 1 is forward-scattered.")
     """
+    # carb.settings.get_settings().set("/rtx/raytracing/inscattering/atmosphereHeight", -2000)
     carb.settings.get_settings().set("/rtx/raytracing/globalVolumetricEffects/enabled", enable)
     carb.settings.get_settings().set("/rtx/raytracing/inscattering/densityMult", density_mult)
     carb.settings.get_settings().set("/rtx/raytracing/inscattering/anisotropyFactor", anisotropy_factor)
@@ -506,6 +509,48 @@ def unmask_objects(objects: list[Usd.Prim]) -> None:
     """Unmask a list of objects."""
     for obj in objects:
         obj.GetAttribute("visibility").Set("inherited")
+
+def add_material(material_folder_path: str) -> list[UsdShade.Material]:
+    """
+    Add a material to the stage.
+    """
+    
+    stage = omni.usd.get_context().get_stage()
+    stage.DefinePrim("/SDG_materials", "Scope")
+
+    # Convert to Path object for easier handling
+    materials_path = Path(material_folder_path)
+    
+    # Check if the path exists
+    if not materials_path.exists():
+        print(f"Error: Path '{material_folder_path}' does not exist.")
+        print(f"Not adding any material.")
+        return []
+    
+    # Walk through all subdirectories
+    materials = []
+    for root, dirs, files in os.walk(materials_path):
+        # Look for files with .usd extension (including .usdc, .usda, etc.)
+        for file in files:
+            if file.lower().endswith(('.usd', '.usdc', '.usda', '.usdz')):
+                material_name = file.split("_")[0]
+                print(f"Adding material: {material_name}")
+                full_path = os.path.join(root, file)
+                material_prim = add_reference_to_stage(prim_path=f'/SDG_materials/{material_name}', usd_path=full_path, prim_type="Material")
+                materials.append(UsdShade.Material(material_prim))
+    
+    
+    return materials
+
+def change_material(materials: list[UsdShade.Material], prim: Usd.Prim) -> None:
+    """
+    NOTE: This function contains hardcoded paths, so it is not generalizable.
+    Shift the diffuse texture of a material to the next texture in the list.
+    """
+    # diffuse_texture_shader = stage.GetPrimAtPath("/root/_materials/tex_u1_v1/Image_Texture")
+    # diffuse_texture_shader.GetAttribute("inputs:file").Set("./textures/tex_u1_v1_diffuse.jp")
+    random_material = random.choice(materials)
+    UsdShade.MaterialBindingAPI(prim).Bind(random_material, UsdShade.Tokens.strongerThanDescendants)
 
 # def add_default_objects(physics=False):
 #     full_objs_list = []
