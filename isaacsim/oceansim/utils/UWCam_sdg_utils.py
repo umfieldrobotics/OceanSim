@@ -91,7 +91,6 @@ COU_LABELS = {
 }
 
 
-COU_OBJECTS_FOLDER_PATH = "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready/"
 
 import math
 import os
@@ -152,7 +151,7 @@ def parse_object_folder(objects_folder_path):
 
 
 def add_COU_objects(
-                objects_folder_path=COU_OBJECTS_FOLDER_PATH,
+                objects_folder_path,
                 override_semantic_mapping=COU_LABELS,
                 root_path="SDG_objects",
                 name_prefix="", 

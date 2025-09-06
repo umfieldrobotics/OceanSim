@@ -171,8 +171,7 @@ class UWCam_KittiWriter(Writer):
             self._UW_param = UW_param
             print(f"Using render param {self._UW_param}")
         
-        self._device = str(wp.get_preferred_device())
-        print(f"Using device {self._device}")
+
         self.colorize_instance_segmentation = colorize_instance_segmentation
 
         if mapping_path and mapping_dict:
@@ -206,10 +205,10 @@ class UWCam_KittiWriter(Writer):
 
         self.annotators = [
             AnnotatorRegistry.get_annotator(
-                "rgb", device=self._device
+                "rgb"
             ),
             AnnotatorRegistry.get_annotator(
-                "normals", device=self._device
+                "normals"
             ),
             "bounding_box_2d_tight_fast",
             "bounding_box_2d_loose_fast",
@@ -220,7 +219,7 @@ class UWCam_KittiWriter(Writer):
                 "instance_segmentation_fast", init_params={"colorize": colorize_instance_segmentation}
             ),
             AnnotatorRegistry.get_annotator(
-                "distance_to_camera", device=self._device
+                "distance_to_camera"
             ),
             "bounding_box_3d_fast", 
             "camera_params",
@@ -246,7 +245,7 @@ class UWCam_KittiWriter(Writer):
     def _write_rgb(self, data, sub_dir: str, rgb_annotator: str, dist_to_cam_annotator:str, camera_param_annotator:str, normals_annotator:str):
 
         if self._debug_mode:
-            self._debug_data["raw_rgb"] = data[rgb_annotator].numpy()
+            self._debug_data["raw_rgb"] = data[rgb_annotator]
         width, height = data[rgb_annotator].shape[:2]
         uw_image = wp.empty(shape=data[rgb_annotator].shape, dtype=wp.uint8)
         uw_rgb_dir_name = "uw_image_02" if self._use_kitti_dir_names else "uw_rgb"
@@ -340,7 +339,7 @@ class UWCam_KittiWriter(Writer):
         #         )  
 
 
-        self.uw_image_np = uw_image.numpy()
+        self.uw_image_np = uw_image
         self._backend.schedule(F.write_image, data=uw_image, path=uw_rgb_file_path)
 
     def _write_object_pose(self, data, sub_dir: str, bbox_3d_annotator: str, camera_param_annotator: str):
@@ -840,7 +839,7 @@ class UWCam_KittiWriter(Writer):
         
     
     def _write_distance_to_camera(self, data, sub_dir: str, annotator: str):
-        distance_to_camera_metres = data[annotator].numpy()
+        distance_to_camera_metres = data[annotator]
         distance_to_camera_metres = np.nan_to_num(distance_to_camera_metres, posinf=0.0)
         distance_to_camera_uint16 = (distance_to_camera_metres * 256).astype(np.uint16)
         file_path = os.path.join(sub_dir, "depth", f"{self._frame_id}.png")

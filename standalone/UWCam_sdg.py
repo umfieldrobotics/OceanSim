@@ -16,7 +16,7 @@ config = {
     "total_captures" : 15,
     "camera_collider_radius": 0.1,
     "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/Collected_padded_pebble_new/padded_pebble_water.usd",
-    "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets_simready",
+    "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_6_scissors/",
     "texture_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/SDG_materials/",
     "rt_subframes": 16,
     "resolution": [1024, 1024],
@@ -218,7 +218,7 @@ def run_sdg(config: dict=config):
         print(f"[SDG] Created camera colliders with radius {camera_collider_radius}")
     
     # Add COU objects
-    objects, kitti_labels = add_COU_objects(objects_folder_path=objects_url, physics=True)
+    objects, kitti_labels = add_COU_objects(objects_folder_path=objects_url, override_semantic_mapping=None, physics=True)
     print(f"[SDG] {len(objects)} numbers of COU objects being added to the scene")
 
     # Resolve any centimeter-meter scale issues of the assets
