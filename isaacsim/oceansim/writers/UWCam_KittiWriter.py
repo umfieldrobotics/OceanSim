@@ -172,6 +172,7 @@ class UWCam_KittiWriter(Writer):
             print(f"Using render param {self._UW_param}")
         
         self._device = str(wp.get_preferred_device())
+        print(f"Using device {self._device}")
         self.colorize_instance_segmentation = colorize_instance_segmentation
 
         if mapping_path and mapping_dict:
@@ -254,6 +255,7 @@ class UWCam_KittiWriter(Writer):
         self._scale = random.uniform(self._UW_param["scale_range"][0], self._UW_param["scale_range"][1])
         self._veiling = random.choice(list(self._UW_param["veiling"].values()))
         self._backscatter = random.choice(list(self._UW_param["backscatter"].values()))
+        
         uw_image = data[rgb_annotator]
         # if self._enable_caustics:
         #     _caustics_tex = wp.empty(shape=(height, width, 4), dtype=wp.uint8)
@@ -472,10 +474,9 @@ class UWCam_KittiWriter(Writer):
             bbox3d_info = self._process_bounding_box_3d_single(bbox3d_id_to_bbox[id], data[camera_param_annotator])
             
             # Check if object is beyond max distance, skip if it is
-            if self._obj_beyond_max_distance(bbox3d_info["location_world_frame"], data[camera_param_annotator]):
-                continue
+            # if self._obj_beyond_max_distance(bbox3d_info["location_world_frame"], data[camera_param_annotator]):
+            #     continue
 
-            # TODO: unlabel objects that are past the max_distance and make the same as the background label
             
             semantic_label = data[box_annotator]["info"]["idToLabels"].get(box["semanticId"])
 
@@ -655,8 +656,8 @@ class UWCam_KittiWriter(Writer):
             obj["location_world_frame"] = location_world_frame.tolist()
 
             # if object is beyond max_distance, skip
-            if self._obj_beyond_max_distance(location_world_frame, camera_params):
-                continue
+            # if self._obj_beyond_max_distance(location_world_frame, camera_params):
+            #     continue
 
             rotation_matrix_world_frame = local_to_world_tf[:3, :3]
             obj["rotation_matrix_world_frame"] = rotation_matrix_world_frame.tolist()
@@ -785,30 +786,35 @@ class UWCam_KittiWriter(Writer):
         inst_dir_name = "instance" if self._use_kitti_dir_names else "instance_segmentation"
         seg_filepath = os.path.join(sub_dir, "semantic_segmentation", f"{self._frame_id}.png")
         seg_mapping_filepath = os.path.join(sub_dir, "semantic_mapping.json")
+
         inst_filepath = os.path.join(sub_dir, inst_dir_name, f"{self._frame_id}.png")
 
-        # Get instance data and metadata
         inst_id_to_labels = data[inst_annotator]["info"]["idToSemantics"]
-        inst_seg_img = data[inst_annotator]["data"]
-        height, width = inst_seg_img.shape[:2]
-        
-        # Schedule semantic mapping file write
         self._backend.schedule(F.write_json, data=self.mapping_dict, path=seg_mapping_filepath)
 
-        # Handle optional colorized instance segmentation
+        inst_seg_img = data[inst_annotator]["data"]
+        height, width = inst_seg_img.shape[:2]
+
         if self.colorize_instance_segmentation:
             inst_col_filepath = os.path.join(sub_dir, "instance_rgb", f"{self._frame_id}.png")
-            inst_seg_img_colorized = inst_seg_img.view(np.uint8).reshape(height, width, -1)
+            inst_seg_img_colorized = inst_seg_img.view(np.uint8)
+            inst_seg_img_colorized = inst_seg_img_colorized.reshape(height, width, -1)
             self._backend.schedule(F.write_image, data=inst_seg_img_colorized, path=inst_col_filepath)
 
-        # Get distance data for filtering
-        distance_data = self._get_distance_data(data, inst_annotator)
-        
-        # Prepare for instance processing
-        background_semantic_id = self.mapping_dict.get("BACKGROUND", 1)
-        inst_seg_uint32 = self._prepare_instance_data(inst_seg_img, inst_id_to_labels)
-        
-        # Initialize output arrays
+        # Re-label instances to be sequentially numbered
+        # The instance segmentation is a 16bit png where the lower 8 bit contain the semantic ID and the higher 8 bits
+        # contain the instance ID
+        # Semantic segmentation is saved as a 3 channel image where each channel is the same 8 bit semantic ID
+        # Instance IDs start from 1
+        cur_idx = {}
+        if self.colorize_instance_segmentation:
+            # convert ids to uint32
+            inst_id_to_labels = {
+                (iid[0] | iid[1] << 8 | iid[2] << 16 | iid[3] << 24): v for iid, v in inst_id_to_labels.items()
+            }
+
+        instance_ids = list(inst_id_to_labels.keys())
+        inst_seg_uint32 = inst_seg_img.view(np.uint32).squeeze()
         inst_seg_img_renumbered = np.zeros((height, width), dtype=np.uint16)
         sem_seg_img_renumbered = np.zeros((height, width), dtype=np.uint8)
         for i, iid in enumerate(instance_ids):
@@ -828,151 +834,10 @@ class UWCam_KittiWriter(Writer):
                 inst_seg_img_renumbered[inst_seg_uint32 == iid] = cur_idx[cur_semantics] + semantics_renumbered * 256
                 sem_seg_img_renumbered[inst_seg_uint32 == iid] = semantics_renumbered
 
-        # Write output files
         self._backend.schedule(F.write_image, data=inst_seg_img_renumbered, path=inst_filepath)
         self._backend.schedule(F.write_image, data=sem_seg_img_renumbered, path=seg_filepath)
-
-    def _get_distance_data(self, data, inst_annotator):
-        """Get appropriate distance data for filtering."""
-        distance_annotator = "distance_to_camera"
+    
         
-        # Handle render products for multi-camera scenarios
-        render_products = [k for k in data.keys() if k.startswith("rp_")]
-        if len(render_products) > 1:
-            for rp in render_products:
-                rp_name = rp[3:]
-                if f"{inst_annotator}-{rp_name}" in data or inst_annotator.endswith(rp_name):
-                    distance_annotator = f"distance_to_camera-{rp_name}"
-                    break
-        
-        if distance_annotator in data:
-            distance_data = data[distance_annotator].numpy()
-            # Convert inf values to large finite numbers for robust processing
-            return np.nan_to_num(distance_data, posinf=1000.0)
-        
-        return None
-
-    def _prepare_instance_data(self, inst_seg_img, inst_id_to_labels):
-        """Prepare instance segmentation data for processing."""
-        if self.colorize_instance_segmentation:
-            # Convert 4-byte color IDs to uint32
-            inst_id_to_labels = {
-                (iid[0] | iid[1] << 8 | iid[2] << 16 | iid[3] << 24): v 
-                for iid, v in inst_id_to_labels.items()
-            }
-        
-        return inst_seg_img.view(np.uint32).squeeze()
-
-    def _determine_instance_action(self, instance_id, inst_id_to_labels, inst_seg_uint32, 
-                                distance_data, background_semantic_id):
-        """
-        Determine what action to take for an instance based on various criteria.
-        
-        Returns:
-            dict: Action specification with 'type' and relevant parameters
-        """
-        semantic_class = inst_id_to_labels[instance_id].get("class", "unlabelled")
-        
-        # Check various filtering criteria
-        is_unlabelled = semantic_class.lower() == "unlabelled"
-        is_background = semantic_class.lower() == "background"
-        is_in_mapping = semantic_class in self.mapping_dict
-        
-        # Validate bounding box
-        bbox_tight = self._get_bbox_from_instance_id(inst_seg_uint32, instance_id)
-        is_valid_bbox = self._is_bbox_valid(bbox_tight)
-        
-        # Check distance filtering
-        is_beyond_max_distance = self._is_beyond_max_distance(
-            instance_id, inst_seg_uint32, distance_data
-        )
-        
-        # Determine action based on criteria priority
-        if is_beyond_max_distance:
-            return {
-                'type': 'set_background',
-                'semantic_id': background_semantic_id,
-                'reason': 'beyond_max_distance'
-            }
-        elif is_background:
-            return {
-                'type': 'set_background',
-                'semantic_id': background_semantic_id,
-                'reason': 'explicit_background'
-            }
-        elif not is_in_mapping or is_unlabelled or not is_valid_bbox:
-            return {
-                'type': 'set_invalid',
-                'reason': f"not_in_mapping={not is_in_mapping}, unlabelled={is_unlabelled}, invalid_bbox={not is_valid_bbox}"
-            }
-        else:
-            return {
-                'type': 'process_valid',
-                'semantic_class': semantic_class,
-                'semantic_id': self.mapping_dict.get(semantic_class, 0)
-            }
-
-    def _is_beyond_max_distance(self, instance_id, inst_seg_uint32, distance_data):
-        """
-        Check if an instance is beyond the maximum distance threshold.
-        
-        Uses pixel-level distance data and median filtering for robustness.
-        """
-        if distance_data is None or not hasattr(self, '_enable_distance_filter') or not self._enable_distance_filter:
-            return False
-        
-        if not hasattr(self, '_max_distance'):
-            return False
-        
-        # Get pixels belonging to this instance
-        instance_mask = inst_seg_uint32 == instance_id
-        if not np.any(instance_mask):
-            return False
-        
-        # Get distance values for instance pixels
-        instance_distances = distance_data[instance_mask]
-        
-        # Filter out zero/invalid distances
-        valid_distances = instance_distances[instance_distances > 0]
-        
-        if len(valid_distances) == 0:
-            return False
-        
-        # Use median distance to be robust against outliers
-        median_distance = np.median(valid_distances)
-        return median_distance > self._max_distance
-
-    def _apply_instance_action(self, action, instance_id, inst_seg_uint32, 
-                            inst_seg_img_renumbered, sem_seg_img_renumbered, 
-                            instance_counter, inst_id_to_labels):
-        """Apply the determined action to the instance segmentation arrays."""
-        instance_mask = inst_seg_uint32 == instance_id
-        
-        if action['type'] == 'set_background':
-            semantic_id = action['semantic_id']
-            inst_seg_img_renumbered[instance_mask] = semantic_id * 256
-            sem_seg_img_renumbered[instance_mask] = semantic_id
-            
-        elif action['type'] == 'set_invalid':
-            # Set invalid/unlabelled objects to 0
-            inst_seg_img_renumbered[instance_mask] = 0
-            sem_seg_img_renumbered[instance_mask] = 0
-            
-        elif action['type'] == 'process_valid':
-            # Process valid instances with sequential numbering
-            semantic_class = action['semantic_class']
-            semantic_id = action['semantic_id']
-            
-            # Use string representation of full instance info for counter key
-            counter_key = str(inst_id_to_labels[instance_id])
-            instance_counter.setdefault(counter_key, 0)
-            instance_counter[counter_key] += 1
-            
-            # Encode: instance_number (high 8 bits) + semantic_id (low 8 bits)
-            encoded_id = instance_counter[counter_key] + semantic_id * 256
-            
-            inst_seg_img_renumbered[instance_mask] = encoded_id
-            sem_seg_img_renumbered[instance_mask] = semantic_id
     
     def _write_distance_to_camera(self, data, sub_dir: str, annotator: str):
         distance_to_camera_metres = data[annotator].numpy()
@@ -1252,8 +1117,7 @@ class UWCam_KittiWriter(Writer):
         #     return False
         if not self._is_bbox_in_scope(self.uw_image_np, bbox_tight):
             return False
-        # if not self._obj_beyond_max_distance:
-        #     return False
+
         return True
 
     def _is_bbox_in_scope(self, image: np.ndarray, bbox_tight: dict):

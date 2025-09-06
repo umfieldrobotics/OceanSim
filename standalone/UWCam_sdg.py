@@ -13,13 +13,11 @@ config = {
             "--/log/outputStreamLevel=error"
             ]
     },
-    "total_captures" : 5000,
+    "total_captures" : 15,
     "camera_collider_radius": 0.1,
-    # "env_url": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/Collected_pebble_floor/padded_pebble_floor_water.usd",
-    # "env_url": "C:/Users/mahaoyu/Desktop/pebble_floor_old/padded_pebble_floor_water.usd",
-    "env_url": "C:/Users/mahaoyu/Desktop/padded_pebble_water.usd",
-    # "objects_url": "/frog-drive/ocean-sim/sim2real/ObjectAssets_simready",
-    "objects_url": "C:/Users/mahaoyu/Desktop/ObjectAssets_simready_2",
+    "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/Collected_padded_pebble_new/padded_pebble_water.usd",
+    "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets_simready",
+    "texture_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/SDG_materials/",
     "rt_subframes": 16,
     "resolution": [1024, 1024],
     "masked_objects_ratio": 0.5,
@@ -34,9 +32,7 @@ config = {
             # Type of the writer to use (e.g. PoseWriter, BasicWriter, etc.) and the kwargs to pass to the writer init
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                # "output_dir": "C:/Users/mahaoyu/Desktop/SDG/",
-                "output_dir": "Y:/projects/OceanSim/sim2real/SDG/SDG_8_28_2025/",
-                # "output_dir": "/home/haoyu/Desktop/viz/",
+                "output_dir": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_data/SDG_test",
                 "colorize_instance_segmentation": False,
                 "veiling_visibility_threshold": 12, # This is not used now
                 "use_tight_bbox": True,
@@ -47,7 +43,7 @@ config = {
     ],
     "obj_workspace": [-0.75, -0.75, 0.15, 0.75, 0.75, 0.6],
     "cam_workspace" : [-1.0, -1.0, 0.3, 1.0, 1.0, 0.7],
-    "disable_render_products": True,
+    "disable_render_products": False,
     "debug_mode": False,
     "path_tracing": False,
 }
@@ -259,8 +255,8 @@ def run_sdg(config: dict=config):
 
     print(f"[SDG] Created {len(writers)} writers")
 
-
-    materials = add_material(material_folder_path="C:/Users/mahaoyu/Desktop/materials")
+    material_url = config.get("texture_url", "")
+    materials = add_material(material_folder_path=material_url)
     scene_xform = stage.GetPrimAtPath("/World/padded_pebble")
 
     capture_counter = 0
