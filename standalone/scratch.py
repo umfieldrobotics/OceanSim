@@ -122,6 +122,9 @@ mesh.GetPrim().CreateAttribute("refinementEnableOverride", Sdf.ValueTypeNames.Bo
 mesh.GetPrim().CreateAttribute("refinementLevel", Sdf.ValueTypeNames.Int).Set(4)
 
 # TODO: Bind the material to the mesh
+# When coding PBR node, make sure texture has the right reading format (like sRGB or raw)
+# !!! If displacement texture is sRGB, the displacement will be wrong !!!
+
 
 # Load the height map
 img = Image.open(height_map_path)
