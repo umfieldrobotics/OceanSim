@@ -36,7 +36,7 @@ DULUTH_PARAM_DICT = {
 
     
 UW_PARAM_DICT = {
-    "scale_range": (0.2, 0.6),
+    "scale_range": (1.0, 1.0),
     "veiling": {
             "deep_sea": wp.vec3f(0.0, 0.0, 0.28),
             # "shallow_water": wp.vec3f(0.05, 0.11, 0.7),
@@ -45,6 +45,7 @@ UW_PARAM_DICT = {
             "mud": wp.vec3f(0.259, 0.259, 0.024),
             "mhl": wp.vec3f(0.0, 0.3021, 0.239),
             "murky": wp.vec3f(0.275, 0.212, 0.071),
+            "seaclear_sea_urchin": wp.vec3f(0.08, 0.42, 0.52),
         },
     "backscatter": {
             "Type I": wp.vec3f(0.905, 0.961, 0.982),
@@ -121,8 +122,6 @@ class UWCam_KittiWriter(Writer):
         use_kitti_dir_names: bool = False,
         UW_param: Union[str, dict] = UW_PARAM_DICT,
         cuboid_keypoints_order: list = ["Center", "LDB", "LDF", "LUB", "LUF", "RDB", "RDF", "RUB", "RUF"],
-        enable_distance_filter: bool = True,
-        max_distance: float = 10.0, # CHANGE THIS to adjust for distance for each pixel
         debug_mode: bool = False,
         enable_caustics: bool = False,
     ):
@@ -138,7 +137,7 @@ class UWCam_KittiWriter(Writer):
             )
         else:
             self._backend = BackendDispatch(output_dir=output_dir)
-        self.backend = self._backend
+        self.backend = self._backend # I know, boilerplate...
         self._omit_semantic_type = omit_semantic_type
         self._bbox_height_threshold = bbox_height_threshold
         self._use_tight_bbox = use_tight_bbox
@@ -146,10 +145,7 @@ class UWCam_KittiWriter(Writer):
         self._bbox2d_fully_visible_threshold = bbox2d_fully_visible_threshold
         self._use_kitti_dir_names = use_kitti_dir_names
         self._cuboid_keypoints_order = cuboid_keypoints_order
-        self._enable_distance_filter = enable_distance_filter
-        self._max_distance = max_distance
         self._debug_mode = debug_mode
-        #TODO: figure out a better way to handle too difficult detection cases
         self._veiling_visibility_threshold = veiling_visibility_threshold
         self._enable_caustics = enable_caustics
         if self._debug_mode:
@@ -205,10 +201,10 @@ class UWCam_KittiWriter(Writer):
 
         self.annotators = [
             AnnotatorRegistry.get_annotator(
-                "rgb"
+                "rgb", device="cuda",
             ),
             AnnotatorRegistry.get_annotator(
-                "normals"
+                "normals", device="cuda",
             ),
             "bounding_box_2d_tight_fast",
             "bounding_box_2d_loose_fast",
@@ -219,7 +215,7 @@ class UWCam_KittiWriter(Writer):
                 "instance_segmentation_fast", init_params={"colorize": colorize_instance_segmentation}
             ),
             AnnotatorRegistry.get_annotator(
-                "distance_to_camera"
+                "distance_to_camera", device="cuda"
             ),
             "bounding_box_3d_fast", 
             "camera_params",
@@ -245,7 +241,7 @@ class UWCam_KittiWriter(Writer):
     def _write_rgb(self, data, sub_dir: str, rgb_annotator: str, dist_to_cam_annotator:str, camera_param_annotator:str, normals_annotator:str):
 
         if self._debug_mode:
-            self._debug_data["raw_rgb"] = data[rgb_annotator]
+            self._debug_data["raw_rgb"] = data[rgb_annotator].numpy()
         width, height = data[rgb_annotator].shape[:2]
         uw_image = wp.empty(shape=data[rgb_annotator].shape, dtype=wp.uint8)
         uw_rgb_dir_name = "uw_image_02" if self._use_kitti_dir_names else "uw_rgb"
@@ -254,89 +250,87 @@ class UWCam_KittiWriter(Writer):
         self._scale = random.uniform(self._UW_param["scale_range"][0], self._UW_param["scale_range"][1])
         self._veiling = random.choice(list(self._UW_param["veiling"].values()))
         self._backscatter = random.choice(list(self._UW_param["backscatter"].values()))
-        
+        self._attenuation = self._backscatter
         uw_image = data[rgb_annotator]
-        # if self._enable_caustics:
-        #     _caustics_tex = wp.empty(shape=(height, width, 4), dtype=wp.uint8)
-        #     _world_pos = wp.empty(shape=(height, width, 3), dtype=wp.float32)
+        if self._enable_caustics:
+            _caustics_tex = wp.empty(shape=(height, width, 4), dtype=wp.uint8)
+            _world_pos = wp.empty(shape=(height, width, 3), dtype=wp.float32)
 
-        #     wp.launch(
-        #         kernel=water_caustics,
-        #         dim=(width, height),  # (x, y)
-        #         inputs=[_caustics_tex, width, height, self._frame_id, 2.0],
-        #     )
+            wp.launch(
+                kernel=water_caustics,
+                dim=(width, height),  # (x, y)
+                inputs=[_caustics_tex, width, height, self._frame_id, 2.0],
+            )
 
 
-        #     # Launch depth to world kernel once (this doesn't change)
-        #     wp.launch(
-        #         kernel=depth_to_world_pos,
-        #         dim=(width, height),  # Launch dimensions (width, height)
-        #         inputs=[
-        #             data[dist_to_cam_annotator],
-        #             wp.mat44(data[camera_param_annotator]["cameraProjection"].reshape(4, 4)),
-        #             wp.mat44(data[camera_param_annotator]["cameraViewTransform"].reshape(4, 4)),
-        #             width,
-        #             height
-        #         ],
-        #         outputs=[_world_pos],
-        #         device=str(self._device)
-        #     )
-        #     wp.launch(
-        #         kernel=blend_caustics,
-        #         dim=(width, height),
-        #         inputs=[
-        #             data[rgb_annotator],
-        #             _world_pos,
-        #             data[normals_annotator],
-        #             _caustics_tex,
-        #             wp.vec3f(0.0, 0.0, 1.0),
-        #             1.0,       # blend_weight
-        #             random.uniform(0.5, 1.5),       # uv_scale_x (horizontal scaling)
-        #             random.uniform(0.5, 1.5),       # uv_scale_y (vertical scaling)
-        #             0.0,       # depth_min
-        #             100.0,   # depth_max
-        #             width,         # tex_w
-        #             height,         # tex_h
-        #         ],
-        #         outputs=[uw_image],
-        #         device=str(self._device)
-        #     )
+            # Launch depth to world kernel once (this doesn't change)
+            wp.launch(
+                kernel=depth_to_world_pos,
+                dim=(width, height),  # Launch dimensions (width, height)
+                inputs=[
+                    data[dist_to_cam_annotator],
+                    wp.mat44(data[camera_param_annotator]["cameraProjection"].reshape(4, 4)),
+                    wp.mat44(data[camera_param_annotator]["cameraViewTransform"].reshape(4, 4)),
+                    width,
+                    height
+                ],
+                outputs=[_world_pos],
+            )
+            wp.launch(
+                kernel=blend_caustics,
+                dim=(width, height),
+                inputs=[
+                    data[rgb_annotator],
+                    _world_pos,
+                    data[normals_annotator],
+                    _caustics_tex,
+                    wp.vec3f(0.0, 0.0, 1.0),
+                    1.0,       # blend_weight
+                    random.uniform(0.5, 1.5),       # uv_scale_x (horizontal scaling)
+                    random.uniform(0.5, 1.5),       # uv_scale_y (vertical scaling)
+                    0.0,       # depth_min
+                    100.0,   # depth_max
+                    width,         # tex_w
+                    height,         # tex_h
+                ],
+                outputs=[uw_image],
+            )
 
 
         
-        #     wp.launch(
-        #             dim=data[rgb_annotator].shape[:2],
-        #             kernel=UW_render_2,
-        #             inputs=[
-        #                 uw_image,
-        #                 data[dist_to_cam_annotator],
-        #                 self._scale,
-        #                 self._veiling,
-        #                 self._backscatter,
-        #                 self._backscatter,
+            wp.launch(
+                    dim=data[rgb_annotator].shape[:2],
+                    kernel=UW_render_2,
+                    inputs=[
+                        uw_image,
+                        data[dist_to_cam_annotator],
+                        self._scale,
+                        self._veiling,
+                        self._backscatter,
+                        self._attenuation,
 
-        #             ],
-        #             outputs=[
-        #                 uw_image
-        #             ]
-        #         )  
-        # else:
-        #     wp.launch(
-        #             dim=data[rgb_annotator].shape[:2],
-        #             kernel=UW_render_2,
-        #             inputs=[
-        #                 data[rgb_annotator],
-        #                 data[dist_to_cam_annotator],
-        #                 self._scale,
-        #                 self._veiling,
-        #                 self._backscatter,
-        #                 self._backscatter,
+                    ],
+                    outputs=[
+                        uw_image
+                    ]
+                )  
+        else:
+            wp.launch(
+                    dim=data[rgb_annotator].shape[:2],
+                    kernel=UW_render_2,
+                    inputs=[
+                        data[rgb_annotator],
+                        data[dist_to_cam_annotator],
+                        self._scale,
+                        self._veiling,
+                        self._backscatter,
+                        self._attenuation,
 
-        #             ],
-        #             outputs=[
-        #                 uw_image
-        #             ]
-        #         )  
+                    ],
+                    outputs=[
+                        uw_image
+                    ]
+                )  
 
 
         self.uw_image_np = uw_image
@@ -349,47 +343,47 @@ class UWCam_KittiWriter(Writer):
         self._backend.schedule(F.write_json, path=pose_file_path, data=objs_data, indent=2)
 
     # Write a function to avoid creating bounding boxes or recording information for any objects located beyond a specified distance (e.g., 10 meters, set as a variable)
-    def _obj_beyond_max_distance(self, obj_location_world_frame, camera_params, max_distance=None, enable_filter=None):
-        """
-        Determines whether an object is beyond the specified max distance from the camera.
+    # def _obj_beyond_max_distance(self, obj_location_world_frame, camera_params, max_distance=None, enable_filter=None):
+    #     """
+    #     Determines whether an object is beyond the specified max distance from the camera.
         
-        Parameters:
-        - obj_location_world_frame (list or np.array): [x, y, z] position of the object in world coordinates.
-        - camera_params (dict): Camera parameters containing the camera view transform.
-        - max_distance (float, optional): Maximum allowable distance in meters. Uses self._max_distance if None.
-        - enable_filter (bool, optional): If False, the function always returns False (i.e., no filtering).
-                                        Uses self._enable_distance_filter if None.
+    #     Parameters:
+    #     - obj_location_world_frame (list or np.array): [x, y, z] position of the object in world coordinates.
+    #     - camera_params (dict): Camera parameters containing the camera view transform.
+    #     - max_distance (float, optional): Maximum allowable distance in meters. Uses self._max_distance if None.
+    #     - enable_filter (bool, optional): If False, the function always returns False (i.e., no filtering).
+    #                                     Uses self._enable_distance_filter if None.
         
-        Returns:
-        - bool: True if object is beyond max_distance and filtering is enabled, False otherwise.
-        """
-        # Determine whether distance filtering is enabled
-        # if distance filtering is enabled and use default filter and distance
-        if enable_filter is None:
-            enable_filter = self._enable_distance_filter
-        if max_distance is None:
-            max_distance = self._max_distance
+    #     Returns:
+    #     - bool: True if object is beyond max_distance and filtering is enabled, False otherwise.
+    #     """
+    #     # Determine whether distance filtering is enabled
+    #     # if distance filtering is enabled and use default filter and distance
+    #     if enable_filter is None:
+    #         enable_filter = self._enable_distance_filter
+    #     if max_distance is None:
+    #         max_distance = self._max_distance
 
-        # if disabled, keep objects
-        if not enable_filter:
-            return False
+    #     # if disabled, keep objects
+    #     if not enable_filter:
+    #         return False
         
-        # Reshape camera view transform matrix (4x4)
-        world_to_camera_tf = camera_params["cameraViewTransform"].reshape(4, 4)
+    #     # Reshape camera view transform matrix (4x4)
+    #     world_to_camera_tf = camera_params["cameraViewTransform"].reshape(4, 4)
         
-        # Invert the matrix to get the camera's position in world coordinates
-        camera_to_world_tf = np.linalg.inv(world_to_camera_tf)
-        # The translation vector (x,y,z) is stored in the last row (index 3) of the inverse matrix
-        camera_position_world = camera_to_world_tf[3, :3]  # Extract translation component for camera location in world space
+    #     # Invert the matrix to get the camera's position in world coordinates
+    #     camera_to_world_tf = np.linalg.inv(world_to_camera_tf)
+    #     # The translation vector (x,y,z) is stored in the last row (index 3) of the inverse matrix
+    #     camera_position_world = camera_to_world_tf[3, :3]  # Extract translation component for camera location in world space
         
-        # Convert object position to numpy array
-        obj_position = np.array(obj_location_world_frame[:3])
+    #     # Convert object position to numpy array
+    #     obj_position = np.array(obj_location_world_frame[:3])
         
-        # Compute Euclidean distance
-        distance = np.linalg.norm(obj_position - camera_position_world)
+    #     # Compute Euclidean distance
+    #     distance = np.linalg.norm(obj_position - camera_position_world)
 
-        # Return True only if the object is farther than the limit
-        return distance > max_distance
+    #     # Return True only if the object is farther than the limit
+    #     return distance > max_distance
 
     def _write_object_detection(
         self,
@@ -466,6 +460,7 @@ class UWCam_KittiWriter(Writer):
                 occlusion_estimation = 1
             else:
                 occlusion_estimation = 2
+                continue  # Skip if heavily occluded
 
 
 
@@ -654,9 +649,6 @@ class UWCam_KittiWriter(Writer):
             location_world_frame = local_to_world_tf[3, :3]
             obj["location_world_frame"] = location_world_frame.tolist()
 
-            # if object is beyond max_distance, skip
-            # if self._obj_beyond_max_distance(location_world_frame, camera_params):
-            #     continue
 
             rotation_matrix_world_frame = local_to_world_tf[:3, :3]
             obj["rotation_matrix_world_frame"] = rotation_matrix_world_frame.tolist()
@@ -840,7 +832,7 @@ class UWCam_KittiWriter(Writer):
     
     def _write_distance_to_camera(self, data, sub_dir: str, annotator: str):
         distance_to_camera_metres = data[annotator]
-        distance_to_camera_metres = np.nan_to_num(distance_to_camera_metres, posinf=0.0)
+        distance_to_camera_metres = np.nan_to_num(distance_to_camera_metres.numpy(), posinf=0.0)
         distance_to_camera_uint16 = (distance_to_camera_metres * 256).astype(np.uint16)
         file_path = os.path.join(sub_dir, "depth", f"{self._frame_id}.png")
         self._backend.schedule(F.write_image, data=distance_to_camera_uint16, path=file_path)

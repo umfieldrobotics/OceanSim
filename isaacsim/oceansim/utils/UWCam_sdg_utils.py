@@ -95,7 +95,6 @@ COU_LABELS = {
 import math
 import os
 import random
-import re
 from itertools import chain
 from collections import defaultdict
 import json
@@ -150,32 +149,47 @@ def parse_object_folder(objects_folder_path):
 
 
 
-def add_COU_objects(
+def add_objects(
                 objects_folder_path,
                 override_semantic_mapping=COU_LABELS,
                 root_path="SDG_objects",
                 name_prefix="", 
                 physics=False,
+                count = 1,
                 ) -> tuple[list[Usd.Prim], dict[str, tuple[int, int, int, int]]]:
+    """
+    Adds objects from the specified folder to the USD stage, assigns semantics, and optionally adds physics properties.
+
+    Args:
+        objects_folder_path (str): Path to the folder containing object categories and USD files.
+        override_semantic_mapping (dict, optional): Dictionary mapping category names to semantic labels. Defaults to COU_LABELS.
+        root_path (str, optional): Root path in the USD stage where objects will be added. Defaults to "SDG_objects".
+        name_prefix (str, optional): Prefix for the names of added objects. Defaults to "".
+        physics (bool, optional): Whether to add physics properties to the objects. Defaults to False.
+        count (int, optional): Number of times to add each object. Defaults to 1.
+
+    Returns:
+        tuple: A tuple containing a list of added Usd.Prim objects and a dictionary of semantic mappings.
+    """
     stage = omni.usd.get_context().get_stage()
     stage.DefinePrim(f"/{root_path}", "Scope")
     categories = parse_object_folder(objects_folder_path)
     assets = []
     for category, usd_files in categories.items():
         for usd_file in usd_files:
-            
-            prim_path = omni.usd.get_stage_next_free_path(stage, f"/{root_path}/{name_prefix}{category}", False)
+            for _ in range(count):
+                prim_path = omni.usd.get_stage_next_free_path(stage, f"/{root_path}/{name_prefix}{category}", False)
 
-            prim = add_reference_to_stage(usd_path=usd_file, prim_path=prim_path)
-            if physics:
-                add_colliders(prim)
-                add_rigid_body_dynamics(prim, disable_gravity=False)
+                prim = add_reference_to_stage(usd_path=usd_file, prim_path=prim_path)
+                if physics:
+                    add_colliders(prim)
+                    add_rigid_body_dynamics(prim, disable_gravity=False)
 
-            remove_labels(prim)  # Remove all
-            upgrade_prim_semantics_to_labels(prim)
-            add_labels(prim, [category.lower()])
+                remove_labels(prim)  # Remove all
+                upgrade_prim_semantics_to_labels(prim)
+                add_labels(prim, [category.lower()])
 
-            assets.append(prim)
+                assets.append(prim)
     
     if override_semantic_mapping is not None:
         return assets, override_semantic_mapping
@@ -384,6 +398,53 @@ def hide_matching_prims(match_strings: list[str], root_path: str | None = None, 
             if any(match in str(prim.GetPath()) for match in match_strings):
                 prim.GetAttribute("visibility").Set("invisible")
 
+def sample_objects_on_points(
+    points, 
+    objects: list[Usd.Prim],
+    offset: tuple[float, float, float] = (0, 0, 0),
+    ) -> None:
+    """Sample objects on a mesh surface."""
+    for obj in objects:
+        random_point = random.choice(points)
+        new_location = (
+            random_point[0] + offset[0],
+            random_point[1] + offset[1],
+            random_point[2] + offset[2],
+        )
+        set_transform_attributes(obj, location=new_location)
+
+def perturb_object_poses(
+    objects: list[Usd.Prim],
+    translation_range: tuple[float, float] = (0.0, 0.0),
+    rotation_range: tuple[float, float] = (0.0, 0.0),
+    scale_range: tuple[float, float] = (1.0, 1.0),
+) -> None:
+    for obj in objects:
+        # Get current location, rotation, and scale
+        loc = obj.GetAttribute("xformOp:translate").Get()
+
+        # Apply random perturbations within the specified ranges
+        new_loc = (
+            loc[0] + random.uniform(translation_range[0], translation_range[1]),
+            loc[1] + random.uniform(translation_range[0], translation_range[1]),
+            loc[2] + random.uniform(translation_range[0], translation_range[1]),
+        )
+        new_rot = (
+            random.uniform(rotation_range[0], rotation_range[1]),
+            random.uniform(rotation_range[0], rotation_range[1]),
+            random.uniform(rotation_range[0], rotation_range[1]),
+        )
+        new_scale = random.uniform(scale_range[0], scale_range[1])
+
+        
+
+        # Set the new transformation attributes
+        set_transform_attributes(obj, 
+                                 location=new_loc, 
+                                 rotation=new_rot, 
+                                 scale=(new_scale,  new_scale, new_scale))
+
+
 
 
 def get_random_pose_on_sphere(
@@ -550,25 +611,6 @@ def change_material(materials: list[UsdShade.Material], prim: Usd.Prim) -> None:
     # diffuse_texture_shader.GetAttribute("inputs:file").Set("./textures/tex_u1_v1_diffuse.jp")
     random_material = random.choice(materials)
     UsdShade.MaterialBindingAPI(prim).Bind(random_material, UsdShade.Tokens.strongerThanDescendants)
-
-# def add_default_objects(physics=False):
-#     full_objs_list = []
-
-#     for obj in DEFAULT_OBJECTS:
-#         full_objs_list.append(prefix_with_isaac_asset_server(obj))
-
-#     assets = []
-#     for obj in full_objs_list:
-#         asset = rep.create.from_usd(obj)
-#         prim = asset.get_output_prims()["prims"][0]
-
-#         if physics:
-#             add_colliders(prim, approximation_shape="boundingCube")
-
-#         assets.append(asset)
-
-#     return rep.create.group(assets)
-
 
 
 def capture_pathtracing(delta_time=0.0, spp=128, pause_timeline=True):
