@@ -34,6 +34,75 @@ DEFAULT_OBJECTS = 3 * [
     "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_04.usd",
     "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_03.usd",
 ]
+DISTRACTORS = [
+    "/Isaac/Environments/Simple_Warehouse/Props/S_TrafficCone.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/S_WetFloorSign.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_03.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_03.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_C_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticB_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticD_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticE_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BucketPlastic_B.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1262.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1268.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1482.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1683.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_291.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1454.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1513.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_A_04.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_03.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_05.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_C_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_E_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_PushcartA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_04.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_03.usd",
+    "/Isaac/Environments/Hospital/Props/Pharmacy_Low.usd",
+    "/Isaac/Environments/Hospital/Props/SM_BedSideTable_01b.usd",
+    "/Isaac/Environments/Hospital/Props/SM_BooksSet_26.usd",
+    "/Isaac/Environments/Hospital/Props/SM_BottleB.usd",
+    "/Isaac/Environments/Hospital/Props/SM_BottleA.usd",
+    "/Isaac/Environments/Hospital/Props/SM_BottleC.usd",
+    "/Isaac/Environments/Hospital/Props/SM_Cart_01a.usd",
+    "/Isaac/Environments/Hospital/Props/SM_Chair_02a.usd",
+    "/Isaac/Environments/Hospital/Props/SM_Chair_01a.usd",
+    "/Isaac/Environments/Hospital/Props/SM_Computer_02b.usd",
+    "/Isaac/Environments/Hospital/Props/SM_Desk_04a.usd",
+    "/Isaac/Environments/Hospital/Props/SM_DisposalStand_02.usd",
+    "/Isaac/Environments/Hospital/Props/SM_FirstAidKit_01a.usd",
+    "/Isaac/Environments/Hospital/Props/SM_GasCart_01c.usd",
+    "/Isaac/Environments/Hospital/Props/SM_Gurney_01b.usd",
+    "/Isaac/Environments/Hospital/Props/SM_HospitalBed_01b.usd",
+    "/Isaac/Environments/Hospital/Props/SM_MedicalBag_01a.usd",
+    "/Isaac/Environments/Hospital/Props/SM_Mirror.usd",
+    "/Isaac/Environments/Hospital/Props/SM_MopSet_01b.usd",
+    "/Isaac/Environments/Hospital/Props/SM_SideTable_02a.usd",
+    "/Isaac/Environments/Hospital/Props/SM_SupplyCabinet_01c.usd",
+    "/Isaac/Environments/Hospital/Props/SM_SupplyCart_01e.usd",
+    "/Isaac/Environments/Hospital/Props/SM_TrashCan.usd",
+    "/Isaac/Environments/Hospital/Props/SM_Washbasin.usd",
+    "/Isaac/Environments/Hospital/Props/SM_WheelChair_01a.usd",
+    "/Isaac/Environments/Office/Props/SM_WaterCooler.usd",
+    "/Isaac/Environments/Office/Props/SM_TV.usd",
+    "/Isaac/Environments/Office/Props/SM_TableC.usd",
+    "/Isaac/Environments/Office/Props/SM_Recliner.usd",
+    "/Isaac/Environments/Office/Props/SM_Personenleitsystem_Red1m.usd",
+    "/Isaac/Environments/Office/Props/SM_Lamp02_162.usd",
+    "/Isaac/Environments/Office/Props/SM_Lamp02.usd",
+    "/Isaac/Environments/Office/Props/SM_HandDryer.usd",
+    "/Isaac/Environments/Office/Props/SM_Extinguisher.usd",
+]
+
+
 DEFAULT_LABELS = {
     "UNLABELLED": (0, 0, 0, 0),
     "BACKGROUND": (0, 0, 0, 0),
@@ -433,24 +502,6 @@ def unmask_objects(objects: list[Usd.Prim]) -> None:
     """Unmask a list of objects."""
     for obj in objects:
         obj.GetAttribute("visibility").Set("inherited")
-
-# def add_default_objects(physics=False):
-#     full_objs_list = []
-
-#     for obj in DEFAULT_OBJECTS:
-#         full_objs_list.append(prefix_with_isaac_asset_server(obj))
-
-#     assets = []
-#     for obj in full_objs_list:
-#         asset = rep.create.from_usd(obj)
-#         prim = asset.get_output_prims()["prims"][0]
-
-#         if physics:
-#             add_colliders(prim, approximation_shape="boundingCube")
-
-#         assets.append(asset)
-
-#     return rep.create.group(assets)
 
 
 

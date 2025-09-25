@@ -39,8 +39,9 @@ config = {
             },
         }
     ],
+    "add_distractors": False,
     "cam_workspace" : [-1.0, -1.0, 0.3, 1.0, 1.0, 1.3], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
-    "obj_workspace" : [-1.0, -1.0, -0.1, 1.0, 1.0, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "obj_workspace" : [-1.5, -1.5, -0.1, 1.5, 1.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "disable_render_products": False,
     "debug_mode": False,
     "path_tracing": False,
@@ -215,13 +216,25 @@ def run_sdg(config: dict=config):
     
         print(f"[SDG] Created camera colliders with radius {camera_collider_radius}")
     
-    # Add COU objects
+    # Add objects
     objects, kitti_labels = add_objects(objects_folder_path=objects_url, 
                                         override_semantic_mapping=None, 
                                         physics=True,
-                                        count=20,
+                                        count=40,
                                         )
     print(f"[SDG] {len(objects)} numbers of COU objects being added to the scene")
+
+    distractors = []
+    if config.get("add_distractors", False):
+        objects, kitti_labels = add_distractor(mapping=kitti_labels,
+                                                root_path="SDG_distractors",
+                                                name_prefix="distractor_",
+                                                physics=True,
+                                                num=10,
+                                                count=1,
+                                                )
+        distractors.extend(objects)
+        print(f"[SDG] {len(distractors)} numbers of distractor objects being added to the scene")
 
     # Resolve any centimeter-meter scale issues of the assets
     resolve_scale_issues_with_metrics_assembler()
@@ -271,12 +284,15 @@ def run_sdg(config: dict=config):
     while capture_counter < total_captures:
 
         enable_global_volumetric_effects(enable=True, 
-                                        density_mult=random.uniform(1.85, 1.95), 
+                                        density_mult=random.uniform(0.75, 1.25), 
                                         anisotropy_factor=-1.0, 
-                                        transmittance_distance=10000,
+                                        transmittance_distance=10,
                                         )
 
         sample_objects_on_points(points, objects, offset=(0, 0, 0.05))
+
+        if distractors:
+            sample_objects_on_points(points, distractors, offset=(0, 0, 0.25))
 
         randomize_camera_poses_rel_to_ws(cameras, objects, cam_ws, look_at_offset=(-0.0, 0.0))
 

@@ -34,6 +34,76 @@ DEFAULT_OBJECTS = 3 * [
     "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_04.usd",
     "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_03.usd",
 ]
+
+DISTRACTORS = [
+    "/Isaac/Environments/Simple_Warehouse/Props/S_TrafficCone.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/S_WetFloorSign.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_A_03.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_B_03.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BarelPlastic_C_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticB_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticD_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BottlePlasticE_01.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_BucketPlastic_B.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1262.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1268.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1482.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_1683.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxB_01_291.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1454.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CardBoxD_01_1513.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_A_04.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_03.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_B_05.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_C_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_CratePlastic_E_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_PushcartA_02.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_04.usd",
+    "/Isaac/Environments/Simple_Warehouse/Props/SM_RackPile_03.usd",
+    # "/Isaac/Environments/Hospital/Props/Pharmacy_Low.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_BedSideTable_01b.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_BooksSet_26.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_BottleB.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_BottleA.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_BottleC.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_Cart_01a.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_Chair_02a.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_Chair_01a.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_Computer_02b.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_Desk_04a.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_DisposalStand_02.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_FirstAidKit_01a.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_GasCart_01c.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_Gurney_01b.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_HospitalBed_01b.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_MedicalBag_01a.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_Mirror.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_MopSet_01b.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_SideTable_02a.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_SupplyCabinet_01c.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_SupplyCart_01e.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_TrashCan.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_Washbasin.usd",
+    # "/Isaac/Environments/Hospital/Props/SM_WheelChair_01a.usd",
+    # "/Isaac/Environments/Office/Props/SM_WaterCooler.usd",
+    # "/Isaac/Environments/Office/Props/SM_TV.usd",
+    # "/Isaac/Environments/Office/Props/SM_TableC.usd",
+    # "/Isaac/Environments/Office/Props/SM_Recliner.usd",
+    # "/Isaac/Environments/Office/Props/SM_Personenleitsystem_Red1m.usd",
+    # "/Isaac/Environments/Office/Props/SM_Lamp02_162.usd",
+    # "/Isaac/Environments/Office/Props/SM_Lamp02.usd",
+    # "/Isaac/Environments/Office/Props/SM_HandDryer.usd",
+    # "/Isaac/Environments/Office/Props/SM_Extinguisher.usd",
+]
+
+
 DEFAULT_LABELS = {
     "UNLABELLED": (0, 0, 0, 0),
     "BACKGROUND": (0, 0, 0, 0),
@@ -195,7 +265,65 @@ def add_objects(
         return assets, override_semantic_mapping
     else:
         return assets, generate_kitti_labels(categories)
+
+# needed for loading nvidia assets correctly
+def prefix_with_isaac_asset_server(relative_path):
+    assets_root_path = get_assets_root_path()
+    if assets_root_path is None:
+        raise Exception(
+            "Nucleus server not found, could not access Isaac Sim assets folder"
+        )
+    return assets_root_path + relative_path
+
+def add_distractor(
+                mapping : dict,
+                root_path="SDG_distractors",
+                name_prefix="distractor_", 
+                physics=False,
+                num = 10,
+                count = 1,
+                ) -> tuple[list[Usd.Prim], dict[str, tuple[int, int, int, int]]]:
+    """
+    Adds objects from the specified folder to the USD stage, assigns semantics, and optionally adds physics properties.
+
+    Args:
+        objects_folder_path (str): Path to the folder containing object categories and USD files.
+        override_semantic_mapping (dict, optional): Dictionary mapping category names to semantic labels. Defaults to COU_LABELS.
+        root_path (str, optional): Root path in the USD stage where objects will be added. Defaults to "SDG_objects".
+        name_prefix (str, optional): Prefix for the names of added objects. Defaults to "".
+        physics (bool, optional): Whether to add physics properties to the objects. Defaults to False.
+        count (int, optional): Number of times to add each object. Defaults to 1.
+
+    Returns:
+        tuple: A tuple containing a list of added Usd.Prim objects and a dictionary of semantic mappings.
+    """
+    stage = omni.usd.get_context().get_stage()
+    stage.DefinePrim(f"/{root_path}", "Scope")
+    distractor_list = [prefix_with_isaac_asset_server(path) for path in DISTRACTORS]
+    assets = []
+    for url in random.choices(distractor_list, k=num):
+        for _ in range(count):
+            prim_path = omni.usd.get_stage_next_free_path(stage, f"/{root_path}/{name_prefix}", False)
+
+            prim = add_reference_to_stage(usd_path=url, prim_path=prim_path)
+            if physics:
+                add_colliders(prim)
+                add_rigid_body_dynamics(prim, disable_gravity=False)
+
+            remove_labels(prim)  # Remove all
+            upgrade_prim_semantics_to_labels(prim)
+            add_labels(prim, ['distractor'])
+
+            assets.append(prim)
     
+    # Add 'distractor' to the mapping if not already present
+    mapping.update({'distractor': len(mapping)})
+
+    return assets, mapping
+
+
+
+
 def assign_scene_semantics_based_on_ref(override_semantic_mapping: dict[str, int] | None = None) -> dict[str, int]:
     """
     Assigns semantics to the scene based on the referenced asset path.
