@@ -27,15 +27,54 @@ config = {
         "clippingRange": [0.001, 100],
     },
     "writers": [
+        # random haze writer
         {
-            # Type of the writer to use (e.g. PoseWriter, BasicWriter, etc.) and the kwargs to pass to the writer init
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "/home/nsieh/Desktop/test_SDG/",
+                "output_dir": "/home/nsieh/Desktop/test_SDG/random_haze",
                 "colorize_instance_segmentation": False,
                 "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
                 "use_tight_bbox": True,
-                "debug_mode": True,
+                "debug_mode": False,
+            },
+        },
+        # No haze writer
+        {
+            "type": "UWCam_KittiWriter",
+            "kwargs": {
+                "output_dir": "/home/nsieh/Desktop/test_SDG/no_haze",
+                "colorize_instance_segmentation": False,
+                "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
+                "use_tight_bbox": True,
+                "debug_mode": False,
+                "UW_param": {
+                    "scale_range": (1.0, 1.0),
+                    "veiling": {
+                        "no_haze": (0.0, 0.0, 0.0)
+                    },
+                    "backscatter": {
+                        "no_haze": (0.0, 0.0, 0.0)
+                    }
+                }
+            },
+        },
+        # Single haze writer
+        {
+            "type": "UWCam_KittiWriter",
+            "kwargs": {
+                "output_dir": "/home/nsieh/Desktop/test_SDG/single_haze",
+                "colorize_instance_segmentation": False,
+                "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
+                "use_tight_bbox": True,
+                "debug_mode": False,
+                "UW_param": {   
+                    "scale_range": (1.0, 1.0),
+                    "veiling": {
+                        "seaclear_sea_urchin": (0.08, 0.42, 0.52)                    },
+                    "backscatter": {
+                        "seaclear_sea_urchin": (1.0, 1.0, 1.0)
+                    }
+                }
             },
         }
     ],
@@ -44,6 +83,7 @@ config = {
     "obj_workspace" : [-1.5, -1.5, -0.1, 1.5, 1.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "disable_render_products": False,
     "debug_mode": False,
+    "seed": 984,
     "path_tracing": False,
 }
 
@@ -82,6 +122,9 @@ print(f"[SDG] Using config:\n{config}")
 
 launch_config = config.get("launch_config", {})
 debug_mode = config.get("debug_mode", False)
+seed = config.get("seed", None)
+
+
 if debug_mode:
     launch_config["headless"] = False
 
@@ -352,6 +395,11 @@ if debug_mode:
     np.random.seed(10)
     random.seed(10)
     rep.set_global_seed(10)
+
+if seed:
+    np.random.seed(seed)
+    random.seed(seed)
+    rep.set_global_seed(seed)
 
 
 # Start the SDG pipeline

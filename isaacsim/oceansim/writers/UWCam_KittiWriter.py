@@ -27,10 +27,10 @@ __version__ = "0.1.0"
 DULUTH_PARAM_DICT = {
     "scale_range": (0.5, 1.0),
     "veiling": {
-        "duluth": wp.vec3f(0.19, 0.30, 0.0)
+        "duluth": (0.19, 0.30, 0.0)
         }, 
     "backscatter": {
-        "duluth": wp.vec3f(0.53, 0.68, 0.99)
+        "duluth": (0.53, 0.68, 0.99)
         }
     }
 
@@ -38,26 +38,26 @@ DULUTH_PARAM_DICT = {
 UW_PARAM_DICT = {
     "scale_range": (1.0, 1.0),
     "veiling": {
-            "deep_sea": wp.vec3f(0.0, 0.0, 0.28),
-            # "shallow_water": wp.vec3f(0.05, 0.11, 0.7),
-            "akdeniz": wp.vec3f(0.14, 0.3, 0.5),
-            "river": wp.vec3f(0.294, 0.4, 0.263),
-            "mud": wp.vec3f(0.259, 0.259, 0.024),
-            "mhl": wp.vec3f(0.0, 0.3021, 0.239),
-            "murky": wp.vec3f(0.275, 0.212, 0.071),
-            "seaclear_sea_urchin": wp.vec3f(0.08, 0.42, 0.52),
+            "deep_sea": (0.0, 0.0, 0.28),
+            # "shallow_water": (0.05, 0.11, 0.7),
+            "akdeniz": (0.14, 0.3, 0.5),
+            "river": (0.294, 0.4, 0.263),
+            "mud": (0.259, 0.259, 0.024),
+            "mhl": (0.0, 0.3021, 0.239),
+            "murky": (0.275, 0.212, 0.071),
+            "seaclear_sea_urchin": (0.08, 0.42, 0.52),
         },
     "backscatter": {
-            "Type I": wp.vec3f(0.905, 0.961, 0.982),
-            "Type IA": wp.vec3f(0.804, 0.954, 0.975),
-            "Type IB": wp.vec3f(0.830, 0.940, 0.968),
-            "Type II": wp.vec3f(0.800, 0.925, 0.940),
-            "Type III": wp.vec3f(0.750, 0.885, 0.890),
-            "Type 1": wp.vec3f(0.750, 0.885, 0.875),
-            "Type 3": wp.vec3f(0.710, 0.820, 0.800),
-            "Type 5": wp.vec3f(0.670, 0.730, 0.670),
-            "Type 7": wp.vec3f(0.620, 0.610, 0.590),
-            "Type 9": wp.vec3f(0.550, 0.460, 0.290),
+            "Type I": (0.905, 0.961, 0.982),
+            "Type IA": (0.804, 0.954, 0.975),
+            "Type IB": (0.830, 0.940, 0.968),
+            "Type II": (0.800, 0.925, 0.940),
+            "Type III": (0.750, 0.885, 0.890),
+            "Type 1": (0.750, 0.885, 0.875),
+            "Type 3": (0.710, 0.820, 0.800),
+            "Type 5": (0.670, 0.730, 0.670),
+            "Type 7": (0.620, 0.610, 0.590),
+            "Type 9": (0.550, 0.460, 0.290),
     }
 }
 
@@ -250,7 +250,7 @@ class UWCam_KittiWriter(Writer):
         self._scale = random.uniform(self._UW_param["scale_range"][0], self._UW_param["scale_range"][1])
         self._veiling = random.choice(list(self._UW_param["veiling"].values()))
         self._backscatter = random.choice(list(self._UW_param["backscatter"].values()))
-        self._attenuation = self._backscatter
+        self._attenuation = self._backscatter # Defaul the attentuation to be the same as the backscatter
         uw_image = data[rgb_annotator]
         if self._enable_caustics:
             _caustics_tex = wp.empty(shape=(height, width, 4), dtype=wp.uint8)
