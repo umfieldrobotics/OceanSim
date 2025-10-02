@@ -1,8 +1,12 @@
 import warp as wp
 import omni.kit.commands
 from pxr import Sdf, UsdGeom, Usd, Gf
+from PIL import Image
+import numpy as np
+from usdrt import Vt
 
-
+# Prevent DecompressionBombError for very large images
+Image.MAX_IMAGE_PIXELS = None
 
 def create_plane_mesh(stage, target_path, plane_resolution=100, plane_width=100):
 
@@ -19,6 +23,76 @@ def create_plane_mesh(stage, target_path, plane_resolution=100, plane_width=100)
     omni.kit.commands.execute("MovePrim", path_from=tmp_path, path_to=Sdf.Path(target_path))
     omni.usd.get_context().get_selection().set_selected_prim_paths([], False)
     return UsdGeom.Mesh.Get(stage, target_path)
+
+def read_displacement_map(height_map_path):
+    # Load the height map
+    img = Image.open(height_map_path)
+
+    # Convert to grayscale luminance if needed (e.g., RGB/RGBA/P/CMYK/YCbCr)
+    if img.mode not in ("L", "I;16", "I", "F"):
+        img = img.convert("L")
+
+    # Get numpy array and normalize to [0, 1] based on dtype/bit depth
+    raw_array = np.array(img, copy=False)
+    dtype = raw_array.dtype
+    if dtype == np.uint8:
+        img_array = raw_array.astype(np.float32) / 255.0
+    elif dtype == np.uint16:
+        img_array = raw_array.astype(np.float32) / 65535.0
+    elif dtype == np.uint32:
+        img_array = raw_array.astype(np.float32) / 4294967295.0
+    else:
+        raise ValueError(f"Unsupported dtype: {dtype}")
+    
+    return img_array
+
+def create_displaced_plane_mesh(stage, 
+                                target_path, 
+                                height_map_path, 
+                                plane_resolution=100, 
+                                plane_width=100, 
+                                displacement_scale=1.0, 
+                                tile_x=1.0, 
+                                tile_y=1.0):
+    """
+    Create a plane mesh and displace its vertices based on a height map.
+    
+    Args:
+        stage: USD stage
+        target_path: Path where to create the mesh
+        height_map_path: Path to the height map image
+        plane_resolution: Number of vertices per side (default: 100)
+        plane_width: Width of the plane (default: 100)
+        displacement_scale: Scale factor for height displacement (default: 1.0)
+        tile_x: Number of times to tile the height map in the x direction (default: 1.0)
+        tile_y: Number of times to tile the height map in the y direction (default: 1.0)
+    """
+    # Create the plane mesh
+    mesh = create_plane_mesh(stage, target_path, plane_resolution, plane_width * 100)
+    
+    # Get the original points from the plane mesh
+    points = mesh.GetPointsAttr().Get()
+    
+    # Convert points to Warp array
+    points_wp = wp.array(points, dtype=wp.vec3, device="cuda")
+    deformed_points_wp = wp.empty_like(points_wp, device="cuda")
+    # Convert height map to 2D Warp array
+    img_array = read_displacement_map(height_map_path)
+    height_map_wp = wp.from_numpy(img_array, dtype=wp.float32, device="cuda")
+    
+    
+    wp.launch(
+        kernel=deform_points,
+        dim=len(points_wp),
+        inputs=[points_wp, height_map_wp, displacement_scale, plane_width, tile_x, tile_y],
+        outputs=[deformed_points_wp],
+        device="cuda"
+    )
+    
+    # Apply the deformed points to the mesh
+    mesh.GetPointsAttr().Set(Vt.Vec3fArray(deformed_points_wp.numpy()))
+    
+    return mesh
 
 
 def create_plane_with_hole(stage, target_path, plane_width=10, hole_size=2):
