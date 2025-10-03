@@ -11,12 +11,12 @@ config = {
             "--/log/level=error",                                    # These will shut isaac sim the fuck up 
             "--/log/fileLogLevel=error", 
             "--/log/outputStreamLevel=error",
-            "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug?
+            "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug? Will crash on multi-gpu
             ]
     },
-    "total_captures" : 15,
+    "total_captures" : 5000,
     "camera_collider_radius": 0.1,
-    "env_url": "/frog-drive/projects/OceanSim/sim2real/SDG_assets/sceneAssets/Collected_rocky_2x2/scene_2x2.usd",
+    "env_url": "/home/nsieh/Desktop/terrains/",
     "objects_url": "/frog-drive/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/",
     "rt_subframes": 16,
     "resolution": [1024, 1024],
@@ -78,11 +78,11 @@ config = {
             },
         }
     ],
-    "add_distractors": False,
+    "add_distractors": True,
     "cam_workspace" : [-1.0, -1.0, 0.3, 1.0, 1.0, 1.3], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
-    "obj_workspace" : [-1.5, -1.5, -0.1, 1.5, 1.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "obj_workspace" : [-1.2, -1.2, -0.1, 1.2, 1.2, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "disable_render_products": False,
-    "debug_mode": False,
+    "debug_mode": True,
     "seed": 984,
     "path_tracing": False,
 }
@@ -198,19 +198,23 @@ def run_sdg(config: dict=config):
     disable_render_products = config.get("disable_render_products", False)
 
     # ENVIRONMENT
-    # Create an empty or load a custom stage (clearing any previous semantics)
-    if env_url:
-        omni.usd.get_context().open_stage(env_url)
-        stage = omni.usd.get_context().get_stage()
-    else:
-        omni.usd.get_context().new_stage()
-        stage = omni.usd.get_context().get_stage()
-        # Add a distant light to the empty stage
-        distant_light = stage.DefinePrim("/World/Lights/DistantLight", "DistantLight")
-        distant_light.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float).Set(400.0)
-        if not distant_light.HasAttribute("xformOp:rotateXYZ"):
-            UsdGeom.Xformable(distant_light).AddRotateXYZOp()
-        distant_light.GetAttribute("xformOp:rotateXYZ").Set((0, 60, 0))
+    parsed_envs = parse_env_folder(env_url)
+
+    # This is an another freaking bug that Isaac Sim has to open a stage with MDL displacement on first,
+    # so that the stages loaded after can have displacement effective
+    omni.usd.get_context().open_stage(list(parsed_envs.values())[0])
+    run_simulation(num_frames=100, render=True)
+    print('heated up the renderer')
+    omni.usd.get_context().new_stage()
+
+    num_envs = len(parsed_envs)
+    envs_iter = iter(parsed_envs.values())
+    add_reference_to_stage(usd_path=next(envs_iter), prim_path='/terrain')
+
+    stage = omni.usd.get_context().get_stage()
+    create_dome_ligth(stage, "/Environment", intensity=1000.0)
+
+
 
     # Create a physics scene to modify custom physics settings
     physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
@@ -263,20 +267,27 @@ def run_sdg(config: dict=config):
     objects, kitti_labels = add_objects(objects_folder_path=objects_url, 
                                         override_semantic_mapping=None, 
                                         physics=True,
-                                        count=40,
+                                        count=20,
                                         )
-    print(f"[SDG] {len(objects)} numbers of COU objects being added to the scene")
+    print(f"[SDG] {len(objects)} numbers of detection objects being added to the scene")
 
     distractors = []
     if config.get("add_distractors", False):
-        objects, kitti_labels = add_distractor(mapping=kitti_labels,
+        # update the kitti labels mapping dict with distractor objects
+        ds, kitti_labels = add_distractor_from_UE(mapping=kitti_labels,
+                                                UE_asset_folder='/frog-drive/projects/OceanSim/sim2real/SDG_assets/sceneAssets/Collected_OceanRealm/Assets/',
                                                 root_path="SDG_distractors",
                                                 name_prefix="distractor_",
                                                 physics=True,
-                                                num=10,
+                                                num=20,
                                                 count=1,
                                                 )
-        distractors.extend(objects)
+        distractors.extend(ds)
+
+        # for distractor in distractors:
+        #     #Scale donw the distractor objects
+        #     set_transform_attributes(distractor, scale=(0.1, 0.1, 0.1))
+        
         print(f"[SDG] {len(distractors)} numbers of distractor objects being added to the scene")
 
     # Resolve any centimeter-meter scale issues of the assets
@@ -313,7 +324,7 @@ def run_sdg(config: dict=config):
 
     print(f"[SDG] Created {len(writers)} writers")
 
-    terrian_mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/World/plane_0_collider"))
+    terrian_mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/terrain/collider"))
     points = terrian_mesh.GetPointsAttr().Get()
     points = [
         point
@@ -324,7 +335,33 @@ def run_sdg(config: dict=config):
     ]
 
     capture_counter = 0
+
+    env_switch_interval = max(1, total_captures // num_envs)
+    env_index = 0
+    print(f"[SDG] env_switch_interval: {env_switch_interval}, num_envs: {num_envs}")
+
+
     while capture_counter < total_captures:
+
+        if capture_counter % env_switch_interval == 0 and capture_counter > 0:
+            stage.RemovePrim("/terrain")
+            print(f"[SDG] Switching environment from [{env_index}] {list(parsed_envs.keys())[env_index]} to [{(env_index + 1)}] {list(parsed_envs.keys())[env_index + 1]}")
+            add_reference_to_stage(usd_path=next(envs_iter), prim_path='/terrain')
+            env_index += 1
+
+            # Recompute the sampled points on the new terrain
+            terrian_mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/terrain/collider"))
+            points = terrian_mesh.GetPointsAttr().Get()
+            points = [
+                point
+                for point in points
+                if obj_ws[0] <= point[0] <= obj_ws[3]
+                and obj_ws[1] <= point[1] <= obj_ws[4]
+                and obj_ws[2] <= point[2] <= obj_ws[5]
+            ]
+            # make sure render artifact is gone
+            for _ in range(100):
+                simulation_app.update()
 
         enable_global_volumetric_effects(enable=True, 
                                         density_mult=random.uniform(0.75, 1.25), 
@@ -335,13 +372,13 @@ def run_sdg(config: dict=config):
         sample_objects_on_points(points, objects, offset=(0, 0, 0.05))
 
         if distractors:
-            sample_objects_on_points(points, distractors, offset=(0, 0, 0.25))
+            sample_objects_on_points(points, distractors)
 
         randomize_camera_poses_rel_to_ws(cameras, objects, cam_ws, look_at_offset=(-0.0, 0.0))
 
         perturb_object_poses(objects, translation_range=(-0.1, 0.1),scale_range=(0.5, 1.5))
         # Run simulation a bit for collider to settle
-        run_simulation(num_frames=3, render=False)
+        run_simulation(num_frames=5, render=False)
 
         # Check if the render products need to be enabled for the capture
         if disable_render_products:

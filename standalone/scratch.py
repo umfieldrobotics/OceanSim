@@ -42,7 +42,63 @@ import warp as wp
 import omni.usd
 from isaacsim.oceansim.utils.mesh_utils import *
 import carb.settings
+def export_prim_to_layer(prim: Usd.Prim, flatten=True,
+                         include_session_layer=True):
+    """
+    Creates a temporary layer with only the given prim in it
 
+    Parameters
+    ----------
+    prim: Usd.Prim
+        The usd object we wish to export by itself into its own layer
+    flatten: bool
+        If True, then the returned layer will have all composition arcs
+        flattened. If False, then the returned layer will contain a reference
+        to the original prim.
+    include_session_layer: bool
+        If True, then include changes from the session layer. If this is
+        False, and the prim is ONLY defined in the session layer, then None
+        will be returned.
+
+    Note that no parents are included, and xforms are not "flattened" (even if
+    `flatten` is True - `flatten` refers to USD composition arcs, not parent
+    hierarchy or xforms).
+    """
+    orig_stage = prim.GetStage()
+    orig_root_layer = orig_stage.GetRootLayer()
+    orig_session_layer = orig_stage.GetSessionLayer()
+    if orig_session_layer and not include_session_layer:
+        # Make sure that the prim still exists if we exclude the session layer
+        stage_no_session = Usd.Stage.Open(orig_root_layer, sessionLayer=None)
+        if not stage_no_session.GetPrimAtPath(prim.GetPrimPath()):
+            return None
+
+        orig_session_layer = None
+
+    # If there is a session layer, to get an EXACT copy including possible
+    # modifications by the session layer, we need to create a new "copy" layer,
+    # with a layer stack composed of the orig_stage's session layer
+    # and root layer
+    if not orig_session_layer:
+        copy_layer = orig_root_layer
+    else:
+        copy_layer = Sdf.Layer.CreateAnonymous()
+        copy_layer.subLayerPaths.append(orig_session_layer.identifier)
+        copy_layer.subLayerPaths.append(orig_root_layer.identifier)
+
+    # Now create a "solo" stage, with only our prim (from the copy layer)
+    # referenced in
+    solo_stage = Usd.Stage.CreateInMemory()
+    solo_prim_path = Sdf.Path(f"/{prim.GetName()}")
+    solo_prim = solo_stage.DefinePrim(solo_prim_path)
+    solo_prim.GetReferences().AddReference(copy_layer.identifier,
+                                           prim.GetPrimPath())
+    solo_stage.SetDefaultPrim(solo_prim)
+
+    if flatten:
+        return solo_stage.Flatten()
+    else:
+        return solo_stage.GetRootLayer()
 # # # Enable MDL displacement globally
 # carb.settings.get_settings().set("/rtx/material/enableMDLDisplacement", True)
 # import isaacsim.core.utils.stage as stage_utils
@@ -53,11 +109,13 @@ import carb.settings
 height_map_path = "/frog-drive/projects/OceanSim/sim2real/SDG_assets/sceneAssets/Collected_rocky_2x2/textures/rocks_ground_02_height_8k.png"
 displacement_scale = 0.1 # This fucking value is the maximum displacement window in global scale
 size = 4.0   # length of the sqaure plane in meters (stage units)
+gt_size = 2.0 # meters (NOTE: only square texture is supported). This should comes with any texture assets online that indicates physical scan area
 resolution = 100 # number of vertices + 1 per side
-tile_x = 1.0  # number of tiles in the x direction
-tile_y = 1.0  # number of tiles in the y direction
+tile_x = size / gt_size  # number of tiles in the x direction
+tile_y = size / gt_size  # number of tiles in the y direction
 terrain_path = "/World"
-background_size = size * 10  # Size of the background plane
+bg_factor = 10
+background_size = size * bg_factor  # Size of the background plane
 
 
 stage = omni.usd.get_context().get_stage()
@@ -98,7 +156,7 @@ mesh_prim = create_plane_mesh(stage, f"{terrain_path}/collider", resolution, siz
 
 # Get the original points from the plane mesh
 points = mesh_prim.GetPointsAttr().Get()
-
+uvs = mesh_prim.GetPrim().GetAttribute("primvars:st").Get()
 # Convert points to Warp array
 points_wp = wp.array(points, dtype=wp.vec3, device="cuda")
 deformed_points_wp = wp.empty_like(points_wp, device="cuda")
@@ -106,13 +164,13 @@ deformed_points_wp = wp.empty_like(points_wp, device="cuda")
 height_map_wp = wp.from_numpy(img_array, dtype=wp.float32, device="cuda")
 
 
-wp.launch(
-    kernel=deform_points,
-    dim=len(points_wp),
-    inputs=[points_wp, height_map_wp, displacement_scale, size, tile_x, tile_y],
-    outputs=[deformed_points_wp],
-    device="cuda"
-)
+# wp.launch(
+#     kernel=deform_points,
+#     dim=len(points_wp),
+#     inputs=[points_wp, height_map_wp, displacement_scale, size, tile_x, tile_y],
+#     outputs=[deformed_points_wp],
+#     device="cuda"
+# )
 
 # Apply the deformed points to the mesh
 mesh_prim.GetPointsAttr().Set(Vt.Vec3fArray(deformed_points_wp.numpy()))

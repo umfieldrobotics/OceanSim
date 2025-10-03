@@ -169,7 +169,7 @@ from itertools import chain
 from collections import defaultdict
 import json
 from pathlib import Path
-
+from collections import OrderedDict
 
 import omni.kit.app
 import omni.kit.commands
@@ -181,7 +181,7 @@ import carb.settings
 from isaacsim.core.utils.semantics import  remove_labels, add_labels, upgrade_prim_semantics_to_labels
 from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.storage.native import get_assets_root_path
-from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
+from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, UsdLux
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.core.utils.transformations import get_relative_transform
 
@@ -275,7 +275,7 @@ def prefix_with_isaac_asset_server(relative_path):
         )
     return assets_root_path + relative_path
 
-def add_distractor(
+def add_distractor_from_isaac(
                 mapping : dict,
                 root_path="SDG_distractors",
                 name_prefix="distractor_", 
@@ -321,6 +321,59 @@ def add_distractor(
 
     return assets, mapping
 
+def add_distractor_from_UE(
+                mapping : dict,
+                UE_asset_folder : str,
+                root_path="SDG_distractors",
+                name_prefix="distractor_", 
+                physics=False,
+                num = 10,
+                count = 1,
+                ) -> tuple[list[Usd.Prim], dict[str, tuple[int, int, int, int]]]:
+    """
+    Adds objects from the specified folder to the USD stage, assigns semantics, and optionally adds physics properties.
+
+    Args:
+        objects_folder_path (str): Path to the folder containing object categories and USD files.
+        override_semantic_mapping (dict, optional): Dictionary mapping category names to semantic labels. Defaults to COU_LABELS.
+        root_path (str, optional): Root path in the USD stage where objects will be added. Defaults to "SDG_objects".
+        name_prefix (str, optional): Prefix for the names of added objects. Defaults to "".
+        physics (bool, optional): Whether to add physics properties to the objects. Defaults to False.
+        count (int, optional): Number of times to add each object. Defaults to 1.
+
+    Returns:
+        tuple: A tuple containing a list of added Usd.Prim objects and a dictionary of semantic mappings.
+    """
+    stage = omni.usd.get_context().get_stage()
+    stage.DefinePrim(f"/{root_path}", "Scope")
+    distractor_list = []
+    for filename in os.listdir(UE_asset_folder):
+        if filename.lower().endswith(('.usd', '.usdc', '.usdz')) and 'SM_' in filename:
+            distractor_list.append(os.path.join(UE_asset_folder, filename))
+
+    assets = []
+    for url in random.choices(distractor_list, k=num):
+        for _ in range(count):
+            prim_path = omni.usd.get_stage_next_free_path(stage, f"/{root_path}/{name_prefix}", False)
+
+            prim = add_reference_to_stage(usd_path=url, prim_path=prim_path)
+
+            # Spawn this far from the terrain
+            set_transform_attributes(prim, location=(0,0,-10), scale=(0.1,0.1,0.1))
+            if physics:
+                add_colliders(prim)
+                # add_rigid_body_dynamics(prim, disable_gravity=False)
+
+            remove_labels(prim)  # Remove all
+            upgrade_prim_semantics_to_labels(prim)
+            add_labels(prim, ['distractor'])
+
+            assets.append(prim)
+    
+    # Add 'distractor' to the mapping if not already present
+    mapping.update({'distractor': len(mapping)})
+
+    return assets, mapping
 
 
 
@@ -529,10 +582,15 @@ def hide_matching_prims(match_strings: list[str], root_path: str | None = None, 
 def sample_objects_on_points(
     points, 
     objects: list[Usd.Prim],
+    num_objects: int = -1,
     offset: tuple[float, float, float] = (0, 0, 0),
     ) -> None:
     """Sample objects on a mesh surface."""
-    for obj in objects:
+    if num_objects > 0:
+        obj_list = random.choices(objects, k=num_objects)
+    else:
+        obj_list = objects
+    for obj in obj_list:
         random_point = random.choice(points)
         new_location = (
             random_point[0] + offset[0],
@@ -875,3 +933,44 @@ def save_object_info(objects: list[Usd.Prim], cameras: list[Usd.Prim], output_pa
             obj_info["visibility"] = True if obj.GetAttribute("visibility").Get() == "inherited" else False
     with open(output_path, "w") as f:
         json.dump(info, f)
+
+
+def parse_env_folder(env_url: str) -> OrderedDict | str:
+    """
+    Parses the environment folder to create a dictionary mapping categories to their USD files.
+
+    Args:
+        objects_folder_path (str): Path to the folder containing environment categories and USD files.
+
+    Returns:
+        dict: A dictionary where keys are category names and values are lists of USD file paths.
+    """
+    if os.path.isfile(env_url) and env_url.lower().endswith(('.usd', '.usdc', '.usda', '.usdz')):
+        print(f'A single env_url file provided: {env_url}. No need to iterate through envs.')
+        return OrderedDict({'single_env': env_url})
+    elif os.path.isdir(env_url):
+        envs = OrderedDict()
+        env_names = [d for d in os.listdir(env_url) if os.path.isdir(os.path.join(env_url, d))]
+        print(f"Found {len(env_names)} num of environments: {env_names}")
+        for env in env_names:
+            env_path = os.path.join(env_url, env)
+            usd_files = [
+                os.path.join(env_path, usd_file)
+                for usd_file in os.listdir(env_path)
+                if usd_file.lower().endswith(('.usd', '.usdc', '.usda', '.usdz'))
+            ]
+            if usd_files:
+                # NOTE: only take the first usd file in the env folder (typically one stage should just be inone texture folder)
+                envs[env] = usd_files[0] 
+            else:
+                print(f"  No USD files found in env '{env}'")
+        return envs
+    else:
+        raise ValueError(f"Provided env_url '{env_url}' is neither a valid .usd* nor a directory.")
+    
+
+def create_dome_ligth(stage, path, intensity=500.0) -> UsdLux.DomeLight:
+    stage.DefinePrim(path, "Xform")
+    dome_light = stage.DefinePrim(path + '/DomeLight', "DomeLight")
+    dome_light.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float).Set(intensity)
+    return dome_light

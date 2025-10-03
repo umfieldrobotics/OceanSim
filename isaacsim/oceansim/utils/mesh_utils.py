@@ -25,6 +25,10 @@ def create_plane_mesh(stage, target_path, plane_resolution=100, plane_width=100)
     return UsdGeom.Mesh.Get(stage, target_path)
 
 def read_displacement_map(height_map_path):
+    if not height_map_path:
+        print("No height map path provided, using default flat map.")
+        return np.zeros((1024, 1024), dtype=np.float32)
+    
     # Load the height map
     img = Image.open(height_map_path)
 
