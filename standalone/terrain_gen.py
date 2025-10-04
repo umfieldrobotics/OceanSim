@@ -1,9 +1,9 @@
-DISPLACEMENT_FACTOR = 0.05 # This fucking value is the maximum displacement window in global scale (meters)
-PATCH_FACTOR : int = 2
-RES = 100 # number of vertices + 1 per side for the central plane (visual)
-REFINE_LEVEL = 5 # subdivision level for the central plane (catmullClark)
-COL_RES = 1000 # number of vertices + 1 per side for the collider 
-BG_FACTOR = 10 # background plane size factor relative to the central terrain plane
+# DISPLACEMENT_FACTOR = 0.05 # This fucking value is the maximum displacement window in global scale (meters)
+# PATCH_FACTOR : int = 3
+# RES = 100 # number of vertices + 1 per side for the central plane (visual)
+# REFINE_LEVEL = 5 # subdivision level for the central plane (catmullClark)
+# COL_RES = 1000 # number of vertices + 1 per side for the collider 
+# BG_FACTOR = 10 # background plane size factor relative to the central terrain plane
 
 
 import argparse
@@ -140,84 +140,13 @@ def parse_textures(url) -> dict:
     return textures
 
 
-def export_prim_to_layer(prim: Usd.Prim, flatten=True,
-                         include_session_layer=True) -> Sdf.Layer | None:
-    """
-    Creates a temporary layer with only the given prim in it
-
-    Parameters
-    ----------
-    prim: Usd.Prim
-        The usd object we wish to export by itself into its own layer
-    flatten: bool
-        If True, then the returned layer will have all composition arcs
-        flattened. If False, then the returned layer will contain a reference
-        to the original prim.
-    include_session_layer: bool
-        If True, then include changes from the session layer. If this is
-        False, and the prim is ONLY defined in the session layer, then None
-        will be returned.
-
-    Note that no parents are included, and xforms are not "flattened" (even if
-    `flatten` is True - `flatten` refers to USD composition arcs, not parent
-    hierarchy or xforms).
-    """
-    orig_stage = prim.GetStage()
-    orig_root_layer = orig_stage.GetRootLayer()
-    orig_session_layer = orig_stage.GetSessionLayer()
-    if orig_session_layer and not include_session_layer:
-        # Make sure that the prim still exists if we exclude the session layer
-        stage_no_session = Usd.Stage.Open(orig_root_layer, sessionLayer=None)
-        if not stage_no_session.GetPrimAtPath(prim.GetPrimPath()):
-            return None
-
-        orig_session_layer = None
-
-    # If there is a session layer, to get an EXACT copy including possible
-    # modifications by the session layer, we need to create a new "copy" layer,
-    # with a layer stack composed of the orig_stage's session layer
-    # and root layer
-    if not orig_session_layer:
-        copy_layer = orig_root_layer
-    else:
-        copy_layer = Sdf.Layer.CreateAnonymous()
-        copy_layer.subLayerPaths.append(orig_session_layer.identifier)
-        copy_layer.subLayerPaths.append(orig_root_layer.identifier)
-
-    # Now create a "solo" stage, with only our prim (from the copy layer)
-    # referenced in
-    solo_stage = Usd.Stage.CreateInMemory()
-    solo_prim_path = Sdf.Path(f"/{prim.GetName()}")
-    solo_prim = solo_stage.DefinePrim(solo_prim_path)
-    solo_prim.GetReferences().AddReference(copy_layer.identifier,
-                                           prim.GetPrimPath())
-    solo_stage.SetDefaultPrim(solo_prim)
-
-    if flatten:
-        return solo_stage.Flatten()
-    else:
-        return solo_stage.GetRootLayer()
-
-def create_shader_node(name, source, function, shader_path):
-    # add construct_color node
-    new_node = UsdShade.Shader.Define(omni.usd.get_context().get_stage(), shader_path.AppendChild(name))
-    # Set attributes
-    api_schemas = Sdf.TokenListOp()
-    api_schemas.explicitItems = ["NodeGraphNodeAPI"]
-    new_node.GetPrim().SetMetadata("apiSchemas", api_schemas)  # Add NodeGraphNodeAPI
-    new_node.CreateIdAttr("sourceAsset")  # Set implementation source
-    new_node.GetPrim().CreateAttribute("info:implementationSource", Sdf.ValueTypeNames.Token).Set("sourceAsset")
-    new_node.GetPrim().CreateAttribute("info:mdl:sourceAsset", Sdf.ValueTypeNames.Asset).Set(source)
-    new_node.GetPrim().CreateAttribute("info:mdl:sourceAsset:subIdentifier", Sdf.ValueTypeNames.Token).Set(function)
-    new_node.GetPrim().CreateAttribute("ui:nodegraph:node:expansionState", Sdf.ValueTypeNames.Token).Set("open")
-
-    return new_node
-
-
-
 
 def terrain_gen(texture_folder_url : str) -> None:
-
+    dp_factor = 0.05
+    patch_factor = 2
+    bg_factor = 5
+    resolution = 100 # number of vertices + 1 per side
+    collider_res = 1000
 
     texture_name = os.path.basename(texture_folder_url)
     texPath = parse_textures(texture_folder_url)
@@ -229,15 +158,15 @@ def terrain_gen(texture_folder_url : str) -> None:
     terrain_path = "/terrain"
     # This should comes with any texture assets online that indicates physical scan area 
     gt_texture_size = texPath["meta"].get('wide', 2.0) # meters (NOTE: only square texture is supported). 
-    displacement = gt_texture_size * DISPLACEMENT_FACTOR # max displacement in meters 
+    displacement = gt_texture_size * dp_factor # max displacement in meters 
 
     # NOTE: Since we are using trigangle mesh collider, the mesh resolution determines the collider resolution
     
-    size = gt_texture_size * PATCH_FACTOR   # length of the sqaure plane in meters (stage units) 
-    tile_x =  size / gt_texture_size # number of tiles in the x direction
-    tile_y = size / gt_texture_size # number of tiles in the y direction
+    size = gt_texture_size * patch_factor   # length of the sqaure plane in meters (stage units) 
+    tile_x =  bg_factor * patch_factor # number of tiles in the x direction
+    tile_y = bg_factor * patch_factor # number of tiles in the y direction
 
-    background_size = size * BG_FACTOR  # Size of the background plane
+    background_size = size * bg_factor  # Size of the background plane
 
     # Create a new stage
     omni.usd.get_context().new_stage()
@@ -250,52 +179,60 @@ def terrain_gen(texture_folder_url : str) -> None:
     defaultPrim = stage.DefinePrim(terrain_path, "Xform")
     stage.SetDefaultPrim(defaultPrim)
     # This is the central plane (high res) for visual 
-    mesh = create_plane_mesh(stage, f"{terrain_path}/plain", RES, size * 100)
+    bgMesh_info, plainMesh_info = create_plane_with_cutout(stage, terrain_path, resolution, background_size, size)
 
-    # Create subdivision schema and assign subdivion level
-    mesh.GetSubdivisionSchemeAttr().Set(UsdGeom.Tokens.catmullClark)
-    mesh.GetPrim().CreateAttribute("refinementEnableOverride", Sdf.ValueTypeNames.Bool).Set(True)
-    mesh.GetPrim().CreateAttribute("refinementLevel", Sdf.ValueTypeNames.Int).Set(REFINE_LEVEL) 
-    meshPrim = stage.GetPrimAtPath(f"{terrain_path}/plain")
+    plainMesh_info['mesh'].GetSubdivisionSchemeAttr().Set(UsdGeom.Tokens.catmullClark)
+    plainMesh_info['mesh'].GetPrim().CreateAttribute("refinementEnableOverride", Sdf.ValueTypeNames.Bool).Set(True)
+    plainMesh_info['mesh'].GetPrim().CreateAttribute("refinementLevel", Sdf.ValueTypeNames.Int).Set(7)
+
+    bgMesh_info['mesh'].GetSubdivisionSchemeAttr().Set(UsdGeom.Tokens.bilinear)
+    bgMesh_info['mesh'].GetPrim().CreateAttribute("refinementEnableOverride", Sdf.ValueTypeNames.Bool).Set(True)
+    bgMesh_info['mesh'].GetPrim().CreateAttribute("refinementLevel", Sdf.ValueTypeNames.Int).Set(5)
 
 
-    # This is the invisible collider (low res) for physics
-    meshCollider = create_displaced_plane_mesh(
-        stage,
-        f"{terrain_path}/collider",
-        height_map_path=texPath.get("displacement", ""),
-        plane_resolution=COL_RES,
-        plane_width=size,
-        displacement_scale=displacement,
-        tile_x=tile_x,
-        tile_y=tile_y,
+    # uv00, uv10, uv11, uv01, point_x_min, point_x_max, point_y_min, point_y_max = get_plane_corners_uv(plainMesh_info['points'], plainMesh_info['uvs'])
+    colliderMesh_info = create_plane_with_uvs(
+        stage, 
+        terrain_path + '/collider', 
+        collider_res, 
+        plainMesh_info['px_max'] - plainMesh_info["px_min"], 
+        plainMesh_info['uv00'], 
+        plainMesh_info['uv10'], 
+        plainMesh_info['uv11'], 
+        plainMesh_info['uv01']
     )
-    meshColliderPrim = stage.GetPrimAtPath(f"{terrain_path}/collider")
-    meshColliderPrim.GetAttribute("visibility").Set("invisible")
 
-    # Create background mesh for visual (NOTE: no collider for the background)
-    bgMesh = create_plane_with_hole(
-        stage,
-        f"{terrain_path}/background",
-        plane_width=background_size,
-        hole_size=size,
+
+
+    # Convert points to Warp array
+    colliderMeshPoints = wp.array(colliderMesh_info['points'], dtype=wp.vec3, device="cuda")
+    colliderMeshUVs = wp.array(colliderMesh_info['uvs'], dtype=wp.vec2, device='cuda')
+    deformed_points = wp.empty_like(colliderMeshPoints, device="cuda")
+    # Convert height map to 2D Warp array
+    img_array = read_displacement_map(texPath['displacement'])
+    height_map_wp = wp.from_numpy(img_array, dtype=wp.float32, device="cuda")
+
+
+    wp.launch(
+        kernel=deform_points_uv_tiling,
+        dim=len(colliderMeshPoints),
+        inputs=[colliderMeshPoints, height_map_wp, displacement, colliderMeshUVs, tile_x, tile_y],
+        outputs=[deformed_points],
+        device="cuda"
     )
-    # NOTE: not using catmullClark because it creates smoothed hole edge in the center
-    bgMesh.GetSubdivisionSchemeAttr().Set(UsdGeom.Tokens.bilinear)
-    bgMesh.GetPrim().CreateAttribute("refinementEnableOverride", Sdf.ValueTypeNames.Bool).Set(True)
-    bgMesh.GetPrim().CreateAttribute("refinementLevel", Sdf.ValueTypeNames.Int).Set(8) # Maximize the subdivision for best visual
-    bgMeshPrim = stage.GetPrimAtPath(f"{terrain_path}/background")
 
-    # Assign physics coollder to this mesh
-    UsdPhysics.CollisionAPI.Apply(meshColliderPrim)
-    meshCollisionAPI = UsdPhysics.MeshCollisionAPI.Apply(meshColliderPrim)
+    colliderMesh_info['mesh'].GetPrim().GetAttribute('points').Set(Vt.Vec3fArray(deformed_points.numpy()))
+    colliderPrim = colliderMesh_info['mesh'].GetPrim()
+    colliderPrim.GetAttribute("visibility").Set("invisible")
+    UsdPhysics.CollisionAPI.Apply(colliderPrim)
+    meshCollisionAPI = UsdPhysics.MeshCollisionAPI.Apply(colliderPrim)
     meshCollisionAPI.GetApproximationAttr().Set("none") # This defaults to triangle mesh colldier
 
 
     # create the material and shader
     scopePath = Sdf.Path(f"{terrain_path}/Looks")
     stage.DefinePrim(scopePath, "Scope")
-    materialPath = scopePath.AppendChild("PlaneMaterial")
+    materialPath = scopePath.AppendChild(f"{texture_name}")
     materialPrim = stage.DefinePrim(materialPath, "Material")
     material = UsdShade.Material.Get(stage, materialPath)
 
@@ -326,7 +263,6 @@ def terrain_gen(texture_folder_url : str) -> None:
     omniPBRShaderAOInput = omniPBRShader.CreateInput("ao_texture", Sdf.ValueTypeNames.Asset)
     omniPBRShaderNormalInput = omniPBRShader.CreateInput("normalmap_texture", Sdf.ValueTypeNames.Asset)
     omniPBRShaderTilingInput = omniPBRShader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2)
-
 
     omniPBRShaderAlbedoInput.Set(texPath.get("albedo", ""))
     omniPBRShaderRoughnessInput.Set(texPath.get("roughness", ""))
@@ -364,32 +300,16 @@ def terrain_gen(texture_folder_url : str) -> None:
     material.CreateVolumeOutput().ConnectToSource(addDispShaderOut)
     material.CreateDisplacementOutput().ConnectToSource(addDispShaderOut)
 
-
-    # duplicate the material for a bigger tiling for the background plane
-    materialPath2 = scopePath.AppendChild("BackgroundMaterial")
-    omni.usd.duplicate_prim(stage, str(materialPath), str(materialPath2))
-    # set new tiling value for the background material
-    materialPrim2 = stage.GetPrimAtPath(materialPath2)
-    material2 = UsdShade.Material.Get(stage, materialPath2)
-    material2TilingConstShader = UsdShade.Shader.Get(stage, materialPath2.AppendChild("float2_const"))
-    material2TilingConstShader.GetInput("f2").Set(Gf.Vec2f(BG_FACTOR * tile_x, BG_FACTOR * tile_y))
-
-
-    # bind the material to the central plane
-    binding_api = UsdShade.MaterialBindingAPI.Apply(meshPrim)
-    binding_api.Bind(material)
-    # bind the material to the background plane
-    binding_api2 = UsdShade.MaterialBindingAPI.Apply(bgMeshPrim)
-    binding_api2.Bind(material2)
+    # Apply the material
+    UsdShade.MaterialBindingAPI.Apply(bgMesh_info['mesh'].GetPrim()).Bind(material)
+    UsdShade.MaterialBindingAPI.Apply(plainMesh_info['mesh'].GetPrim()).Bind(material)
 
 
     # Export the matieral separately for asset reuse
     material_folder_url = os.path.join(texture_folder_url, "materials")
     # This is the material (lesss tiling) for the central plane
-    export_prim_to_layer(materialPrim).Export(material_folder_url + f"/{texture_name}_main.usd")
-    # This is the material (more tiling) for the background plane
-    export_prim_to_layer(materialPrim2).Export(material_folder_url + f"/{texture_name}_bg.usd")
-    print(f"[Terrain Gen] Exported materials to: {material_folder_url}/")
+    export_prim_to_layer(materialPrim).Export(material_folder_url + f"/{texture_name}_mat.usd")
+    print(f"[Terrain Gen] Exported material to: {material_folder_url}/")
     
     # Export the entire stage
     save_path = f"{texture_folder_url}/{texture_name}.usd"

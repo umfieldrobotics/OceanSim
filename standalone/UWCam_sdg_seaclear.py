@@ -31,7 +31,7 @@ config = {
         {
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "/home/nsieh/Desktop/test_SDG/random_haze",
+                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_3/random_haze",
                 "colorize_instance_segmentation": False,
                 "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
                 "use_tight_bbox": True,
@@ -42,7 +42,7 @@ config = {
         {
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "/home/nsieh/Desktop/test_SDG/no_haze",
+                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_3/no_haze",
                 "colorize_instance_segmentation": False,
                 "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
                 "use_tight_bbox": True,
@@ -62,7 +62,7 @@ config = {
         {
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "/home/nsieh/Desktop/test_SDG/single_haze",
+                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_3/single_haze",
                 "colorize_instance_segmentation": False,
                 "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
                 "use_tight_bbox": True,
@@ -70,7 +70,8 @@ config = {
                 "UW_param": {   
                     "scale_range": (1.0, 1.0),
                     "veiling": {
-                        "seaclear_sea_urchin": (0.08, 0.42, 0.52)                    },
+                        "seaclear_sea_urchin": (0.08, 0.42, 0.52)                    
+                    },
                     "backscatter": {
                         "seaclear_sea_urchin": (1.0, 1.0, 1.0)
                     }
@@ -79,11 +80,11 @@ config = {
         }
     ],
     "add_distractors": True,
-    "cam_workspace" : [-1.0, -1.0, 0.3, 1.0, 1.0, 1.3], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "cam_workspace" : [-1.0, -1.0, 0.6, 1.0, 1.0, 1.3], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "obj_workspace" : [-1.2, -1.2, -0.1, 1.2, 1.2, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "disable_render_products": False,
-    "debug_mode": True,
-    "seed": 984,
+    "debug_mode": False,
+    "seed": 983,
     "path_tracing": False,
 }
 
@@ -275,19 +276,15 @@ def run_sdg(config: dict=config):
     if config.get("add_distractors", False):
         # update the kitti labels mapping dict with distractor objects
         ds, kitti_labels = add_distractor_from_UE(mapping=kitti_labels,
-                                                UE_asset_folder='/frog-drive/projects/OceanSim/sim2real/SDG_assets/sceneAssets/Collected_OceanRealm/Assets/',
+                                                UE_asset_folder='/frog-drive/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/OceanRealm_assets/',
                                                 root_path="SDG_distractors",
                                                 name_prefix="distractor_",
                                                 physics=True,
-                                                num=20,
+                                                num=15,
                                                 count=1,
                                                 )
         distractors.extend(ds)
 
-        # for distractor in distractors:
-        #     #Scale donw the distractor objects
-        #     set_transform_attributes(distractor, scale=(0.1, 0.1, 0.1))
-        
         print(f"[SDG] {len(distractors)} numbers of distractor objects being added to the scene")
 
     # Resolve any centimeter-meter scale issues of the assets
@@ -344,10 +341,15 @@ def run_sdg(config: dict=config):
     while capture_counter < total_captures:
 
         if capture_counter % env_switch_interval == 0 and capture_counter > 0:
-            stage.RemovePrim("/terrain")
-            print(f"[SDG] Switching environment from [{env_index}] {list(parsed_envs.keys())[env_index]} to [{(env_index + 1)}] {list(parsed_envs.keys())[env_index + 1]}")
-            add_reference_to_stage(usd_path=next(envs_iter), prim_path='/terrain')
-            env_index += 1
+            try:
+                next_env = next(envs_iter)
+                stage.RemovePrim("/terrain")
+                add_reference_to_stage(usd_path=next_env, prim_path='/terrain')
+                print(f"[SDG] Switching environment from [{env_index}] {list(parsed_envs.keys())[env_index]} to [{(env_index + 1)}] {list(parsed_envs.keys())[env_index + 1]}")
+                env_index += 1
+            except:
+                print(f"[SDG] Environment exhausted, reuse the last environment.")
+
 
             # Recompute the sampled points on the new terrain
             terrian_mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/terrain/collider"))

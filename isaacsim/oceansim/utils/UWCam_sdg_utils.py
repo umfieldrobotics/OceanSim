@@ -251,6 +251,12 @@ def add_objects(
                 prim_path = omni.usd.get_stage_next_free_path(stage, f"/{root_path}/{name_prefix}{category}", False)
 
                 prim = add_reference_to_stage(usd_path=usd_file, prim_path=prim_path)
+                set_transform_attributes(prim, 
+                                        location=(0.0, 0.0, 0.0), 
+                                        orientation=Gf.Quatf(1), 
+                                        rotation=(0.0 ,0.0, 0.0),
+                                        scale=(1.0, 1.0, 1.0) 
+                                        )                
                 if physics:
                     add_colliders(prim)
                     add_rigid_body_dynamics(prim, disable_gravity=False)
@@ -306,6 +312,13 @@ def add_distractor_from_isaac(
             prim_path = omni.usd.get_stage_next_free_path(stage, f"/{root_path}/{name_prefix}", False)
 
             prim = add_reference_to_stage(usd_path=url, prim_path=prim_path)
+            set_transform_attributes(prim, 
+                                     location=(0.0, 0.0, 0.0), 
+                                     orientation=Gf.Quatf(1), 
+                                     rotation=(0.0 ,0.0, 0.0),
+                                     scale=(1.0, 1.0, 1.0) 
+                                     )
+            
             if physics:
                 add_colliders(prim)
                 add_rigid_body_dynamics(prim, disable_gravity=False)
@@ -358,8 +371,12 @@ def add_distractor_from_UE(
 
             prim = add_reference_to_stage(usd_path=url, prim_path=prim_path)
 
-            # Spawn this far from the terrain
-            set_transform_attributes(prim, location=(0,0,-10), scale=(0.1,0.1,0.1))
+            set_transform_attributes(prim, 
+                                     location=(0.0, 0.0, 0.0), 
+                                     orientation=Gf.Quatf(1), 
+                                     rotation=(0.0 ,0.0, 0.0),
+                                     scale=(0.25, 0.25, 0.25) 
+                                     )
             if physics:
                 add_colliders(prim)
                 # add_rigid_body_dynamics(prim, disable_gravity=False)

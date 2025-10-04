@@ -467,6 +467,11 @@ class UWCam_KittiWriter(Writer):
             # Only compute object's 3d information after the above test
             bbox3d_info = self._process_bounding_box_3d_single(bbox3d_id_to_bbox[id], data[camera_param_annotator])
             
+            # Check if a majority part of the object is out of the frame
+            if bbox3d_info['truncation_ratio'] > 0.6:
+                continue
+            
+            
             # Check if object is beyond max distance, skip if it is
             # if self._obj_beyond_max_distance(bbox3d_info["location_world_frame"], data[camera_param_annotator]):
             #     continue
