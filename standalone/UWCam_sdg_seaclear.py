@@ -14,7 +14,7 @@ config = {
             "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug? Will crash on multi-gpu
             ]
     },
-    "total_captures" : 5000,
+    "total_captures" : 10,
     "camera_collider_radius": 0.1,
     "env_url": "/home/nsieh/Desktop/terrains/",
     "objects_url": "/frog-drive/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/",
@@ -28,21 +28,21 @@ config = {
     },
     "writers": [
         # random haze writer
-        {
-            "type": "UWCam_KittiWriter",
-            "kwargs": {
-                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_3/random_haze",
-                "colorize_instance_segmentation": False,
-                "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
-                "use_tight_bbox": True,
-                "debug_mode": False,
-            },
-        },
+        # {
+        #     "type": "UWCam_KittiWriter",
+        #     "kwargs": {
+        #         "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_3/random_haze",
+        #         "colorize_instance_segmentation": False,
+        #         "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
+        #         "use_tight_bbox": True,
+        #         "debug_mode": False,
+        #     },
+        # },
         # No haze writer
         {
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_3/no_haze",
+                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_23/no_haze",
                 "colorize_instance_segmentation": False,
                 "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
                 "use_tight_bbox": True,
@@ -54,6 +54,9 @@ config = {
                     },
                     "backscatter": {
                         "no_haze": (0.0, 0.0, 0.0)
+                    },
+                    "attenuation": {
+                        "no_haze": (0.0, 0.0, 0.0)
                     }
                 }
             },
@@ -62,7 +65,7 @@ config = {
         {
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_3/single_haze",
+                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_23/single_haze_1.0",
                 "colorize_instance_segmentation": False,
                 "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
                 "use_tight_bbox": True,
@@ -70,20 +73,91 @@ config = {
                 "UW_param": {   
                     "scale_range": (1.0, 1.0),
                     "veiling": {
-                        "seaclear_sea_urchin": (0.08, 0.42, 0.52)                    
-                    },
+                        "seaclear": (0.01, 0.66, 0.68)
+                        },
                     "backscatter": {
-                        "seaclear_sea_urchin": (1.0, 1.0, 1.0)
+                        "seaclear": (0.01, 0.66, 0.68)
+                        },
+                    "attenuation": {
+                        "seaclear": (0.50, 0.90, 1.0)
+                        }
                     }
-                }
+            },
+        },
+
+        {
+            "type": "UWCam_KittiWriter",
+            "kwargs": {
+                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_23/single_haze_0.75",
+                "colorize_instance_segmentation": False,
+                "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
+                "use_tight_bbox": True,
+                "debug_mode": False,
+                "UW_param": {   
+                    "scale_range": (0.75, 0.75),
+                    "veiling": {
+                        "seaclear": (0.01, 0.66, 0.68)
+                        },
+                    "backscatter": {
+                        "seaclear": (0.01, 0.66, 0.68)
+                        },
+                    "attenuation": {
+                        "seaclear": (0.50, 0.90, 1.0)
+                        }
+                    }
+            },
+        },
+        {
+            "type": "UWCam_KittiWriter",
+            "kwargs": {
+                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_23/single_haze_0.5",
+                "colorize_instance_segmentation": False,
+                "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
+                "use_tight_bbox": True,
+                "debug_mode": False,
+                "UW_param": {   
+                    "scale_range": (0.5, 0.5),
+                    "veiling": {
+                        "seaclear": (0.01, 0.66, 0.68)
+                        },
+                    "backscatter": {
+                        "seaclear": (0.01, 0.66, 0.68)
+                        },
+                    "attenuation": {
+                        "seaclear": (0.50, 0.90, 1.0)
+                        }
+                    }
+            },
+        },
+        {
+            "type": "UWCam_KittiWriter",
+            "kwargs": {
+                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_23/single_haze_0.25",
+                "colorize_instance_segmentation": False,
+                "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
+                "use_tight_bbox": True,
+                "debug_mode": False,
+                "UW_param": {   
+                    "scale_range": (0.25, 0.25),
+                    "veiling": {
+                        "seaclear": (0.01, 0.66, 0.68)
+                        },
+                    "backscatter": {
+                        "seaclear": (0.01, 0.66, 0.68)
+                        },
+                    "attenuation": {
+                        "seaclear": (0.50, 0.90, 1.0)
+                        }
+                    }
             },
         }
+
     ],
     "add_distractors": True,
     "cam_workspace" : [-1.0, -1.0, 0.6, 1.0, 1.0, 1.3], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "obj_workspace" : [-1.2, -1.2, -0.1, 1.2, 1.2, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "disable_render_products": False,
-    "debug_mode": False,
+    "debug_mode": True,
     "seed": 983,
     "path_tracing": False,
 }
@@ -213,8 +287,16 @@ def run_sdg(config: dict=config):
     add_reference_to_stage(usd_path=next(envs_iter), prim_path='/terrain')
 
     stage = omni.usd.get_context().get_stage()
-    create_dome_ligth(stage, "/Environment", intensity=1000.0)
+    domelight = create_dome_ligth(stage, "/Environment", intensity=300.0)
 
+    # Enable FFT bloom (This makes the underwater scene look a bit more blurry, a bit more realistic)
+    enable_FFT_bloom(enable=True, energyConstrainingBlend=True)
+    # Enable global volumetric effects 
+    enable_global_volumetric_effects(enable=True, 
+                                    density_mult=1.0, 
+                                    anisotropy_factor=-1.0, 
+                                    transmittance_distance=20,
+                                    )
 
 
     # Create a physics scene to modify custom physics settings
@@ -365,20 +447,16 @@ def run_sdg(config: dict=config):
             for _ in range(100):
                 simulation_app.update()
 
-        enable_global_volumetric_effects(enable=True, 
-                                        density_mult=random.uniform(0.75, 1.25), 
-                                        anisotropy_factor=-1.0, 
-                                        transmittance_distance=10,
-                                        )
 
+        domelight.GetAttribute("inputs:intensity").Set(random.uniform(150.0, 450.0))
         sample_objects_on_points(points, objects, offset=(0, 0, 0.05))
 
         if distractors:
             sample_objects_on_points(points, distractors)
 
-        randomize_camera_poses_rel_to_ws(cameras, objects, cam_ws, look_at_offset=(-0.0, 0.0))
+        randomize_camera_poses_rel_to_ws(cameras, objects, cam_ws, look_at_offset=(-0.25, 0.25))
 
-        perturb_object_poses(objects, translation_range=(-0.1, 0.1),scale_range=(0.5, 1.5))
+        perturb_object_poses(objects, scale_range=(0.5, 1.0))
         # Run simulation a bit for collider to settle
         run_simulation(num_frames=5, render=False)
 

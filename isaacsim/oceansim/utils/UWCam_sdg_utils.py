@@ -496,6 +496,16 @@ def set_transform_attributes(
             UsdGeom.Xformable(prim).AddScaleOp()
         prim.GetAttribute("xformOp:scale").Set(scale)
 
+def enable_auto_exposure(enable: bool = True) -> None:
+    """Enable or disable auto exposure."""
+    carb.settings.get_settings().set("/rtx/post/histogram/enabled", enable)
+
+def enable_FFT_bloom(enable: bool = True, energyConstrainingBlend: bool = True) -> None:
+    """Enable or disable FFT bloom."""
+    carb.settings.get_settings().set("/rtx/post/lensFlares/enabled", enable)
+    carb.settings.get_settings().set("/rtx/post/lensFlares/energyConstrainingBlend", energyConstrainingBlend)
+
+
 
 def add_colliders(root_prim: Usd.Prim, approximation_type: str = "convexHull") -> None:
     """Add collision attributes to mesh and geometry primitives under the root prim."""

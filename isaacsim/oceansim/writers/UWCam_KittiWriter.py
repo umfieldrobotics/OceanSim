@@ -31,6 +31,22 @@ DULUTH_PARAM_DICT = {
         }, 
     "backscatter": {
         "duluth": (0.53, 0.68, 0.99)
+        },
+    "attenuation": {
+        "duluth": (0.53, 0.68, 0.99)
+        }
+    }
+
+SEACLEAR_PARAM_DICT = {
+    "scale_range": (0.5, 1.0),
+    "veiling": {
+        "seaclear": (0.01, 0.66, 0.68)
+        },
+    "backscatter": {
+        "seaclear": (0.01, 0.66, 0.68)
+        },
+    "attenuation": {
+        "seaclear": (0.50, 0.90, 1.0)
         }
     }
 
@@ -48,6 +64,18 @@ UW_PARAM_DICT = {
             "seaclear_sea_urchin": (0.08, 0.42, 0.52),
         },
     "backscatter": {
+            "Type I": (0.905, 0.961, 0.982),
+            "Type IA": (0.804, 0.954, 0.975),
+            "Type IB": (0.830, 0.940, 0.968),
+            "Type II": (0.800, 0.925, 0.940),
+            "Type III": (0.750, 0.885, 0.890),
+            "Type 1": (0.750, 0.885, 0.875),
+            "Type 3": (0.710, 0.820, 0.800),
+            "Type 5": (0.670, 0.730, 0.670),
+            "Type 7": (0.620, 0.610, 0.590),
+            "Type 9": (0.550, 0.460, 0.290),
+    },
+    "attenuation": {
             "Type I": (0.905, 0.961, 0.982),
             "Type IA": (0.804, 0.954, 0.975),
             "Type IB": (0.830, 0.940, 0.968),
@@ -250,7 +278,8 @@ class UWCam_KittiWriter(Writer):
         self._scale = random.uniform(self._UW_param["scale_range"][0], self._UW_param["scale_range"][1])
         self._veiling = random.choice(list(self._UW_param["veiling"].values()))
         self._backscatter = random.choice(list(self._UW_param["backscatter"].values()))
-        self._attenuation = self._backscatter # Defaul the attentuation to be the same as the backscatter
+        # self._attenuation = self._backscatter # Defaul the attentuation to be the same as the backscatter
+        self._attenuation = random.choice(list(self._UW_param["attenuation"].values()))
         uw_image = data[rgb_annotator]
         if self._enable_caustics:
             _caustics_tex = wp.empty(shape=(height, width, 4), dtype=wp.uint8)
