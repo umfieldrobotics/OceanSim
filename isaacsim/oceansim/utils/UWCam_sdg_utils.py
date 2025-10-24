@@ -470,6 +470,14 @@ def enable_global_volumetric_effects(enable: bool = True,
     carb.settings.get_settings().set("/rtx/raytracing/inscattering/densityMult", density_mult)
     carb.settings.get_settings().set("/rtx/raytracing/inscattering/anisotropyFactor", anisotropy_factor)
     carb.settings.get_settings().set("/rtx/raytracing/inscattering/transmittanceMeasurementDistance", transmittance_distance)
+
+
+
+# def set_background_type(background_type: str = "None", color: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> None:
+#     """Set the background type. Color, Texture, None"""
+#     carb.settings.get_settings().set("/rtx/background/source/type", background_type)
+#     carb.settings.get_settings().set("/rtx/background/source/color", color)
+
 # needed for loading textures correctly
 def set_transform_attributes(
     prim: Usd.Prim,

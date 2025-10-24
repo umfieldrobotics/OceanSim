@@ -14,7 +14,7 @@ config = {
             "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug? Will crash on multi-gpu
             ]
     },
-    "total_captures" : 10,
+    "total_captures" : 5000,
     "camera_collider_radius": 0.1,
     "env_url": "/home/nsieh/Desktop/terrains/",
     "objects_url": "/frog-drive/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/",
@@ -157,8 +157,8 @@ config = {
     "cam_workspace" : [-1.0, -1.0, 0.6, 1.0, 1.0, 1.3], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "obj_workspace" : [-1.2, -1.2, -0.1, 1.2, 1.2, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "disable_render_products": False,
-    "debug_mode": True,
-    "seed": 983,
+    "debug_mode": False,
+    "seed": 983261,
     "path_tracing": False,
 }
 
@@ -289,14 +289,7 @@ def run_sdg(config: dict=config):
     stage = omni.usd.get_context().get_stage()
     domelight = create_dome_ligth(stage, "/Environment", intensity=300.0)
 
-    # Enable FFT bloom (This makes the underwater scene look a bit more blurry, a bit more realistic)
-    enable_FFT_bloom(enable=True, energyConstrainingBlend=True)
-    # Enable global volumetric effects 
-    enable_global_volumetric_effects(enable=True, 
-                                    density_mult=1.0, 
-                                    anisotropy_factor=-1.0, 
-                                    transmittance_distance=20,
-                                    )
+
 
 
     # Create a physics scene to modify custom physics settings
@@ -420,6 +413,19 @@ def run_sdg(config: dict=config):
     print(f"[SDG] env_switch_interval: {env_switch_interval}, num_envs: {num_envs}")
 
 
+    # Enable FFT bloom (This makes the underwater scene look a bit more blurry, a bit more realistic)
+    enable_FFT_bloom(enable=True, energyConstrainingBlend=True)
+    enable_global_volumetric_effects(enable=True, 
+                                    density_mult=1.0, 
+                                    anisotropy_factor=-1.0, 
+                                    transmittance_distance=20,
+                                    )
+    # Set the background type to Black
+    # set_background_type(background_type="Color", color=(0.0, 0.0, 0.0))
+    # carb.settings.get_settings().set("/rtx/background/source/color", (0, 0, 0))
+    # carb.settings.get_settings().set("/rtx/background/source/type", "Color")
+    # carb.settings.get_settings().set("/rtx/background/source/color", (0, 0, 0))
+
     while capture_counter < total_captures:
 
         if capture_counter % env_switch_interval == 0 and capture_counter > 0:
@@ -454,9 +460,10 @@ def run_sdg(config: dict=config):
         if distractors:
             sample_objects_on_points(points, distractors)
 
-        randomize_camera_poses_rel_to_ws(cameras, objects, cam_ws, look_at_offset=(-0.25, 0.25))
+        randomize_camera_poses_rel_to_ws(cameras, objects, cam_ws, look_at_offset=(-0.3, 0.3))
 
         perturb_object_poses(objects, scale_range=(0.5, 1.0))
+
         # Run simulation a bit for collider to settle
         run_simulation(num_frames=5, render=False)
 
@@ -468,6 +475,7 @@ def run_sdg(config: dict=config):
         if path_tracing:
             capture_pathtracing(delta_time=0.0, spp=512, pause_timeline=True)
         else:
+
             rep.orchestrator.step(rt_subframes=rt_subframes, delta_time=0.0)
 
         
@@ -475,7 +483,7 @@ def run_sdg(config: dict=config):
         # NOTE: Temporary code to save the object info as metadata
         if not os.path.exists(os.path.join(out_dir, "metadata")):
             os.makedirs(os.path.join(out_dir, "metadata"), exist_ok=True)
-        save_object_info(objects, cameras, os.path.join(out_dir, "metadata", f"object_info_{capture_counter}.json"))
+        # save_object_info(objects, cameras, os.path.join(out_dir, "metadata", f"object_info_{capture_counter}.json"))
         
         
         
