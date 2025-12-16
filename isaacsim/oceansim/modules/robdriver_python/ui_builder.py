@@ -1,6 +1,7 @@
 # Omniverse import
 import numpy as np
 import os
+from omni.replicator.core.scripts.create import camera
 import omni.timeline
 import omni.ui as ui
 from omni.usd import StageEventType
@@ -18,12 +19,12 @@ from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.core.utils.extensions import get_extension_path
 import omni.replicator.core as rep
-
+from isaacsim.core.api import SimulationContext
 # Custom import
 from .scenario import RobDriver_Scenario
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
 from isaacsim.oceansim.utils.assets_utils import get_oceansim_assets_path
-
+from isaacsim.oceansim.sensors import DVLsensor
 class UIBuilder():
     def __init__(self):
 
@@ -238,6 +239,7 @@ class UIBuilder():
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         create_new_stage()
+        
         if self._USD_path_field.get_value_as_string() != "":
             scene_prim_path = '/World/scene'
             add_reference_to_stage(usd_path=self._USD_path_field.get_value_as_string(), prim_path=scene_prim_path)
@@ -251,18 +253,12 @@ class UIBuilder():
             add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
             # Toggle MHL mesh's collider
             SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
-            # apply a reflectivity of 1.0 to mesh of the scene for sonar simulation
-            add_update_semantics(prim=get_prim_at_path(MHL_prim_path + "/Mesh/mesh"),
-                                type_label='reflectivity',
-                                semantic_label='1.0')
+
             # Load the rock
             rock_prim_path = '/World/rock'
             rock_usd_path = get_oceansim_assets_path() + "/collected_rock/rock.usd"
             rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
-            # apply a reflectivity of 2.0 for sonar simulation
-            add_update_semantics(prim=get_prim_at_path(rock_prim_path+ '/Mesh/mesh'),
-                                type_label='reflectivity',
-                                semantic_label='2.0')
+
             # Toggle collider for the rock
             rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
                             collision=True)
@@ -273,10 +269,11 @@ class UIBuilder():
                                             translation=np.array([1.0, 0.1, -1.5]),
                                             orientation=euler_angles_to_quat(np.array([0.0,0.0,90]), degrees=True), 
                                             )
-            
+
         # add bluerov robot as reference
+        self._stage = omni.usd.get_context().get_stage()
         robot_prim_path = "/World/rob"
-        robot_usd_path = get_oceansim_assets_path() + "/Bluerov/BROV_low.usd"
+        robot_usd_path = "/mnt/frog-users/projects/OceanSim/foundnationStero/rob_frames.usd"
         self._rob = add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
         # Toggle rigid body and collider preset for robot, and set zero gravity to mimic underwater environment
         rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(robot_prim_path))
@@ -293,12 +290,18 @@ class UIBuilder():
                         translation=np.array([-2.0, 0.0, -0.8]))
 
         set_camera_view(eye=np.array([5,0.6,0.4]), target=rob_collider_prim.get_world_pose()[0])
-        
-        stereo = rep.create.stereo_camera(
-            position=(0.25, 0, 0),
-            rotation=(0, 0, 180),
-             stereo_baseline=0.15, 
-             parent=robot_prim_path)
+
+        from isaacsim.sensors.camera import Camera
+        result, sensor = omni.kit.commands.execute(
+            "IsaacSensorCreateImuSensor",
+            path="/Imu_Sensor",
+            parent="/World/rob/base_link/imu_link",
+        )
+
+        left_camera_prim_path = "/World/rob/base_link/left_camera/cam_L"
+        right_camera_prim_path = "/World/rob/base_link/right_camera/cam_R"
+        cam_L = Camera(prim_path=left_camera_prim_path)
+        cam_R = Camera(prim_path=right_camera_prim_path)
 
         
             
@@ -319,6 +322,7 @@ class UIBuilder():
         self._reset_btn.enabled = True
 
     def _reset_scenario(self):
+        self._scenario.save_data_frame()
         self._scenario.teardown_scenario()
         self._scenario.setup_scenario(self._rob, self._ctrl_mode)
     def _on_post_reset_btn(self):
