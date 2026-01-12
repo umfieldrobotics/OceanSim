@@ -14,7 +14,7 @@ config = {
             "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug? Will crash on multi-gpu
             ]
     },
-    "total_captures" : 4,
+    "total_captures" : 10,
     "camera_collider_radius": 0.1,
     "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains",
     "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/",
@@ -49,7 +49,7 @@ config = {
                 "use_tight_bbox": True,
                 "debug_mode": False,
                 "UW_param": {
-                    "scale_range": (0.25, 0.25), # this 0.25 for now is based on an ablalation study that gives the greatest mAP 
+                    "scale_range": (0.5, 0.5), # 0.25 for now is on an ablalation study that gives the greatest mAP 
                     "veiling": {
                             "deep_sea": (0.0, 0.0, 0.28),
                             # "shallow_water": (0.05, 0.11, 0.7),
@@ -90,8 +90,9 @@ config = {
 
     ],
     "add_distractors": True,
-    "cam_workspace" : [-1.0, -1.0, 0.6, 1.0, 1.0, 1.3], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
-    "obj_workspace" : [-1.2, -1.2, -0.1, 1.2, 1.2, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "cam_workspace" : [-1.0, -1.0, 0.75, 1.0, 1.0, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "obj_workspace" : [-0.75, -0.75, -1.0, 0.75, 0.75, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "dist_workspace" : [-1.0, -1.0, -1.0, 1.0, 1.0, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "disable_render_products": False,
     "debug_mode": False,
     "seed": 114514,
@@ -199,6 +200,7 @@ def run_sdg(config: dict=config):
     total_captures = config.get("total_captures", 10)
     rt_subframes = config.get("rt_subframes", 4) 
     obj_ws = config.get("obj_workspace")
+    dist_ws = config.get("dist_workspace")
     cam_ws = config.get("cam_workspace")
     camera_properties_kwargs = config.get("camera_properties_kwargs", {})
     masked_objects_ratio = config.get("masked_objects_ratio", 0.5)
@@ -335,12 +337,19 @@ def run_sdg(config: dict=config):
 
     terrian_mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/terrain/collider"))
     points = terrian_mesh.GetPointsAttr().Get()
-    points = [
+    obj_ws_points = [
         point
         for point in points
         if obj_ws[0] <= point[0] <= obj_ws[3]
         and obj_ws[1] <= point[1] <= obj_ws[4]
         and obj_ws[2] <= point[2] <= obj_ws[5]
+    ]
+    dist_ws_points = [
+        point
+        for point in points
+        if dist_ws[0] <= point[0] <= dist_ws[3]
+        and dist_ws[1] <= point[1] <= dist_ws[4]
+        and dist_ws[2] <= point[2] <= dist_ws[5]
     ]
 
     capture_counter = 0
@@ -355,7 +364,7 @@ def run_sdg(config: dict=config):
     enable_global_volumetric_effects(enable=True, 
                                     density_mult=1.0, 
                                     anisotropy_factor=-1.0, 
-                                    transmittance_distance=20,
+                                    transmittance_distance=40,
                                     )
     # Set the background type to Black
     # set_background_type(background_type="Color", color=(0.0, 0.0, 0.0))
@@ -379,23 +388,29 @@ def run_sdg(config: dict=config):
             # Recompute the sampled points on the new terrain
             terrian_mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/terrain/collider"))
             points = terrian_mesh.GetPointsAttr().Get()
-            points = [
+            obj_ws_points = [
                 point
                 for point in points
                 if obj_ws[0] <= point[0] <= obj_ws[3]
                 and obj_ws[1] <= point[1] <= obj_ws[4]
                 and obj_ws[2] <= point[2] <= obj_ws[5]
             ]
+            dist_ws_points = [
+                point
+                for point in points
+                if dist_ws[0] <= point[0] <= dist_ws[3]
+                and dist_ws[1] <= point[1] <= dist_ws[4]
+                and dist_ws[2] <= point[2] <= dist_ws[5]
+            ]
             # make sure render artifact is gone
             for _ in range(100):
                 simulation_app.update()
 
 
-        domelight.GetAttribute("inputs:intensity").Set(random.uniform(150.0, 450.0))
-        sample_objects_on_points(points, objects, offset=(0, 0, 0.05))
-
+        domelight.GetAttribute("inputs:intensity").Set(random.uniform(650.0, 750.0))
+        sample_objects_on_points(obj_ws_points, objects, offset=(0, 0, 0.05))
         if distractors:
-            sample_objects_on_points(points, distractors)
+            sample_objects_on_points(dist_ws_points, distractors)
 
         randomize_camera_poses_rel_to_ws(cameras, objects, cam_ws, look_at_offset=(-0.3, 0.3))
 
