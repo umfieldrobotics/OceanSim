@@ -18,13 +18,12 @@ from isaacsim.gui.components import CollapsableFrame, StateButton, get_style, se
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.core.utils.extensions import get_extension_path
-import omni.replicator.core as rep
-from isaacsim.core.api import SimulationContext
+
 # Custom import
 from .scenario import RobDriver_Scenario
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
 from isaacsim.oceansim.utils.assets_utils import get_oceansim_assets_path
-from isaacsim.oceansim.sensors import DVLsensor
+
 class UIBuilder():
     def __init__(self):
 
@@ -292,11 +291,11 @@ class UIBuilder():
         set_camera_view(eye=np.array([5,0.6,0.4]), target=rob_collider_prim.get_world_pose()[0])
 
         from isaacsim.sensors.camera import Camera
-        result, sensor = omni.kit.commands.execute(
-            "IsaacSensorCreateImuSensor",
-            path="/Imu_Sensor",
-            parent="/World/rob/base_link/imu_link",
-        )
+        # result, sensor = omni.kit.commands.execute(
+        #     "IsaacSensorCreateImuSensor",
+        #     path="/Imu_Sensor",
+        #     parent="/World/rob/base_link/imu_link",
+        # )
 
         left_camera_prim_path = "/World/rob/base_link/left_camera/cam_L"
         right_camera_prim_path = "/World/rob/base_link/right_camera/cam_R"
