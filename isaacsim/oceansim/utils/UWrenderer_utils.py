@@ -43,15 +43,15 @@ def UW_render_2(raw_image: wp.array(ndim=3, dtype=wp.uint8),
              backscatter_coeff: wp.vec3,
              uw_image: wp.array(ndim=3, dtype=wp.uint8)):
     i,j = wp.tid()
-    raw_RGB = wp.vec3(wp.float32(raw_image[j,i,0]), wp.float32(raw_image[j,i,1]), wp.float32(raw_image[j,i,2]), dtype=wp.float32)
-    depth = depth_image[j,i]
+    raw_RGB = wp.vec3(wp.float32(raw_image[i,j,0]), wp.float32(raw_image[i,j,1]), wp.float32(raw_image[i,j,2]), dtype=wp.float32)
+    depth = depth_image[i,j]
     exp_atten = vec3_exp(- depth * atten_coeff * scale)
     exp_back = vec3_exp(- depth * backscatter_coeff * scale)
     UW_RGB = vec3_mul(raw_RGB, exp_atten) + vec3_mul(backscatter_value * wp.float32(255), (wp.vec3f(1.0,1.0,1.0) - exp_back) )
-    uw_image[j,i,0] = wp.uint8(wp.clamp(UW_RGB[0], wp.float32(0), wp.float32(255)))
-    uw_image[j,i,1] = wp.uint8(wp.clamp(UW_RGB[1], wp.float32(0), wp.float32(255)))
-    uw_image[j,i,2] = wp.uint8(wp.clamp(UW_RGB[2], wp.float32(0), wp.float32(255)))
-    uw_image[j,i,3] = raw_image[j,i,3]
+    uw_image[i,j,0] = wp.uint8(wp.clamp(UW_RGB[0], wp.float32(0), wp.float32(255)))
+    uw_image[i,j,1] = wp.uint8(wp.clamp(UW_RGB[1], wp.float32(0), wp.float32(255)))
+    uw_image[i,j,2] = wp.uint8(wp.clamp(UW_RGB[2], wp.float32(0), wp.float32(255)))
+    uw_image[i,j,3] = raw_image[i,j,3]
 
 @wp.func
 def fract(x: float):

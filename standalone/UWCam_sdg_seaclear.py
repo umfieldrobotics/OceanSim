@@ -14,12 +14,13 @@ config = {
             "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug? Will crash on multi-gpu
             ]
     },
-    "total_captures" : 5000,
+    "total_captures" : 4,
     "camera_collider_radius": 0.1,
-    "env_url": "/home/nsieh/Desktop/terrains/",
-    "objects_url": "/frog-drive/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/",
+    "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains",
+    "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/",
+    "distractors_folder": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/OceanRealm_assets/",
     "rt_subframes": 16,
-    "resolution": [1024, 1024],
+    "resolution": [960, 540],
     "camera_properties_kwargs": {
         "focalLength": 24.0,
         "focusDistance": 400,
@@ -42,113 +43,48 @@ config = {
         {
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_23/no_haze",
+                "output_dir": "/mnt/frog-users/projects/OceanSim/sim2real/archive_dataset/SDG_1_12_2026/random_haze_0.25",
                 "colorize_instance_segmentation": False,
                 "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
                 "use_tight_bbox": True,
                 "debug_mode": False,
                 "UW_param": {
-                    "scale_range": (1.0, 1.0),
+                    "scale_range": (0.25, 0.25), # this 0.25 for now is based on an ablalation study that gives the greatest mAP 
                     "veiling": {
-                        "no_haze": (0.0, 0.0, 0.0)
-                    },
+                            "deep_sea": (0.0, 0.0, 0.28),
+                            # "shallow_water": (0.05, 0.11, 0.7),
+                            "akdeniz": (0.14, 0.3, 0.5),
+                            "river": (0.294, 0.4, 0.263),
+                            "mud": (0.259, 0.259, 0.024),
+                            "mhl": (0.0, 0.3021, 0.239),
+                            "murky": (0.275, 0.212, 0.071),
+                            "seaclear_sea_urchin": (0.08, 0.42, 0.52),
+                        },
                     "backscatter": {
-                        "no_haze": (0.0, 0.0, 0.0)
+                            "Type I": (0.905, 0.961, 0.982),
+                            "Type IA": (0.804, 0.954, 0.975),
+                            "Type IB": (0.830, 0.940, 0.968),
+                            "Type II": (0.800, 0.925, 0.940),
+                            "Type III": (0.750, 0.885, 0.890),
+                            "Type 1": (0.750, 0.885, 0.875),
+                            "Type 3": (0.710, 0.820, 0.800),
+                            "Type 5": (0.670, 0.730, 0.670),
+                            "Type 7": (0.620, 0.610, 0.590),
+                            "Type 9": (0.550, 0.460, 0.290),
                     },
                     "attenuation": {
-                        "no_haze": (0.0, 0.0, 0.0)
+                            "Type I": (0.905, 0.961, 0.982),
+                            "Type IA": (0.804, 0.954, 0.975),
+                            "Type IB": (0.830, 0.940, 0.968),
+                            "Type II": (0.800, 0.925, 0.940),
+                            "Type III": (0.750, 0.885, 0.890),
+                            "Type 1": (0.750, 0.885, 0.875),
+                            "Type 3": (0.710, 0.820, 0.800),
+                            "Type 5": (0.670, 0.730, 0.670),
+                            "Type 7": (0.620, 0.610, 0.590),
+                            "Type 9": (0.550, 0.460, 0.290),
                     }
                 }
-            },
-        },
-        # Single haze writer
-        {
-            "type": "UWCam_KittiWriter",
-            "kwargs": {
-                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_23/single_haze_1.0",
-                "colorize_instance_segmentation": False,
-                "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
-                "use_tight_bbox": True,
-                "debug_mode": False,
-                "UW_param": {   
-                    "scale_range": (1.0, 1.0),
-                    "veiling": {
-                        "seaclear": (0.01, 0.66, 0.68)
-                        },
-                    "backscatter": {
-                        "seaclear": (0.01, 0.66, 0.68)
-                        },
-                    "attenuation": {
-                        "seaclear": (0.50, 0.90, 1.0)
-                        }
-                    }
-            },
-        },
-
-        {
-            "type": "UWCam_KittiWriter",
-            "kwargs": {
-                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_23/single_haze_0.75",
-                "colorize_instance_segmentation": False,
-                "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
-                "use_tight_bbox": True,
-                "debug_mode": False,
-                "UW_param": {   
-                    "scale_range": (0.75, 0.75),
-                    "veiling": {
-                        "seaclear": (0.01, 0.66, 0.68)
-                        },
-                    "backscatter": {
-                        "seaclear": (0.01, 0.66, 0.68)
-                        },
-                    "attenuation": {
-                        "seaclear": (0.50, 0.90, 1.0)
-                        }
-                    }
-            },
-        },
-        {
-            "type": "UWCam_KittiWriter",
-            "kwargs": {
-                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_23/single_haze_0.5",
-                "colorize_instance_segmentation": False,
-                "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
-                "use_tight_bbox": True,
-                "debug_mode": False,
-                "UW_param": {   
-                    "scale_range": (0.5, 0.5),
-                    "veiling": {
-                        "seaclear": (0.01, 0.66, 0.68)
-                        },
-                    "backscatter": {
-                        "seaclear": (0.01, 0.66, 0.68)
-                        },
-                    "attenuation": {
-                        "seaclear": (0.50, 0.90, 1.0)
-                        }
-                    }
-            },
-        },
-        {
-            "type": "UWCam_KittiWriter",
-            "kwargs": {
-                "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_23/single_haze_0.25",
-                "colorize_instance_segmentation": False,
-                "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
-                "use_tight_bbox": True,
-                "debug_mode": False,
-                "UW_param": {   
-                    "scale_range": (0.25, 0.25),
-                    "veiling": {
-                        "seaclear": (0.01, 0.66, 0.68)
-                        },
-                    "backscatter": {
-                        "seaclear": (0.01, 0.66, 0.68)
-                        },
-                    "attenuation": {
-                        "seaclear": (0.50, 0.90, 1.0)
-                        }
-                    }
             },
         }
 
@@ -158,7 +94,7 @@ config = {
     "obj_workspace" : [-1.2, -1.2, -0.1, 1.2, 1.2, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "disable_render_products": False,
     "debug_mode": False,
-    "seed": 983261,
+    "seed": 114514,
     "path_tracing": False,
 }
 
@@ -348,10 +284,11 @@ def run_sdg(config: dict=config):
     print(f"[SDG] {len(objects)} numbers of detection objects being added to the scene")
 
     distractors = []
+    distract_folder = config.get('distractors_folder', None)
     if config.get("add_distractors", False):
         # update the kitti labels mapping dict with distractor objects
         ds, kitti_labels = add_distractor_from_UE(mapping=kitti_labels,
-                                                UE_asset_folder='/frog-drive/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/OceanRealm_assets/',
+                                                UE_asset_folder=distract_folder,
                                                 root_path="SDG_distractors",
                                                 name_prefix="distractor_",
                                                 physics=True,

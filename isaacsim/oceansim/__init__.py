@@ -1,5 +1,17 @@
 # Modules are UI extensions and have to be imported separately for UI to work properly
+# import omni.kit.app
 
+# app = omni.kit.app.get_app()
+# ext_manager = app.get_extension_manager()
+# ext_id = "isaacsim.oceansim"
+
+# # Toggle extension state
+# if ext_manager.is_extension_enabled(ext_id):
+#     ext_manager.set_extension_enabled(ext_id, False)
+#     print(f"EXTENSION {ext_id} DEACTIVATED")
+# else:
+#     ext_manager.set_extension_enabled(ext_id, True)
+#     print(f"EXTENSION {ext_id} ACTIVATED")
 from .sensors import *
 from .utils import *
 from .watersurface import *
