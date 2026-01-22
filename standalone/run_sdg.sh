@@ -7,11 +7,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Set base directory - adjust this path as needed for your Linux Isaac Sim installation
 BASEDIR="/isaac-sim/"
 
-SCRIPT="${BASEDIR}extsUser/isaacsim.oceansim/standalone/UWCam_sdg.py"
+SCRIPT="${BASEDIR}extsUser/isaacsim.oceansim/standalone/UWCam_sdg_seaclear.py"
 
 # Use first argument as config directory, or default if not provided
 if [ -z "$1" ]; then
-    CONFIG_DIR="${BASEDIR}extsUser/isaacsim.oceansim/standalone/UWCam_configs/empty"
+    CONFIG_DIR="${BASEDIR}extsUser/isaacsim.oceansim/standalone/Seaclear_configs"
 else
     # If argument is an absolute path (starts with /), use as is; otherwise, make it relative to BASEDIR
     if [[ "$1" == /* ]]; then

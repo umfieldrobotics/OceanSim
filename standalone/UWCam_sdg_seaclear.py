@@ -14,7 +14,7 @@ config = {
             "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug? Will crash on multi-gpu
             ]
     },
-    "total_captures" : 10,
+    "total_captures" : 15,
     "camera_collider_radius": 0.1,
     "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains",
     "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/",
@@ -28,18 +28,6 @@ config = {
         "clippingRange": [0.001, 100],
     },
     "writers": [
-        # random haze writer
-        # {
-        #     "type": "UWCam_KittiWriter",
-        #     "kwargs": {
-        #         "output_dir": "/frog-drive/projects/OceanSim/sim2real/SDG_data/SDG_10_3/random_haze",
-        #         "colorize_instance_segmentation": False,
-        #         "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
-        #         "use_tight_bbox": True,
-        #         "debug_mode": False,
-        #     },
-        # },
-        # No haze writer
         {
             "type": "UWCam_KittiWriter",
             "kwargs": {
@@ -136,7 +124,6 @@ launch_config = config.get("launch_config", {})
 debug_mode = config.get("debug_mode", False)
 seed = config.get("seed", None)
 
-
 if debug_mode:
     launch_config["headless"] = False
 
@@ -203,7 +190,6 @@ def run_sdg(config: dict=config):
     dist_ws = config.get("dist_workspace")
     cam_ws = config.get("cam_workspace")
     camera_properties_kwargs = config.get("camera_properties_kwargs", {})
-    masked_objects_ratio = config.get("masked_objects_ratio", 0.5)
     path_tracing = config.get("path_tracing", False)
     num_cameras = config.get("num_cameras", 1)
     resolution = tuple(config.get("resolution", [640, 480]))
@@ -294,7 +280,7 @@ def run_sdg(config: dict=config):
                                                 root_path="SDG_distractors",
                                                 name_prefix="distractor_",
                                                 physics=True,
-                                                num=15,
+                                                num=25,
                                                 count=1,
                                                 )
         distractors.extend(ds)
@@ -360,7 +346,7 @@ def run_sdg(config: dict=config):
 
 
     # Enable FFT bloom (This makes the underwater scene look a bit more blurry, a bit more realistic)
-    enable_FFT_bloom(enable=True, energyConstrainingBlend=True)
+    enable_FFT_bloom(enable=False, energyConstrainingBlend=True)
     enable_global_volumetric_effects(enable=True, 
                                     density_mult=1.0, 
                                     anisotropy_factor=-1.0, 
@@ -407,7 +393,7 @@ def run_sdg(config: dict=config):
                 simulation_app.update()
 
 
-        domelight.GetAttribute("inputs:intensity").Set(random.uniform(650.0, 750.0))
+        domelight.GetAttribute("inputs:intensity").Set(random.uniform(500, 600))
         sample_objects_on_points(obj_ws_points, objects, offset=(0, 0, 0.05))
         if distractors:
             sample_objects_on_points(dist_ws_points, distractors)
