@@ -143,10 +143,10 @@ def parse_textures(url) -> dict:
 
 def terrain_gen(texture_folder_url : str) -> None:
     dp_factor = 0.05
-    patch_factor = 2
-    bg_factor = 5
+    patch_factor = 3
+    bg_factor = 4
     resolution = 100 # number of vertices + 1 per side
-    collider_res = 1000
+    collider_res = 1500
 
     texture_name = os.path.basename(texture_folder_url)
     texPath = parse_textures(texture_folder_url)

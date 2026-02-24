@@ -11,7 +11,7 @@ launch_config:
     - "--/log/outputStreamLevel=error"
     - "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug?
 
-total_captures: 30
+total_captures: 10000
 camera_collider_radius: 0.1
 env_url: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/simple_plane"
 objects_url: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/"

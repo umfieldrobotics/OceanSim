@@ -14,15 +14,15 @@ config = {
             "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug? Will crash on multi-gpu
             ]
     },
-    "total_captures" : 15,
+    "total_captures" : 10000,
     "camera_collider_radius": 0.1,
-    "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains",
+    "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains_3x3",
     "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/",
     "distractors_folder": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/OceanRealm_assets/",
     "rt_subframes": 16,
-    "resolution": [960, 540],
+    "resolution": [1920, 1080],
     "camera_properties_kwargs": {
-        "focalLength": 24.0,
+        "focalLength": 24,
         "focusDistance": 400,
         "fStop": 0.0,
         "clippingRange": [0.001, 100],
@@ -31,15 +31,14 @@ config = {
         {
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "/mnt/frog-users/projects/OceanSim/sim2real/archive_dataset/SDG_1_12_2026/random_haze_0.25",
+                "output_dir": "/mnt/frog-users/projects/OceanSim/sim2real/archive_dataset/SDG_2_22_2026/",
                 "colorize_instance_segmentation": False,
-                "veiling_visibility_threshold": 12, # This is not used now (writer code, can not easily remove)
                 "use_tight_bbox": True,
                 "debug_mode": False,
                 "UW_param": {
-                    "scale_range": (0.5, 0.5), # 0.25 for now is on an ablalation study that gives the greatest mAP 
+                    "scale_range": (0.5, 1.0), # 0.25 for now is on an ablalation study that gives the greatest mAP 
                     "veiling": {
-                            "deep_sea": (0.0, 0.0, 0.28),
+                            # "deep_sea": (0.0, 0.0, 0.28),
                             # "shallow_water": (0.05, 0.11, 0.7),
                             "akdeniz": (0.14, 0.3, 0.5),
                             "river": (0.294, 0.4, 0.263),
@@ -59,18 +58,19 @@ config = {
                             "Type 5": (0.670, 0.730, 0.670),
                             "Type 7": (0.620, 0.610, 0.590),
                             "Type 9": (0.550, 0.460, 0.290),
+
                     },
                     "attenuation": {
-                            "Type I": (0.905, 0.961, 0.982),
-                            "Type IA": (0.804, 0.954, 0.975),
-                            "Type IB": (0.830, 0.940, 0.968),
-                            "Type II": (0.800, 0.925, 0.940),
-                            "Type III": (0.750, 0.885, 0.890),
-                            "Type 1": (0.750, 0.885, 0.875),
-                            "Type 3": (0.710, 0.820, 0.800),
-                            "Type 5": (0.670, 0.730, 0.670),
-                            "Type 7": (0.620, 0.610, 0.590),
-                            "Type 9": (0.550, 0.460, 0.290),
+                            "Type I": (0.905*1.5, 0.961*1.5, 0.982*1.5),
+                            "Type IA": (0.804*1.5, 0.954*1.5, 0.975*1.5),
+                            "Type IB": (0.830*1.5, 0.940*1.5, 0.968*1.5),
+                            "Type II": (0.800*1.5, 0.925*1.5, 0.940*1.5),
+                            # "Type III": (0.750*1.5, 0.885*1.5, 0.890*1.5),
+                            # "Type 1": (0.750*1.5, 0.885*1.5, 0.875*1.5),
+                            # "Type 3": (0.710*1.5, 0.820*1.5, 0.800*1.5),
+                            # "Type 5": (0.670*1.5, 0.730*1.5, 0.670*1.5),
+                            # "Type 7": (0.620*1.5, 0.610*1.5, 0.590*1.5),
+                            # "Type 9": (0.550*1.5, 0.460*1.5, 0.290*1.5),
                     }
                 }
             },
@@ -78,12 +78,13 @@ config = {
 
     ],
     "add_distractors": True,
-    "cam_workspace" : [-1.0, -1.0, 0.75, 1.0, 1.0, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
-    "obj_workspace" : [-0.75, -0.75, -1.0, 0.75, 0.75, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
-    "dist_workspace" : [-1.0, -1.0, -1.0, 1.0, 1.0, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "cam_workspace" : [-0.25, -0.25, 0.5, 0.25, 0.25, 1.75], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "cam_lookat_workspace" : [-1.5, -1.5, -1.0, 1.5, 1.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "obj_workspace" : [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "dist_workspace" : [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "disable_render_products": False,
     "debug_mode": False,
-    "seed": 114514,
+    "seed": 1145142,
     "path_tracing": False,
 }
 
@@ -189,6 +190,7 @@ def run_sdg(config: dict=config):
     obj_ws = config.get("obj_workspace")
     dist_ws = config.get("dist_workspace")
     cam_ws = config.get("cam_workspace")
+    lookat_ws = config.get("cam_lookat_workspace")
     camera_properties_kwargs = config.get("camera_properties_kwargs", {})
     path_tracing = config.get("path_tracing", False)
     num_cameras = config.get("num_cameras", 1)
@@ -267,7 +269,7 @@ def run_sdg(config: dict=config):
     objects, kitti_labels = add_objects(objects_folder_path=objects_url, 
                                         override_semantic_mapping=None, 
                                         physics=True,
-                                        count=20,
+                                        count=7,
                                         )
     print(f"[SDG] {len(objects)} numbers of detection objects being added to the scene")
 
@@ -280,8 +282,8 @@ def run_sdg(config: dict=config):
                                                 root_path="SDG_distractors",
                                                 name_prefix="distractor_",
                                                 physics=True,
-                                                num=25,
-                                                count=1,
+                                                num=30,
+                                                count=2,
                                                 )
         distractors.extend(ds)
 
@@ -393,12 +395,12 @@ def run_sdg(config: dict=config):
                 simulation_app.update()
 
 
-        domelight.GetAttribute("inputs:intensity").Set(random.uniform(500, 600))
+        domelight.GetAttribute("inputs:intensity").Set(1500.0)
         sample_objects_on_points(obj_ws_points, objects, offset=(0, 0, 0.05))
         if distractors:
             sample_objects_on_points(dist_ws_points, distractors)
 
-        randomize_camera_poses_rel_to_ws(cameras, objects, cam_ws, look_at_offset=(-0.3, 0.3))
+        randomize_camera_poses_rel_to_objs(cameras, objects, lookat_ws, cam_ws, look_at_offset=(-0.3, 0.3))
 
         perturb_object_poses(objects, scale_range=(0.5, 1.0))
 

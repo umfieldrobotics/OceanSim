@@ -170,6 +170,7 @@ from collections import defaultdict
 import json
 from pathlib import Path
 from collections import OrderedDict
+from typing import Optional, List
 
 import omni.kit.app
 import omni.kit.commands
@@ -750,9 +751,10 @@ def randomize_camera_poses_rel_to_targets(
         # Set the camera's transform attributes to the generated location and orientation
         set_transform_attributes(cam, location=loc, orientation=quat)
 
-def randomize_camera_poses_rel_to_ws(
+def randomize_camera_poses_rel_to_objs(
     cameras: list[Usd.Prim],
     targets: list[Usd.Prim],
+    lookat_filter: Optional[None|tuple[float, float, float, float, float, float]],
     cam_ws: tuple[float, float, float, float, float, float],
     look_at_offset: tuple[float, float] = (-0.1, 0.1),
 ) -> None:
@@ -760,7 +762,7 @@ def randomize_camera_poses_rel_to_ws(
     for cam in cameras:
         # Get a random target asset to look at
         target_asset = random.choice(targets)
-
+        
         # Add a look_at offset so the target is not always in the center of the camera view
         target_loc = target_asset.GetAttribute("xformOp:translate").Get()
         target_loc = (
@@ -768,6 +770,14 @@ def randomize_camera_poses_rel_to_ws(
             target_loc[1] + random.uniform(look_at_offset[0], look_at_offset[1]),
             target_loc[2] + random.uniform(look_at_offset[0], look_at_offset[1]),
         )
+        
+        # Apply lookat_filter if provided
+        if lookat_filter is not None:
+            target_loc = (
+                max(lookat_filter[0], min(lookat_filter[3], target_loc[0])),
+                max(lookat_filter[1], min(lookat_filter[4], target_loc[1])),
+                max(lookat_filter[2], min(lookat_filter[5], target_loc[2])),
+            )
 
         # Generate random camera pose
         camera_loc = (

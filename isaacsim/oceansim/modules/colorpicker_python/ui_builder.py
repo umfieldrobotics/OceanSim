@@ -216,7 +216,8 @@ class UIBuilder:
                     param_model, param_slider = combo_floatfield_slider_builder(
                         label=params_labels[i],
                         type=params_types[i],
-                        default_val=params_default[i])
+                        default_val=params_default[i],
+                        max=3.0)
                     self._param_models.append(param_model)
                     param_model.add_value_changed_fn(self._on_color_param_changes)
                     self._on_color_param_changes(param_model)

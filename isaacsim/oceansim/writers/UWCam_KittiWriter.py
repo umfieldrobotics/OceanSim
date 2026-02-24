@@ -138,10 +138,9 @@ class UWCam_KittiWriter(Writer):
         s3_endpoint: str = None,
         semantic_types: List[str] = None,
         omit_semantic_type: bool = True,
-        bbox_height_threshold: int = 25,
-        bbox2d_partly_occluded_threshold: float = 0.5,
+        bbox_height_threshold: int = 5,
+        bbox2d_partly_occluded_threshold: float = 0.65,
         bbox2d_fully_visible_threshold: float = 0.95,
-        veiling_visibility_threshold: float = None,
         use_tight_bbox: bool = False,
         mapping_path: str = None,
         mapping_dict: dict = None,
@@ -174,7 +173,6 @@ class UWCam_KittiWriter(Writer):
         self._use_kitti_dir_names = use_kitti_dir_names
         self._cuboid_keypoints_order = cuboid_keypoints_order
         self._debug_mode = debug_mode
-        self._veiling_visibility_threshold = veiling_visibility_threshold
         self._enable_caustics = enable_caustics
         if self._debug_mode:
             self._CUBOID_KEYPOINT_COLORS = ["white", "red", "green", "blue", "yellow", "cyan", "magenta", "orange", "purple"]
@@ -497,7 +495,7 @@ class UWCam_KittiWriter(Writer):
             bbox3d_info = self._process_bounding_box_3d_single(bbox3d_id_to_bbox[id], data[camera_param_annotator])
             
             # Check if a majority part of the object is out of the frame
-            if bbox3d_info['truncation_ratio'] > 0.6:
+            if bbox3d_info['truncation_ratio'] > 0.45:
                 continue
             
             

@@ -11,7 +11,7 @@ launch_config:
     - "--/log/outputStreamLevel=error"
     - "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug?
 
-total_captures: 30
+total_captures: 10000
 camera_collider_radius: 0.1
 env_url: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains"
 objects_url: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/"
@@ -27,7 +27,7 @@ camera_properties_kwargs:
 writers:
   - type: "UWCam_KittiWriter"
     kwargs:
-      output_dir: "/mnt/frog-users/projects/OceanSim/sim2real/archive_dataset/SDG_1_21_2026/blue_haze_0.5"
+      output_dir: "/mnt/frog-users/projects/OceanSim/sim2real/archive_dataset/SDG_1_21_2026/blue_haze_1.0"
       colorize_instance_segmentation: false
       veiling_visibility_threshold: 12  # This is turned off in the writer code, can not easily remove
       use_tight_bbox: true
@@ -95,7 +95,7 @@ writers:
           Type 9: [0.550, 0.460, 0.290]
   - type: "UWCam_KittiWriter"
     kwargs:
-      output_dir: "/mnt/frog-users/projects/OceanSim/sim2real/archive_dataset/SDG_1_21_2026/no_haze"
+      output_dir: "/mnt/frog-users/projects/OceanSim/sim2real/archive_dataset/SDG_1_21_2026/no_haze_0.0"
       colorize_instance_segmentation: false
       veiling_visibility_threshold: 12  # This is turned off in the writer code, can not easily remove
       use_tight_bbox: true
