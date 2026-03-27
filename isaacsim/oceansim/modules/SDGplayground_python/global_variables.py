@@ -1,4 +1,4 @@
-EXTENSION_TITLE = "Terrain Instancer"
+EXTENSION_TITLE = "SDG playground"
 
 EXTENSION_DESCRIPTION = "" \
 

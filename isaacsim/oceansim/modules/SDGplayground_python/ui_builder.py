@@ -17,7 +17,7 @@ from isaacsim.core.utils.extensions import get_extension_path
 
 from isaacsim.gui.property.array_widget import CustomMultiIntField
 # Custom import
-from .scenario import TerrainInstancer_Scenario
+from .scenario import SDGplayground_Scenario
 from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
 from isaacsim.oceansim.watersurface import WaterSurface
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
@@ -155,72 +155,7 @@ class UIBuilder:
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
 
-        instancer_frame = CollapsableFrame("Instancer on Grid", collapsed=False)
-        self.frames.append(instancer_frame)
-        with instancer_frame:
-            with ui.VStack(style=get_style(), spacing=5, height = 0):
-                self._x_span_int_field = FloatField(
-                    label="X span",
-                    default_value=10.0,
-                    lower_limit=0.01,
-                    on_value_changed_fn=self._on_meshList_UI_change
-                )
-                self._y_span_int_field = FloatField(
-                    label="Y span",
-                    default_value=10.0,
-                    lower_limit= 0.01,
-                    on_value_changed_fn=self._on_meshList_UI_change
-
-                )
-                self._x_count_int_field = IntField(
-                    label="X counte",
-                    default_value=5,
-                    lower_limit=1,
-                    on_value_changed_fn=self._on_meshList_UI_change
-                )
-                self._y_count_int_field = IntField(
-                    label="Y count",
-                    default_value=5,
-                    lower_limit=1,
-                    on_value_changed_fn=self._on_meshList_UI_change
-                )
-                self.wrapped_ui_elements.append(self._x_count_int_field)
-                self.wrapped_ui_elements.append(self._y_count_int_field)
-                self.wrapped_ui_elements.append(self._x_span_int_field)
-                self.wrapped_ui_elements.append(self._y_span_int_field)
-
-    def _on_meshList_UI_change(self, value):
-        self._set_instancer()
-
-    def _set_instancer(self):
-
-        x_span = [-self._x_span_int_field.get_value(), self._x_span_int_field.get_value()]
-        y_span = [-self._y_span_int_field.get_value(), self._y_span_int_field.get_value()]
-        num_instances = [self._x_count_int_field.get_value(), self._y_count_int_field.get_value()]
-        x_pos = np.linspace(x_span[0], y_span[1], num_instances[0])
-        y_pos = np.linspace(y_span[0], y_span[1], num_instances[1])
-        z = 1.0
-        xs, ys = np.meshgrid(x_pos, y_pos)
-        mMeshIndices = []
-        mPositions = []
-        mOrientations = []
-        mLinearVelocities = []
-        mAngularVelocities = []
-        for i in range(num_instances[1]):
-            for j in range(num_instances[0]):
-                mMeshIndices.append(0)
-                mPositions.append(Gf.Vec3f(xs[i][j], ys[i][j], z))
-                mOrientations.append(Gf.Quath(1.0, 0.0, 0.0, 0.0))
-                mLinearVelocities.append(Gf.Vec3f(0.0))
-                mAngularVelocities.append(Gf.Vec3f(0.0))
-
-        if self.shapeList:
-            print("set")
-            self.shapeList.GetProtoIndicesAttr().Set(mMeshIndices)
-            self.shapeList.GetPositionsAttr().Set(mPositions)
-            self.shapeList.GetOrientationsAttr().Set(mOrientations)
-            self.shapeList.GetVelocitiesAttr().Set(mLinearVelocities)
-            self.shapeList.GetAngularVelocitiesAttr().Set(mAngularVelocities)            
+         
 
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
@@ -230,7 +165,7 @@ class UIBuilder:
 
         # Robot parameters
         self.shapeList = None
-        self._scenario = TerrainInstancer_Scenario()
+        self._scenario = SDGplayground_Scenario()
 
 
     def _setup_scene(self):
@@ -246,17 +181,17 @@ class UIBuilder:
         defaultPrimPath = '/root'
         # stage_utils.add_reference_to_stage(test_scene_usd_path, defaultPrimPath)
 
-        geomPointInstancerPath = defaultPrimPath + "/pointinstancer"
-        MeshActorPath = defaultPrimPath + "/mesh"
+        # geomPointInstancerPath = defaultPrimPath + "/pointinstancer"
+        # MeshActorPath = defaultPrimPath + "/mesh"
 
-        # stage_utils.add_reference_to_stage(test_scene_usd_path, MeshActorPath)
+        # # stage_utils.add_reference_to_stage(test_scene_usd_path, MeshActorPath)
 
-        self.shapeList = UsdGeom.PointInstancer.Define(stage, Sdf.Path(geomPointInstancerPath))
-        meshList = self.shapeList.GetPrototypesRel()
-        # add mesh reference to point instancer
-        meshList.AddTarget(Sdf.Path(MeshActorPath))
+        # self.shapeList = UsdGeom.PointInstancer.Define(stage, Sdf.Path(geomPointInstancerPath))
+        # meshList = self.shapeList.GetPrototypesRel()
+        # # add mesh reference to point instancer
+        # meshList.AddTarget(Sdf.Path(MeshActorPath))
 
-        self._set_instancer()
+        # self._set_instancer()
 
                 
                 

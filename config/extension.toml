@@ -35,7 +35,7 @@ name = "isaacsim.oceansim.modules.colorpicker_python"
 name = "isaacsim.oceansim.modules.trajRecorder_python"
 
 [[python.module]]
-name = "isaacsim.oceansim.modules.terrainInstancer_python"
+name = "isaacsim.oceansim.modules.SDGplayground_python"
 
 
 [[python.module]]
