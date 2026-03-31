@@ -36,7 +36,10 @@ def get_material_prims(parent_prim: Usd.Prim) -> list[Usd.Prim]:
 
 
 def get_UsdUVTexture_shaders(parent_prim: Usd.Prim) -> list[Usd.Prim]:
-    """Recursively search for UsdUVTexture shader prims under the given parent prim."""
+    """
+    Recursively search for UsdUVTexture shader prims under the given parent prim.
+    By default the shader does not contain bias and scale inputs, so we add them here for later use.
+    """
     uv_texture_shaders = []
     for child in parent_prim.GetChildren():
         if child.IsA(UsdShade.Shader) and child.GetAttribute("info:implementationSource").Get() == "id" and child.GetAttribute("info:id").Get() == "UsdUVTexture":

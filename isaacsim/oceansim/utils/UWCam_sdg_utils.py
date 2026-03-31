@@ -725,6 +725,8 @@ def randomize_poses(
         rand_scale = random.uniform(scale_range[0], scale_range[1])
         set_transform_attributes(prim, location=rand_loc, rotation=rand_rot, scale=(rand_scale, rand_scale, rand_scale))
 
+
+
 def randomize_camera_poses_rel_to_targets(
     cameras: list[Usd.Prim],
     targets: list[Usd.Prim],
@@ -1030,3 +1032,33 @@ def get_material_prims(parent_prim: Usd.Prim) -> list[Usd.Prim]:
         else:
             material_prims.extend(get_material_prims(child))
     return material_prims
+
+
+def get_UsdUVTexture_shaders(parent_prim: Usd.Prim) -> list[Usd.Prim]:
+    """
+    Recursively search for UsdUVTexture shader prims under the given parent prim.
+    By default the shader does not contain bias and scale inputs, so we add them here for later use.
+    """
+    uv_texture_shaders = []
+    for child in parent_prim.GetChildren():
+        if child.IsA(UsdShade.Shader) and child.GetAttribute("info:implementationSource").Get() == "id" and child.GetAttribute("info:id").Get() == "UsdUVTexture":
+            uv_texture_shaders.append(UsdShade.Shader(child))
+            UsdShade.Shader(child).CreateInput("bias", Sdf.ValueTypeNames.Float4)
+            UsdShade.Shader(child).CreateInput("scale", Sdf.ValueTypeNames.Float4)
+
+    return uv_texture_shaders
+
+
+def randomize_UVTexture_scale_bias(UVShaders: list[UsdShade.Shader], 
+                                   scale_range: tuple[float, float] = (0.5, 2.0), 
+                                   bias_range: tuple[float, float] = (-1.0, 1.0)) -> None:
+    """Randomize the scale and bias of a UsdUVTexture shader."""
+    for UVShader in UVShaders:
+        UVShader.GetInput("scale").Set((random.uniform(scale_range[0], scale_range[1]), 
+                                        random.uniform(scale_range[0], scale_range[1]), 
+                                    random.uniform(scale_range[0], scale_range[1]), 
+                                    1.0))
+        UVShader.GetInput("bias").Set((random.uniform(bias_range[0], bias_range[1]), 
+                                        random.uniform(bias_range[0], bias_range[1]), 
+                                        random.uniform(bias_range[0], bias_range[1]), 
+                                        0.0))

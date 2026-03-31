@@ -8,6 +8,7 @@ import yaml
 from PIL import Image
 import carb
 import os
+import re
 # Isaac sim import
 
 from isaacsim.core.utils.stage import open_stage
@@ -223,20 +224,27 @@ class UIBuilder:
                 # Workspace bounds (min/max XYZ) for both target objects and distractors
                 workspace_labels = ["Min X", "Min Y", "Min Z", "Max X", "Max Y", "Max Z"]
 
-                def _build_workspace_grid(title, defaults, key_prefix):
+                def _build_workspace_grid(title, defaults, key_prefix, labels=None, columns=3):
+                    labels = labels or workspace_labels
+                    total_fields = len(defaults)
+                    if total_fields == 0:
+                        return []
+                    rows = (total_fields + columns - 1) // columns
                     ui.Label(title, height=18, alignment=ui.Alignment.LEFT_CENTER)
                     fields = []
-                    for row in range(2):
+                    for row in range(rows):
                         with ui.HStack(spacing=10):
-                            for col in range(3):
-                                idx = row * 3 + col
-                                label_name = workspace_labels[idx]
-                                key_name = f"{key_prefix}_{label_name.lower().replace(' ', '_')}"
-                                with ui.VStack(spacing=2, width=ui.Fraction(1 / 3)):
+                            for col in range(columns):
+                                idx = row * columns + col
+                                if idx >= total_fields:
+                                    break
+                                label_name = labels[idx] if idx < len(labels) else f"Value {idx + 1}"
+                                key_name = f"{key_prefix}_{self._normalize_label(label_name)}"
+                                with ui.VStack(spacing=2, width=ui.Fraction(1 / columns)):
                                     ui.Label(label_name, height=16, alignment=ui.Alignment.LEFT_CENTER)
                                     field = ui.FloatField(precision=3, height=0)
                                     field.model.set_value(defaults[idx])
-                                    field.tooltip = f"{label_name} bound for {title.lower()}"
+                                    field.tooltip = f"{label_name} for {title.lower()}"
                                     field.model.add_value_changed_fn(
                                         lambda model, key=key_name: self._on_field_change(
                                             key, model.get_value_as_float()
@@ -259,6 +267,31 @@ class UIBuilder:
 
                 camera_look_at_ws_defaults = [-1.5, -1.5, -1.0, 1.5, 1.5, 1.0]
                 self._camera_look_at_ws_fields = _build_workspace_grid("Camera Look-at Workspace", camera_look_at_ws_defaults, "camera_look_at_ws")
+
+                variation_labels = [
+                    "Size Scale  +/-",
+                    "Texture Scale  *//",
+                    "Texture Bias  +/-",
+                ]
+                self._object_variation_fields = _build_workspace_grid(
+                    "Object Variation",
+                    [0.5, 10, 0.5],
+                    "object_variation",
+                    labels=variation_labels,
+                )
+                self._distractor_variation_fields = _build_workspace_grid(
+                    "Distractor Variation",
+                    [0.25, 10, 0.5],
+                    "distractor_variation",
+                    labels=variation_labels,
+                )
+
+                self._process_btn = Button(
+                    text='Update Sampling',
+                    label='Update',
+                    tooltip="Click this button to regenerate the sampling points on the terrain based on the current sampling mesh and workspace settings. This does not respawn objects, so it can be used to adjust sampling without affecting current object placement.",
+                    on_click_fn=self.process_sampling_mesh
+                )
         
         
         color_picker_frame = CollapsableFrame('Color Picker', collapsed=False)
@@ -447,9 +480,15 @@ class UIBuilder:
         self._scenario_state_btn.enabled= False
         self._reset_btn.enabled = False
 
+    def _normalize_label(self, label: str) -> str:
+        normalized = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+        return normalized or "value"
+
     def _on_field_change(self, field_name, value):
         """Generic handler to keep UI-driven data in sync with runtime settings."""
+        original_value = self._randomization_settings.get(field_name, None)
         self._randomization_settings[field_name] = value
+        print(f"Field '{field_name}' changed from {original_value} to {value}.")
 
     def _on_color_param_changes(self, model):
         for i, param_model in zip(range(9), self._param_models):
@@ -463,9 +502,31 @@ class UIBuilder:
 
     def _on_spawn(self):
         """Spawn objects and distractors on the terrain based on the current randomization settings."""
-        sample_objects_on_points(self._obj_ws_points, self._objects, offset=(0, 0, 0.05))
-        sample_objects_on_points(self._dist_ws_points, self._distractors)        
-
+        sample_objects_on_points(self._obj_ws_points, self._objects, offset=(0, 0, 0.025))
+        sample_objects_on_points(self._dist_ws_points, self._distractors)  
+        object_size_var = self._randomization_settings["object_variation_size_scale"]
+        distractor_size_var = self._randomization_settings["distractor_variation_size_scale"]
+        perturb_object_poses(self._objects, scale_range=(1.0 - object_size_var, 1.0 + object_size_var))      
+        # This bias from 0.25 instead of 1.0 is chosen based on the average size of the distractor assets, so that the randomization effect is more visually significant. Adjust as needed based on your specific assets.
+        perturb_object_poses(self._distractors, scale_range=(max(0.1, 0.25 - distractor_size_var), 0.25 + distractor_size_var))
+        randomize_UVTexture_scale_bias(self._object_uv_texture_shaders, 
+                                       scale_range=(
+                                           1.0 / self._randomization_settings["object_variation_texture_scale"],
+                                           1.0 * self._randomization_settings["object_variation_texture_scale"],
+                                       ),
+                                       bias_range=(
+                                           -self._randomization_settings["object_variation_texture_bias"],
+                                           self._randomization_settings["object_variation_texture_bias"],
+                                       ))
+        randomize_UVTexture_scale_bias(self._distractor_uv_texture_shaders, 
+                                       scale_range=(
+                                           1.0 / self._randomization_settings["distractor_variation_texture_scale"],
+                                           1.0 * self._randomization_settings["distractor_variation_texture_scale"],
+                                       ),
+                                       bias_range=(
+                                           -self._randomization_settings["distractor_variation_texture_bias"],
+                                           self._randomization_settings["distractor_variation_texture_bias"],
+                                       ))
         randomize_camera_poses_rel_to_objs(self._cameras, 
                                            self._objects, 
                                            [self._randomization_settings[f"camera_look_at_ws_{bound}"] for bound in ["min_x", "min_y", "min_z", "max_x", "max_y", "max_z"]], 
@@ -519,8 +580,15 @@ class UIBuilder:
                 print(f"Error loading objects: {e}")
                 return
 
-    def process_sampling_mesh(self, sampling_prim_path : str):
-        """Processes the sampling mesh to extract points within the defined workspaces for objects and distractors."""
+    def process_sampling_mesh(self, sampling_prim_path=None):
+        """
+        Processes the sampling mesh to extract points within the defined workspaces for objects and distractors.
+        This function also traverse all the objects in the stage to get the UVtexture shader handles.
+        """
+        sampling_prim_path = sampling_prim_path or self._randomization_settings.get("sampling_prim")
+        if not sampling_prim_path:
+            print("Sampling prim path is not set; please update the sampling mesh path before processing.")
+            return
         sampling_prim = stage_utils.get_current_stage().GetPrimAtPath(sampling_prim_path)
         if not sampling_prim.IsValid() or not sampling_prim.GetAttribute("points"):
             print("Invalid sampling prim or the prim is not a geometry or does not contain points attribute") 
@@ -540,3 +608,9 @@ class UIBuilder:
             and self._randomization_settings["distractor_ws_min_y"] <= point[1] <= self._randomization_settings["distractor_ws_max_y"]
             and self._randomization_settings["distractor_ws_min_z"] <= point[2] <= self._randomization_settings["distractor_ws_max_z"]
         ]   
+
+
+        objects_material_prims = get_material_prims(stage_utils.get_current_stage().GetPrimAtPath("/SDG_objects"))
+        distractor_material_prims = get_material_prims(stage_utils.get_current_stage().GetPrimAtPath("/SDG_distractors"))
+        self._object_uv_texture_shaders = list(chain.from_iterable([get_UsdUVTexture_shaders(prim) for prim in objects_material_prims]))
+        self._distractor_uv_texture_shaders = list(chain.from_iterable([get_UsdUVTexture_shaders(prim) for prim in distractor_material_prims]))
