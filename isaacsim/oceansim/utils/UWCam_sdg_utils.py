@@ -1019,3 +1019,14 @@ def create_dome_ligth(stage, path, intensity=500.0) -> UsdLux.DomeLight:
     dome_light = stage.DefinePrim(path + '/DomeLight', "DomeLight")
     dome_light.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float).Set(intensity)
     return dome_light
+
+
+def get_material_prims(parent_prim: Usd.Prim) -> list[Usd.Prim]:
+    """Recursively search for material prims under the given parent prim."""
+    material_prims = []
+    for child in parent_prim.GetChildren():
+        if child.IsA(UsdShade.Material):
+            material_prims.append(child)
+        else:
+            material_prims.extend(get_material_prims(child))
+    return material_prims

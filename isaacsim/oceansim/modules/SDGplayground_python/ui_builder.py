@@ -15,15 +15,16 @@ from isaacsim.gui.components import CollapsableFrame, StateButton, IntField, get
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
 from isaacsim.core.utils.extensions import get_extension_path
 
-from isaacsim.gui.property.array_widget import CustomMultiIntField
+from isaacsim.gui.property.array_widget import CustomMultiIntField, CustomMultiFloatField
 # Custom import
 from .scenario import SDGplayground_Scenario
-from isaacsim.oceansim.utils.UWrenderer_utils import UW_render
-from isaacsim.oceansim.watersurface import WaterSurface
 from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
 import isaacsim.core.utils.prims as prims_utils
 import isaacsim.core.utils.stage as stage_utils
 from pxr import Gf, Sdf, UsdGeom
+from isaacsim.oceansim.utils.assets_utils import get_oceansim_assets_path
+from isaacsim.oceansim.utils.UWCam_sdg_utils import *
+from isaacsim.oceansim.sensors.UW_Camera import UW_Camera
 class UIBuilder:
     def __init__(self):
         self._ext_id = omni.kit.app.get_app().get_extension_manager().get_extension_id_by_module(__name__)
@@ -32,7 +33,7 @@ class UIBuilder:
         self._doc_link =  EXTENSION_LINK
         self._overview = EXTENSION_DESCRIPTION
         self._extension_path = get_extension_path(self._ext_id)
-
+        self._oceansim_assets_path = get_oceansim_assets_path()
         # UI frames created
         self.frames = []
         # UI elements created using a UIElementWrapper instance
@@ -44,7 +45,7 @@ class UIBuilder:
 
         # Run initialization for the provided example
         self._on_init()
-
+        self._randomization_settings = {}
     ###################################################################################
     #           The Functions Below Are Called Automatically By extension.py
     ###################################################################################
@@ -120,14 +121,86 @@ class UIBuilder:
             with ui.VStack(style=get_style(), spacing=5, height=0):
                 self.scene_path_field = str_builder(
                     label='Path to USD',
-                    tooltip='Input the path to your USD scene file',
-                    default_val="",
+                    tooltip='Input the path to your terrain scene file',
+                    default_val=self._oceansim_assets_path + "sample_sdg/scenes/rocky_trail_8k/rocky_trail_8k.usd",
                     use_folder_picker=True,
                     folder_button_title='Select USD',
                     folder_dialog_title='Select USD scene to import',
-                    on_clicked_fn=lambda x: print("Click load for instancing new usd mesh")
                 )
-                
+                self.object_folder_field = str_builder(
+                    label="Object Folder",
+                    tooltip="Directory containing object assets for randomization",
+                    default_val=self._oceansim_assets_path + "sample_sdg/objects/sea_urchin/",
+                    use_folder_picker=True,
+                    folder_button_title="Select Object Folder",
+                    folder_dialog_title="Select folder with object assets",
+                )
+                self.object_folder_field.add_value_changed_fn(
+                    lambda model, key="object_folder": self._on_field_change(
+                        key, model.get_value_as_string()
+                    )
+                )
+                self._on_field_change("object_folder", self.object_folder_field.get_value_as_string())
+                with ui.HStack(style=get_style(), spacing=10, height=0):
+                    self.object_count_field = IntField(
+                        label="Count",
+                        tooltip="Instances spawned per frame",
+                        lower_limit=0,
+                        default_value=7,
+                    )
+                self.object_count_field.set_on_value_changed_fn(
+                    lambda value, key="object_count": self._on_field_change(key, value)
+                )
+
+                self.wrapped_ui_elements.extend(
+                    [self.object_count_field]
+                )
+                self._on_field_change("object_count", self.object_count_field.get_value())
+
+                self.distractor_folder_field = str_builder(
+                    label="Distractor Folder",
+                    tooltip="Directory containing distractor assets for randomization",
+                    default_val=self._oceansim_assets_path + "sample_sdg/objects/OceanRealm",
+                    use_folder_picker=True,
+                    folder_button_title="Select Distractor Folder",
+                    folder_dialog_title="Select folder with distractor assets",
+                )
+                self.distractor_folder_field.add_value_changed_fn(
+                    lambda model, key="distractor_folder": self._on_field_change(
+                        key, model.get_value_as_string()
+                    )
+                )
+                self._on_field_change(
+                    "distractor_folder", self.distractor_folder_field.get_value_as_string()
+                )
+                with ui.HStack(style=get_style(), spacing=10, height=0):
+                    self.distractor_count_field = IntField(
+                        label="Count",
+                        tooltip="Instances spawned per frame",
+                        lower_limit=0,
+                        default_value=2,
+                    )
+                self.distractor_count_field.set_on_value_changed_fn(
+                    lambda value, key="distractor_count": self._on_field_change(key, value) 
+                )
+
+                self.wrapped_ui_elements.extend(
+                    [
+                        self.distractor_count_field,
+                    ]
+                )
+                self._on_field_change("distractor_count", self.distractor_count_field.get_value())
+
+                self.sampling_prim_field = StringField(
+                    label="Sampling Mesh",
+                    tooltip="USD prim path or mesh file used as the sampling surface",
+                    default_value="/terrain/collider",
+                )
+                self.wrapped_ui_elements.append(self.sampling_prim_field)
+                self.sampling_prim_field.set_on_value_changed_fn(
+                    lambda value, key="sampling_prim": self._on_field_change(key, value)
+                )
+                self._on_field_change("sampling_prim", self.sampling_prim_field.get_value())
                 self._load_btn = LoadButton(
                     "Load Button", "LOAD", setup_scene_fn=self._setup_scene, setup_post_load_fn=self._setup_scenario
                 )
@@ -139,11 +212,97 @@ class UIBuilder:
                 )
                 self._reset_btn.enabled = False
                 self.wrapped_ui_elements.append(self._reset_btn)
+        
+        
+        randomization_control_frame = CollapsableFrame("Randomization Control", collapsed = False)
+        self.frames.append(randomization_control_frame)
+        with randomization_control_frame:
+            with ui.VStack(style=get_style(), spacing=8, height=0):
+                
 
+                # Workspace bounds (min/max XYZ) for both target objects and distractors
+                workspace_labels = ["Min X", "Min Y", "Min Z", "Max X", "Max Y", "Max Z"]
+
+                def _build_workspace_grid(title, defaults, key_prefix):
+                    ui.Label(title, height=18, alignment=ui.Alignment.LEFT_CENTER)
+                    fields = []
+                    for row in range(2):
+                        with ui.HStack(spacing=10):
+                            for col in range(3):
+                                idx = row * 3 + col
+                                label_name = workspace_labels[idx]
+                                key_name = f"{key_prefix}_{label_name.lower().replace(' ', '_')}"
+                                with ui.VStack(spacing=2, width=ui.Fraction(1 / 3)):
+                                    ui.Label(label_name, height=16, alignment=ui.Alignment.LEFT_CENTER)
+                                    field = ui.FloatField(precision=3, height=0)
+                                    field.model.set_value(defaults[idx])
+                                    field.tooltip = f"{label_name} bound for {title.lower()}"
+                                    field.model.add_value_changed_fn(
+                                        lambda model, key=key_name: self._on_field_change(
+                                            key, model.get_value_as_float()
+                                        )
+                                    )
+                                    self._on_field_change(key_name, defaults[idx])
+                                    fields.append(field)
+                    return fields
+
+                obj_ws_defaults = [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0]
+                self._obj_ws_fields = _build_workspace_grid("Object Workspace", obj_ws_defaults, "obj_ws")
+
+                distractor_ws_defaults = [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0]
+                self._distractor_ws_fields = _build_workspace_grid(
+                    "Distractor Workspace", distractor_ws_defaults, "distractor_ws"
+                )
+
+                camera_ws_defaults = [-0.25, -0.25, 0.5, 0.25, 0.25, 1.75]
+                self._camera_ws_fields = _build_workspace_grid("Camera Workspace", camera_ws_defaults, "camera_ws")
+
+                camera_look_at_ws_defaults = [-1.5, -1.5, -1.0, 1.5, 1.5, 1.0]
+                self._camera_look_at_ws_fields = _build_workspace_grid("Camera Look-at Workspace", camera_look_at_ws_defaults, "camera_look_at_ws")
+        
+        
+        color_picker_frame = CollapsableFrame('Color Picker', collapsed=False)
+        self.frames.append(color_picker_frame)
+        self._param_models = []
+        params_labels = [                        
+            "Backscatter_R", "Backscatter_G","Backscatter_B",
+            "Backscatter_coeff_R", "Backscatter_coeff_G", "Backscatter_coeff_B",
+            "Attenuation_coeff_R", "Attenuation_coeff_G", "Attenuation_coeff_B",
+        ]
+        params_types = [
+            'float', 'float', 'float',
+            'float', 'float', 'float',
+            'float', 'float', 'float',
+        ]
+        params_default = [
+            0.08, 0.42, 0.52,
+            0.905, 0.961, 0.982,
+            0.905*1.5, 0.961*1.5, 0.982*1.5,
+        ]
+        self._param = params_default
+        with color_picker_frame:
+            with ui.VStack(spacing=10):
+
+                for i in range(9):
+                    param_model, param_slider = combo_floatfield_slider_builder(
+                        label=params_labels[i],
+                        type=params_types[i],
+                        default_val=params_default[i],
+                        max=3.0)
+                    self._param_models.append(param_model)
+                    param_model.add_value_changed_fn(self._on_color_param_changes)
+                    self._on_color_param_changes(param_model)
+        
         run_scenario_frame = CollapsableFrame("Run Scenario", collapsed=False)
         self.frames.append(run_scenario_frame)
         with run_scenario_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
+                self._spawn_button = Button(
+                    label="Spawn Objects",
+                    text="Spawn",
+                    tooltip="Press this to clear and spawn objects",
+                    on_click_fn= self._on_spawn,
+                )
                 self._scenario_state_btn = StateButton(
                     "Run Scenario",
                     "RUN",
@@ -154,9 +313,19 @@ class UIBuilder:
                 )
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
-
-         
-
+                self.save_dir_field = StringField(
+                    label='Viewport PNG saving Path',
+                    tooltip='Save the render parameter and reference pic into this directory',
+                    use_folder_picker=True
+                )
+                self.wrapped_ui_elements.append(self.save_dir_field)
+                save_viewport_button = Button(
+                    text='Save viewport',
+                    label='Save rendered image',
+                    tooltip="Click this button to capture the current raw/rendered/depth image from viewport",
+                    on_click_fn=self._on_save_viewport
+                )
+                self.wrapped_ui_elements.append(save_viewport_button)
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
     ######################################################################################
@@ -164,9 +333,16 @@ class UIBuilder:
     def _on_init(self):
 
         # Robot parameters
-        self.shapeList = None
         self._scenario = SDGplayground_Scenario()
-
+        self._objects = []
+        self._distractors = []
+        self._cameras = []
+        self._camera_properties =  {
+            "focalLength": 24,
+            "focusDistance": 400,
+            "fStop": 0.0,
+            "clippingRange": (0.001, 100),
+        }
 
     def _setup_scene(self):
         """
@@ -175,25 +351,18 @@ class UIBuilder:
         The user should now load their assets onto the stage and add them to the World Scene.
         """
         stage_utils.create_new_stage()
-        stage_utils.open_stage(self.scene_path_field.get_value_as_string())
-        # test_scene_usd_path = self.scene_path_field.get_value_as_string()
+
+        self.load_terrain()
+        self.load_objects()
+        self.process_sampling_mesh(self._randomization_settings["sampling_prim"])
+        self._on_spawn()
+
         stage = stage_utils.get_current_stage()
-        defaultPrimPath = '/root'
-        # stage_utils.add_reference_to_stage(test_scene_usd_path, defaultPrimPath)
-
-        # geomPointInstancerPath = defaultPrimPath + "/pointinstancer"
-        # MeshActorPath = defaultPrimPath + "/mesh"
-
-        # # stage_utils.add_reference_to_stage(test_scene_usd_path, MeshActorPath)
-
-        # self.shapeList = UsdGeom.PointInstancer.Define(stage, Sdf.Path(geomPointInstancerPath))
-        # meshList = self.shapeList.GetPrototypesRel()
-        # # add mesh reference to point instancer
-        # meshList.AddTarget(Sdf.Path(MeshActorPath))
-
-        # self._set_instancer()
-
-                
+        create_dome_ligth(stage, "/Environment", intensity=1000.0)
+        self._UW_cam = UW_Camera("/UW_Camera", resolution=(1920, 1080))
+        for key, value in self._camera_properties.items():
+            self._UW_cam.prim.GetAttribute(key).Set(value)
+        self._cameras.append(self._UW_cam.prim)
                 
 
     def _setup_scenario(self):
@@ -211,7 +380,7 @@ class UIBuilder:
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario()
+        self._scenario.setup_scenario(self._UW_cam)
 
     def _on_post_reset_btn(self):
         """
@@ -275,25 +444,99 @@ class UIBuilder:
 
     def _reset_ui(self):
         self._scenario_state_btn.reset()
-        self._scenario_state_btn.enabled = False
+        self._scenario_state_btn.enabled= False
         self._reset_btn.enabled = False
 
+    def _on_field_change(self, field_name, value):
+        """Generic handler to keep UI-driven data in sync with runtime settings."""
+        self._randomization_settings[field_name] = value
+
+    def _on_color_param_changes(self, model):
+        for i, param_model in zip(range(9), self._param_models):
+            self._param[i] = param_model.get_value_as_float()
+        if self._scenario._cam is not None: 
+            self._scenario._cam._backscatter_value = wp.vec3f(*self._param[0:3])
+            self._scenario._cam._atten_coeff = wp.vec3f(*self._param[6:9])
+            self._scenario._cam._backscatter_coeff = wp.vec3f(*self._param[3:6]) 
 
 
-    
-    
-    
-    def _on_save_traj(self):
-        if self.save_dir_field.get_value() != "":
-            save_dir = self.save_dir_field.get_value()
-            npy_path = save_dir + f"{self.file_name_field.get_value()}.npy"
 
-            try:
-                np.save(arr = self._scenario.recorded_position, file=npy_path)
-                print(f"Recorded Trajectories written to {npy_path}")
-            except yaml.YAMLError as e:
-                print(f"Error writing npy file: {e}")
+    def _on_spawn(self):
+        """Spawn objects and distractors on the terrain based on the current randomization settings."""
+        sample_objects_on_points(self._obj_ws_points, self._objects, offset=(0, 0, 0.05))
+        sample_objects_on_points(self._dist_ws_points, self._distractors)        
+
+        randomize_camera_poses_rel_to_objs(self._cameras, 
+                                           self._objects, 
+                                           [self._randomization_settings[f"camera_look_at_ws_{bound}"] for bound in ["min_x", "min_y", "min_z", "max_x", "max_y", "max_z"]], 
+                                           [self._randomization_settings[f"camera_ws_{bound}"] for bound in ["min_x", "min_y", "min_z", "max_x", "max_y", "max_z"]],
+                                           look_at_offset=(-0.3, 0.3))
+    
+    
+    def _on_save_viewport(self):
+        if self._scenario_state_btn.enabled:
+            if self.save_dir_field.get_value() != "":
+                save_dir = self.save_dir_field.get_value()
+                rendered_image = self._scenario._cam._uw_image.numpy()
+                uw_image = Image.fromarray(rendered_image, 'RGBA')
+                uw_image.save(save_dir + '/viewport_uw_rgba.png')
+                print(f'viewport result written to {save_dir}.')
+            else:
+
+                carb.log_error('Saving directory is empty.')
+
         else:
-            carb.log_error('Saving directory is empty.')
+            print('Load a scenario first.')
 
 
+    def load_terrain(self):
+        """
+        Loads the terrain and initializes the workspace points.
+        """
+        stage = stage_utils.get_current_stage()
+        stage_utils.add_reference_to_stage(self.scene_path_field.get_value_as_string(), 
+                                               "/terrain")
+        
+        
+    def load_objects(self):
+        if not self._objects:
+            try: 
+                self._objects, _ = add_objects(objects_folder_path=self._randomization_settings["object_folder"], 
+                                                override_semantic_mapping=None, 
+                                                physics=True,
+                                                count=self._randomization_settings["object_count"],
+                                                )
+                
+                self._distractors, _ = add_distractor_from_UE(mapping={},
+                                                UE_asset_folder=self._randomization_settings["distractor_folder"],
+                                                root_path="SDG_distractors",
+                                                name_prefix="distractor_",
+                                                physics=True,
+                                                num=30,
+                                                count=self._randomization_settings["distractor_count"],
+                                                )
+            except Exception as e:
+                print(f"Error loading objects: {e}")
+                return
+
+    def process_sampling_mesh(self, sampling_prim_path : str):
+        """Processes the sampling mesh to extract points within the defined workspaces for objects and distractors."""
+        sampling_prim = stage_utils.get_current_stage().GetPrimAtPath(sampling_prim_path)
+        if not sampling_prim.IsValid() or not sampling_prim.GetAttribute("points"):
+            print("Invalid sampling prim or the prim is not a geometry or does not contain points attribute") 
+            return
+        points = UsdGeom.Mesh(sampling_prim).GetPointsAttr().Get()
+        self._obj_ws_points = [
+            point
+            for point in points
+            if self._randomization_settings["obj_ws_min_x"] <= point[0] <= self._randomization_settings["obj_ws_max_x"]
+            and self._randomization_settings["obj_ws_min_y"] <= point[1] <= self._randomization_settings["obj_ws_max_y"]
+            and self._randomization_settings["obj_ws_min_z"] <= point[2] <= self._randomization_settings["obj_ws_max_z"]
+        ]
+        self._dist_ws_points = [
+            point
+            for point in points
+            if self._randomization_settings["distractor_ws_min_x"] <= point[0] <= self._randomization_settings["distractor_ws_max_x"]
+            and self._randomization_settings["distractor_ws_min_y"] <= point[1] <= self._randomization_settings["distractor_ws_max_y"]
+            and self._randomization_settings["distractor_ws_min_z"] <= point[2] <= self._randomization_settings["distractor_ws_max_z"]
+        ]   

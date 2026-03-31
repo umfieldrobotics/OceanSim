@@ -139,69 +139,52 @@ class UW_Camera(Camera):
             # Extract camera position from view transform matrix
             # For view transform: camera_pos = -view_matrix[3,0:3] (last row, first 3 elements)
 
-            wp.launch(
-                kernel=water_caustics,
-                dim=self.get_resolution(),  # (x, y)
-                inputs=[self._caustics, self._resolution[0], self._resolution[1], self._time, self._timeSpeed],
-            )
-
-
-            # Launch depth to world kernel once (this doesn't change)
-            wp.launch(
-                kernel=depth_to_world_pos,
-                dim=self.get_resolution(),  # Launch dimensions (width, height)
-                inputs=[
-                    self._depth_annot.get_data(),
-                    wp.mat44(self._cameraParamAnnot.get_data()["cameraProjection"].reshape(4, 4)),
-                    wp.mat44(self._cameraParamAnnot.get_data()["cameraViewTransform"].reshape(4, 4)),
-                    self.get_resolution()[0],
-                    self.get_resolution()[1]
-                ],
-                outputs=[self._world_points],
-                device=str(self._device)
-            )
-            wp.launch(
-                kernel=blend_caustics,
-                dim=self.get_resolution(),
-                inputs=[
-                    self._rgba_annot.get_data(),
-                    self._world_points,
-                    self._normalAnnot.get_data(),
-                    self._caustics,
-                    wp.vec3f(0.0, 0.0, 1.0),
-                    1.0,       # blend_weight
-                    1.0,       # uv_scale_x (horizontal scaling)
-                    1.0,       # uv_scale_y (vertical scaling)
-                    0.0,       # depth_min
-                    10000.0,   # depth_max
-                    self._resolution[0],         # tex_w
-                    self._resolution[1],         # tex_h
-                ],
-                outputs=[self._uw_image],
-                device=str(self._device)
-            )
             # wp.launch(
-            #     kernel=blend_caustics_PyTX,
+            #     kernel=water_caustics,
+            #     dim=self.get_resolution(),  # (x, y)
+            #     inputs=[self._caustics, self._resolution[0], self._resolution[1], self._time, self._timeSpeed],
+            # )
+
+
+            # # Launch depth to world kernel once (this doesn't change)
+            # wp.launch(
+            #     kernel=depth_to_world_pos,
+            #     dim=self.get_resolution(),  # Launch dimensions (width, height)
+            #     inputs=[
+            #         self._depth_annot.get_data(),
+            #         wp.mat44(self._cameraParamAnnot.get_data()["cameraProjection"].reshape(4, 4)),
+            #         wp.mat44(self._cameraParamAnnot.get_data()["cameraViewTransform"].reshape(4, 4)),
+            #         self.get_resolution()[0],
+            #         self.get_resolution()[1]
+            #     ],
+            #     outputs=[self._world_points],
+            #     device=str(self._device)
+            # )
+            # wp.launch(
+            #     kernel=blend_caustics,
             #     dim=self.get_resolution(),
             #     inputs=[
             #         self._rgba_annot.get_data(),
-            #         self._depth_annot.get_data(),
+            #         self._world_points,
             #         self._normalAnnot.get_data(),
             #         self._caustics,
             #         wp.vec3f(0.0, 0.0, 1.0),
-            #         0.3,
-            #         0.0,
-            #         10000.0,
+            #         1.0,       # blend_weight
+            #         1.0,       # uv_scale_x (horizontal scaling)
+            #         1.0,       # uv_scale_y (vertical scaling)
+            #         0.0,       # depth_min
+            #         10000.0,   # depth_max
+            #         self._resolution[0],         # tex_w
+            #         self._resolution[1],         # tex_h
             #     ],
-            #     outputs=[
-            #         self._uw_image
-            #     ]
-            # )  
+            #     outputs=[self._uw_image],
+            #     device=str(self._device)
+            # )
             wp.launch(
-                dim=self.get_resolution(),
+                dim=(self._resolution[1], self._resolution[0]),  # Note the (height, width) order for 2D launch
                 kernel=UW_render_2,
                 inputs=[
-                    self._uw_image,
+                    self._rgba_annot.get_data(),
                     self._depth_annot.get_data(),
                     1.0,
                     self._backscatter_value,
