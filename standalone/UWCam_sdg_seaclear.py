@@ -31,7 +31,7 @@ config = {
         {
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "/mnt/frog-users/projects/OceanSim/sim2real/archive_dataset/SDG_2_22_2026/",
+                "output_dir": "/mnt/frog-users/projects/OceanSim/sim2real/",
                 "colorize_instance_segmentation": False,
                 "use_tight_bbox": True,
                 "debug_mode": False,
@@ -61,10 +61,10 @@ config = {
 
                     },
                     "attenuation": {
-                            "Type I": (0.905*1.5, 0.961*1.5, 0.982*1.5),
-                            "Type IA": (0.804*1.5, 0.954*1.5, 0.975*1.5),
-                            "Type IB": (0.830*1.5, 0.940*1.5, 0.968*1.5),
-                            "Type II": (0.800*1.5, 0.925*1.5, 0.940*1.5),
+                            "Type I": (1.3575, 1.4415, 1.473),
+                            "Type IA": (1.206, 1.431, 1.4625),
+                            "Type IB": (1.245, 1.41, 1.452),
+                            "Type II": (1.2, 1.3875, 1.41),
                             # "Type III": (0.750*1.5, 0.885*1.5, 0.890*1.5),
                             # "Type 1": (0.750*1.5, 0.885*1.5, 0.875*1.5),
                             # "Type 3": (0.710*1.5, 0.820*1.5, 0.800*1.5),
@@ -82,6 +82,9 @@ config = {
     "cam_lookat_workspace" : [-1.5, -1.5, -1.0, 1.5, 1.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "obj_workspace" : [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "dist_workspace" : [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "randomize_object_color": True,
+    "color_bias_range": (-0.1, 0.1),
+    "color_scale_range": (0.8, 1.2),
     "disable_render_products": False,
     "debug_mode": False,
     "seed": 1145142,
@@ -190,10 +193,14 @@ def run_sdg(config: dict=config):
     obj_ws = config.get("obj_workspace")
     dist_ws = config.get("dist_workspace")
     cam_ws = config.get("cam_workspace")
+    randomize_object_color = config.get("randomize_object_color", False)
+    color_bias_range = config.get("color_bias_range", ())
+    color_scale_range = config.get("color_scale_range", ())
     lookat_ws = config.get("cam_lookat_workspace")
     camera_properties_kwargs = config.get("camera_properties_kwargs", {})
     path_tracing = config.get("path_tracing", False)
     num_cameras = config.get("num_cameras", 1)
+    domelight_intensity = config.get("domelight_intensity", 1500.0)
     resolution = tuple(config.get("resolution", [640, 480]))
 
     disable_render_products = config.get("disable_render_products", False)
@@ -213,7 +220,7 @@ def run_sdg(config: dict=config):
     add_reference_to_stage(usd_path=next(envs_iter), prim_path='/terrain')
 
     stage = omni.usd.get_context().get_stage()
-    domelight = create_dome_ligth(stage, "/Environment", intensity=300.0)
+    domelight = create_dome_ligth(stage, "/Environment", intensity=domelight_intensity)
 
 
 
@@ -292,6 +299,19 @@ def run_sdg(config: dict=config):
     # Resolve any centimeter-meter scale issues of the assets
     resolve_scale_issues_with_metrics_assembler()
     
+    # Get objects UVtexture shader handles
+    objects_uv_texture_shaders = []
+    if (color_bias_range or color_scale_range) and randomize_object_color and objects:
+        objects_material_prims = get_material_prims(stage.GetPrimAtPath("/SDG_objects"))
+        objects_uv_texture_shaders = list(chain.from_iterable([get_UsdUVTexture_shaders(prim) for prim in objects_material_prims]))
+
+
+    # Get distractors UVtexture shader handles
+    distractors_uv_texture_shaders = []
+    if (color_bias_range or color_scale_range) and distractors:
+        distractors_material_prims = get_material_prims(stage.GetPrimAtPath("/SDG_distractors"))
+        distractors_uv_texture_shaders = list(chain.from_iterable([get_UsdUVTexture_shaders(prim) for prim in distractors_material_prims]))
+    
     
     # Only create the writers if there are render products to attach to
     writers = []
@@ -323,22 +343,8 @@ def run_sdg(config: dict=config):
 
     print(f"[SDG] Created {len(writers)} writers")
 
-    terrian_mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/terrain/collider"))
-    points = terrian_mesh.GetPointsAttr().Get()
-    obj_ws_points = [
-        point
-        for point in points
-        if obj_ws[0] <= point[0] <= obj_ws[3]
-        and obj_ws[1] <= point[1] <= obj_ws[4]
-        and obj_ws[2] <= point[2] <= obj_ws[5]
-    ]
-    dist_ws_points = [
-        point
-        for point in points
-        if dist_ws[0] <= point[0] <= dist_ws[3]
-        and dist_ws[1] <= point[1] <= dist_ws[4]
-        and dist_ws[2] <= point[2] <= dist_ws[5]
-    ]
+    obj_ws_points = extract_points_from_mesh(stage.GetPrimAtPath("/terrain/collider"), obj_ws)
+    dist_ws_points = extract_points_from_mesh(stage.GetPrimAtPath("/terrain/collider"), dist_ws)
 
     capture_counter = 0
 
@@ -373,33 +379,27 @@ def run_sdg(config: dict=config):
                 print(f"[SDG] Environment exhausted, reuse the last environment.")
 
 
-            # Recompute the sampled points on the new terrain
-            terrian_mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/terrain/collider"))
-            points = terrian_mesh.GetPointsAttr().Get()
-            obj_ws_points = [
-                point
-                for point in points
-                if obj_ws[0] <= point[0] <= obj_ws[3]
-                and obj_ws[1] <= point[1] <= obj_ws[4]
-                and obj_ws[2] <= point[2] <= obj_ws[5]
-            ]
-            dist_ws_points = [
-                point
-                for point in points
-                if dist_ws[0] <= point[0] <= dist_ws[3]
-                and dist_ws[1] <= point[1] <= dist_ws[4]
-                and dist_ws[2] <= point[2] <= dist_ws[5]
-            ]
+            # Recompute the sampled points on the new terrain 
+            obj_ws_points = extract_points_from_mesh(stage.GetPrimAtPath("/terrain/collider"), obj_ws)
+            dist_ws_points = extract_points_from_mesh(stage.GetPrimAtPath("/terrain/collider"), dist_ws)
+
             # make sure render artifact is gone
             for _ in range(100):
                 simulation_app.update()
 
-
-        domelight.GetAttribute("inputs:intensity").Set(1500.0)
+        # we put objects a bit higher than the terrain
         sample_objects_on_points(obj_ws_points, objects, offset=(0, 0, 0.05))
         if distractors:
             sample_objects_on_points(dist_ws_points, distractors)
-
+        if objects_uv_texture_shaders:
+            randomize_UVTexture_scale_bias(objects_uv_texture_shaders, 
+                                        scale_range=color_scale_range,
+                                        bias_range=color_bias_range)
+        if distractors_uv_texture_shaders:
+            randomize_UVTexture_scale_bias(distractors_uv_texture_shaders, 
+                                       scale_range=color_scale_range,
+                                       bias_range=color_bias_range)
+        
         randomize_camera_poses_rel_to_objs(cameras, objects, lookat_ws, cam_ws, look_at_offset=(-0.3, 0.3))
 
         perturb_object_poses(objects, scale_range=(0.5, 1.0))

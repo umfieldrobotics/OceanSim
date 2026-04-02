@@ -1,0 +1,74 @@
+launch_config:
+  renderer: "RealTimePathTracing"
+  headless: true
+  extra_args:
+    # "--/persistent/renderer/rtpt/enabled=True",             # This enables RTX 2.0 for Isaac 4.5
+    - "--/persistent/rtx/modes/rt2/enabled=True"              # This enables RTX 2.0 for Isaac 5.0
+    - "--/persistent/rtx/modes/pt/enabled=True"               # This enables Path Tracing for Isaac 5.0
+    - "--/persistent/rtx/modes/rt/enabled=True"               # This enables Ray Tracing for Isaac 5.0
+    - "--/log/level=error"                                     # These will shut isaac sim the fuck up
+    - "--/log/fileLogLevel=error"
+    - "--/log/outputStreamLevel=error"
+    - "--/renderer/multiGpu/enabled=false"                    # Nvidia another freaking bug?
+
+total_captures: 2000
+camera_collider_radius: 0.1
+env_url: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains_3x3"
+objects_url: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/"
+distractors_folder: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/OceanRealm_assets/"
+rt_subframes: 16
+resolution: [1920, 1080]
+camera_properties_kwargs:
+  focalLength: 24.0
+  focusDistance: 400
+  fStop: 0.0
+  clippingRange: [0.001, 100]
+
+writers:
+  - type: "UWCam_KittiWriter"
+    kwargs:
+      output_dir: "/mnt/frog-users/projects/OceanSim/sim2real/training_data/raw_sdg/E3"
+      colorize_instance_segmentation: false
+      use_tight_bbox: true
+      debug_mode: false
+      UW_param:
+        scale_range: [0.5, 1.0]
+        veiling:
+          akdeniz: [0.14, 0.3, 0.5]
+          river: [0.294, 0.4, 0.263]
+          mud: [0.259, 0.259, 0.024]
+          mhl: [0.0, 0.3021, 0.239]
+          murky: [0.275, 0.212, 0.071]
+          seaclear_sea_urchin: [0.08, 0.42, 0.52]
+        backscatter:
+          "Type I": [0.905, 0.961, 0.982]
+          "Type IA": [0.804, 0.954, 0.975]
+          "Type IB": [0.830, 0.940, 0.968]
+          "Type II": [0.800, 0.925, 0.940]
+          "Type III": [0.750, 0.885, 0.890]
+          "Type 1": [0.750, 0.885, 0.875]
+          "Type 3": [0.710, 0.820, 0.800]
+          "Type 5": [0.670, 0.730, 0.670]
+          "Type 7": [0.620, 0.610, 0.590]
+          "Type 9": [0.550, 0.460, 0.290]
+        attenuation:
+          "Type I": [1.3575, 1.4415, 1.473]
+          "Type IA": [1.206, 1.431, 1.4625]
+          "Type IB": [1.245, 1.41, 1.452]
+          "Type II": [1.2, 1.3875, 1.41]
+          # "Type III": [1.125, 1.3275, 1.335]
+          # "Type 1": [1.125, 1.3275, 1.3125]
+          # "Type 3": [1.065, 1.23, 1.2]
+          # "Type 5": [1.005, 1.095, 1.005]
+          # "Type 7": [0.93, 0.915, 0.885]
+          # "Type 9": [0.825, 0.69, 0.435]
+
+add_distractors: false
+cam_workspace: [-0.25, -0.25, 0.5, 0.25, 0.25, 1.75]
+cam_lookat_workspace: [-1.5, -1.5, -1.0, 1.5, 1.5, 1.0]
+obj_workspace: [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0]
+dist_workspace: [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0]
+disable_render_products: false
+debug_mode: false
+seed: 114514
+path_tracing: false

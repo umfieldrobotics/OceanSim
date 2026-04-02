@@ -10,41 +10,84 @@ config = {
             "--/persistent/rtx/modes/rt/enabled=True",              # This enables Ray Tracing for Isaac 5.0
             "--/log/level=error",                                    # These will shut isaac sim the fuck up 
             "--/log/fileLogLevel=error", 
-            "--/log/outputStreamLevel=error"
+            "--/log/outputStreamLevel=error",
+            "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug? Will crash on multi-gpu
             ]
     },
-    "total_captures" : 15,
+    "total_captures" : 5,
     "camera_collider_radius": 0.1,
-    "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/Collected_padded_pebble_new/padded_pebble_water.usd",
-    "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_6_scissors/",
-    "texture_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/SDG_materials/",
+    "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains_3x3",
+    "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_COU_replica",
+    "distractors_folder": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/OceanRealm_assets/",
     "rt_subframes": 16,
-    "resolution": [1024, 1024],
-    "masked_objects_ratio": 0.5,
+    "resolution": [1920, 1080],
     "camera_properties_kwargs": {
-        "focalLength": 50.0,
+        "focalLength": 24,
         "focusDistance": 400,
         "fStop": 0.0,
         "clippingRange": [0.001, 100],
     },
     "writers": [
         {
-            # Type of the writer to use (e.g. PoseWriter, BasicWriter, etc.) and the kwargs to pass to the writer init
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_data/SDG_test",
+                "output_dir": "/mnt/frog-users/projects/OceanSim/sim2real/training_data/temp",
                 "colorize_instance_segmentation": False,
-                "veiling_visibility_threshold": 12, # This is not used now
                 "use_tight_bbox": True,
-                # "UW_param": "/frog-drive/ocean-sim/sim2real/sceneAssets/duluth/duluth.yaml",
-                "debug_mode": True,
+                "debug_mode": False,
+                "UW_param": {
+                    "scale_range": (0.0, 0.0), # 0.25 for now is on an ablalation study that gives the greatest mAP 
+                    "veiling": {
+                            # "deep_sea": (0.0, 0.0, 0.28),
+                            # "shallow_water": (0.05, 0.11, 0.7),
+                            "akdeniz": (0.14, 0.3, 0.5),
+                            "river": (0.294, 0.4, 0.263),
+                            "mud": (0.259, 0.259, 0.024),
+                            "mhl": (0.0, 0.3021, 0.239),
+                            "murky": (0.275, 0.212, 0.071),
+                            "seaclear_sea_urchin": (0.08, 0.42, 0.52),
+                        },
+                    "backscatter": {
+                            "Type I": (0.905, 0.961, 0.982),
+                            "Type IA": (0.804, 0.954, 0.975),
+                            "Type IB": (0.830, 0.940, 0.968),
+                            "Type II": (0.800, 0.925, 0.940),
+                            "Type III": (0.750, 0.885, 0.890),
+                            "Type 1": (0.750, 0.885, 0.875),
+                            "Type 3": (0.710, 0.820, 0.800),
+                            "Type 5": (0.670, 0.730, 0.670),
+                            "Type 7": (0.620, 0.610, 0.590),
+                            "Type 9": (0.550, 0.460, 0.290),
+
+                    },
+                    "attenuation": {
+                            "Type I": (1.3575, 1.4415, 1.473),
+                            "Type IA": (1.206, 1.431, 1.4625),
+                            "Type IB": (1.245, 1.41, 1.452),
+                            "Type II": (1.2, 1.3875, 1.41),
+                            # "Type III": (0.750*1.5, 0.885*1.5, 0.890*1.5),
+                            # "Type 1": (0.750*1.5, 0.885*1.5, 0.875*1.5),
+                            # "Type 3": (0.710*1.5, 0.820*1.5, 0.800*1.5),
+                            # "Type 5": (0.670*1.5, 0.730*1.5, 0.670*1.5),
+                            # "Type 7": (0.620*1.5, 0.610*1.5, 0.590*1.5),
+                            # "Type 9": (0.550*1.5, 0.460*1.5, 0.290*1.5),
+                    }
+                }
             },
         }
+
     ],
-    "obj_workspace": [-0.75, -0.75, 0.15, 0.75, 0.75, 0.6],
-    "cam_workspace" : [-1.0, -1.0, 0.3, 1.0, 1.0, 0.7],
+    "add_distractors": True,
+    "cam_workspace" : [-0.25, -0.25, 0.5, 0.25, 0.25, 1.75], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "cam_lookat_workspace" : [-1.5, -1.5, -1.0, 1.5, 1.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "obj_workspace" : [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "dist_workspace" : [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "randomize_object_color": True,
+    "color_bias_range": (-0.1, 0.1),
+    "color_scale_range": (0.8, 1.2),
     "disable_render_products": False,
     "debug_mode": False,
+    "seed": 114514,
     "path_tracing": False,
 }
 
@@ -83,6 +126,8 @@ print(f"[SDG] Using config:\n{config}")
 
 launch_config = config.get("launch_config", {})
 debug_mode = config.get("debug_mode", False)
+seed = config.get("seed", None)
+
 if debug_mode:
     launch_config["headless"] = False
 
@@ -146,29 +191,39 @@ def run_sdg(config: dict=config):
     total_captures = config.get("total_captures", 10)
     rt_subframes = config.get("rt_subframes", 4) 
     obj_ws = config.get("obj_workspace")
+    dist_ws = config.get("dist_workspace")
     cam_ws = config.get("cam_workspace")
+    randomize_object_color = config.get("randomize_object_color", False)
+    color_bias_range = config.get("color_bias_range", ())
+    color_scale_range = config.get("color_scale_range", ())
+    lookat_ws = config.get("cam_lookat_workspace")
     camera_properties_kwargs = config.get("camera_properties_kwargs", {})
-    masked_objects_ratio = config.get("masked_objects_ratio", 0.5)
     path_tracing = config.get("path_tracing", False)
     num_cameras = config.get("num_cameras", 1)
+    domelight_intensity = config.get("domelight_intensity", 1500.0)
     resolution = tuple(config.get("resolution", [640, 480]))
 
     disable_render_products = config.get("disable_render_products", False)
 
     # ENVIRONMENT
-    # Create an empty or load a custom stage (clearing any previous semantics)
-    if env_url:
-        omni.usd.get_context().open_stage(env_url)
-        stage = omni.usd.get_context().get_stage()
-    else:
-        omni.usd.get_context().new_stage()
-        stage = omni.usd.get_context().get_stage()
-        # Add a distant light to the empty stage
-        distant_light = stage.DefinePrim("/World/Lights/DistantLight", "DistantLight")
-        distant_light.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float).Set(400.0)
-        if not distant_light.HasAttribute("xformOp:rotateXYZ"):
-            UsdGeom.Xformable(distant_light).AddRotateXYZOp()
-        distant_light.GetAttribute("xformOp:rotateXYZ").Set((0, 60, 0))
+    parsed_envs = parse_env_folder(env_url)
+
+    # This is an another freaking bug that Isaac Sim has to open a stage with MDL displacement on first,
+    # so that the stages loaded after can have displacement effective
+    omni.usd.get_context().open_stage(list(parsed_envs.values())[0])
+    run_simulation(num_frames=100, render=True)
+    print('heated up the renderer')
+    omni.usd.get_context().new_stage()
+
+    num_envs = len(parsed_envs)
+    envs_iter = iter(parsed_envs.values())
+    add_reference_to_stage(usd_path=next(envs_iter), prim_path='/terrain')
+
+    stage = omni.usd.get_context().get_stage()
+    domelight = create_dome_ligth(stage, "/Environment", intensity=domelight_intensity)
+
+
+
 
     # Create a physics scene to modify custom physics settings
     physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
@@ -217,12 +272,45 @@ def run_sdg(config: dict=config):
     
         print(f"[SDG] Created camera colliders with radius {camera_collider_radius}")
     
-    # Add COU objects
-    objects, kitti_labels = add_COU_objects(objects_folder_path=objects_url, override_semantic_mapping=None, physics=True)
-    print(f"[SDG] {len(objects)} numbers of COU objects being added to the scene")
+    # Add objects
+    objects, kitti_labels = add_objects(objects_folder_path=objects_url, 
+                                        override_semantic_mapping=None, 
+                                        physics=True,
+                                        count=1,
+                                        )
+    print(f"[SDG] {len(objects)} numbers of detection objects being added to the scene")
+
+    distractors = []
+    distract_folder = config.get('distractors_folder', None)
+    if config.get("add_distractors", False):
+        # update the kitti labels mapping dict with distractor objects
+        ds, kitti_labels = add_distractor_from_UE(mapping=kitti_labels,
+                                                UE_asset_folder=distract_folder,
+                                                root_path="SDG_distractors",
+                                                name_prefix="distractor_",
+                                                physics=True,
+                                                num=30,
+                                                count=2,
+                                                )
+        distractors.extend(ds)
+
+        print(f"[SDG] {len(distractors)} numbers of distractor objects being added to the scene")
 
     # Resolve any centimeter-meter scale issues of the assets
     resolve_scale_issues_with_metrics_assembler()
+    
+    # Get objects UVtexture shader handles
+    objects_uv_texture_shaders = []
+    if (color_bias_range or color_scale_range) and randomize_object_color and objects:
+        objects_material_prims = get_material_prims(stage.GetPrimAtPath("/SDG_objects"))
+        objects_uv_texture_shaders = list(chain.from_iterable([get_UsdUVTexture_shaders(prim) for prim in objects_material_prims]))
+
+
+    # Get distractors UVtexture shader handles
+    distractors_uv_texture_shaders = []
+    if (color_bias_range or color_scale_range) and distractors:
+        distractors_material_prims = get_material_prims(stage.GetPrimAtPath("/SDG_distractors"))
+        distractors_uv_texture_shaders = list(chain.from_iterable([get_UsdUVTexture_shaders(prim) for prim in distractors_material_prims]))
     
     
     # Only create the writers if there are render products to attach to
@@ -255,43 +343,69 @@ def run_sdg(config: dict=config):
 
     print(f"[SDG] Created {len(writers)} writers")
 
-    material_url = config.get("texture_url", "")
-    materials = add_material(material_folder_path=material_url)
-    scene_xform = stage.GetPrimAtPath("/World/padded_pebble")
+    obj_ws_points = extract_points_from_mesh(stage.GetPrimAtPath("/terrain/collider"), obj_ws)
+    dist_ws_points = extract_points_from_mesh(stage.GetPrimAtPath("/terrain/collider"), dist_ws)
 
     capture_counter = 0
+
+    env_switch_interval = max(1, total_captures // num_envs)
+    env_index = 0
+    print(f"[SDG] env_switch_interval: {env_switch_interval}, num_envs: {num_envs}")
+
+
+    # Enable FFT bloom (This makes the underwater scene look a bit more blurry, a bit more realistic)
+    enable_FFT_bloom(enable=False, energyConstrainingBlend=True)
+    enable_global_volumetric_effects(enable=True, 
+                                    density_mult=1.0, 
+                                    anisotropy_factor=-1.0, 
+                                    transmittance_distance=40,
+                                    )
+    # Set the background type to Black
+    # set_background_type(background_type="Color", color=(0.0, 0.0, 0.0))
+    # carb.settings.get_settings().set("/rtx/background/source/color", (0, 0, 0))
+    # carb.settings.get_settings().set("/rtx/background/source/type", "Color")
+    # carb.settings.get_settings().set("/rtx/background/source/color", (0, 0, 0))
+
     while capture_counter < total_captures:
 
-        enable_global_volumetric_effects(enable=True, 
-                                        density_mult=random.uniform(1.0, 1.95), 
-                                        anisotropy_factor=0.0, 
-                                        transmittance_distance=10000,
-                                        )
-        if materials:
-            change_material(materials, scene_xform)
+        if capture_counter % env_switch_interval == 0 and capture_counter > 0:
+            try:
+                next_env = next(envs_iter)
+                stage.RemovePrim("/terrain")
+                add_reference_to_stage(usd_path=next_env, prim_path='/terrain')
+                print(f"[SDG] Switching environment from [{env_index}] {list(parsed_envs.keys())[env_index]} to [{(env_index + 1)}] {list(parsed_envs.keys())[env_index + 1]}")
+                env_index += 1
+            except:
+                print(f"[SDG] Environment exhausted, reuse the last environment.")
 
-        # Randomize the poses of the objects
-        randomize_poses(objects, location_range=obj_ws, rotation_range=(0, 360), scale_range=(0.75, 1.25))
-        
-        # Run simulation a bit for objects to fall
-        run_simulation(num_frames=random.randint(3, 30), render=False)
 
-        # Mask a random number of objects
-        if masked_objects_ratio == 1:
-            for obj in objects:
-                obj.GetAttribute("visibility").Set("invisible")
-            
-            randomize_camera_poses_rel_to_ws(cameras, objects, cam_ws, look_at_offset=(-0.0, 0.0))
-        else:
-            masked_objects = mask_random_objects(objects, ratio=masked_objects_ratio)
-            visible_objects = [obj for obj in objects if obj not in masked_objects]
-            
-            
-            # Randomize the poses of the cameras
-            randomize_camera_poses_rel_to_ws(cameras, visible_objects, cam_ws, look_at_offset=(-0.0, 0.0))
+            # Recompute the sampled points on the new terrain 
+            obj_ws_points = extract_points_from_mesh(stage.GetPrimAtPath("/terrain/collider"), obj_ws)
+            dist_ws_points = extract_points_from_mesh(stage.GetPrimAtPath("/terrain/collider"), dist_ws)
+
+            # make sure render artifact is gone
+            for _ in range(100):
+                simulation_app.update()
+
+        # we put objects a bit higher than the terrain
+        sample_objects_on_points(obj_ws_points, objects, offset=(0, 0, 0.05))
+        if distractors:
+            sample_objects_on_points(dist_ws_points, distractors)
+        if objects_uv_texture_shaders:
+            randomize_UVTexture_scale_bias(objects_uv_texture_shaders, 
+                                        scale_range=color_scale_range,
+                                        bias_range=color_bias_range)
+        if distractors_uv_texture_shaders:
+            randomize_UVTexture_scale_bias(distractors_uv_texture_shaders, 
+                                       scale_range=color_scale_range,
+                                       bias_range=color_bias_range)
         
+        randomize_camera_poses_rel_to_objs(cameras, objects, lookat_ws, cam_ws, look_at_offset=(-0.3, 0.3))
+
+        perturb_object_poses(objects, scale_range=(0.75, 1.25))
+
         # Run simulation a bit for collider to settle
-        run_simulation(num_frames=2, render=False)
+        run_simulation(num_frames=5, render=False)
 
         # Check if the render products need to be enabled for the capture
         if disable_render_products:
@@ -301,6 +415,7 @@ def run_sdg(config: dict=config):
         if path_tracing:
             capture_pathtracing(delta_time=0.0, spp=512, pause_timeline=True)
         else:
+
             rep.orchestrator.step(rt_subframes=rt_subframes, delta_time=0.0)
 
         
@@ -308,7 +423,7 @@ def run_sdg(config: dict=config):
         # NOTE: Temporary code to save the object info as metadata
         if not os.path.exists(os.path.join(out_dir, "metadata")):
             os.makedirs(os.path.join(out_dir, "metadata"), exist_ok=True)
-        save_object_info(objects, cameras, os.path.join(out_dir, "metadata", f"object_info_{capture_counter}.json"))
+        # save_object_info(objects, cameras, os.path.join(out_dir, "metadata", f"object_info_{capture_counter}.json"))
         
         
         
@@ -317,8 +432,6 @@ def run_sdg(config: dict=config):
             for rp in render_products:
                 rp.hydra_texture.set_updates_enabled(False)
 
-
-        unmask_objects(objects)
 
         capture_counter += 1
         print(f"[SDG] Captured {capture_counter}/{total_captures} frames")
@@ -347,6 +460,11 @@ if debug_mode:
     np.random.seed(10)
     random.seed(10)
     rep.set_global_seed(10)
+
+if seed:
+    np.random.seed(seed)
+    random.seed(seed)
+    rep.set_global_seed(seed)
 
 
 # Start the SDG pipeline

@@ -514,8 +514,15 @@ def enable_FFT_bloom(enable: bool = True, energyConstrainingBlend: bool = True) 
     carb.settings.get_settings().set("/rtx/post/lensFlares/enabled", enable)
     carb.settings.get_settings().set("/rtx/post/lensFlares/energyConstrainingBlend", energyConstrainingBlend)
 
-
-
+def extract_points_from_mesh(mesh_prim: Usd.Prim, ws: List[float]) -> list[Gf.Vec3f]:
+    points = UsdGeom.Mesh(mesh_prim).GetPointsAttr().Get()
+    return [
+        point
+        for point in points
+        if ws[0] <= point[0] <= ws[3]
+        and ws[1] <= point[1] <= ws[4]
+        and ws[2] <= point[2] <= ws[5]
+    ]
 def add_colliders(root_prim: Usd.Prim, approximation_type: str = "convexHull") -> None:
     """Add collision attributes to mesh and geometry primitives under the root prim."""
     for desc_prim in Usd.PrimRange(root_prim):

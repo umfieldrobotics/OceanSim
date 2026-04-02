@@ -226,6 +226,7 @@ class UIBuilder():
         self._rob_angular_damping = 10.0
         self._rob_linear_damping = 10.0
 
+
         
         # Scenario
         self._scenario = RobDriver_Scenario()
@@ -291,16 +292,13 @@ class UIBuilder():
         set_camera_view(eye=np.array([5,0.6,0.4]), target=rob_collider_prim.get_world_pose()[0])
 
         from isaacsim.sensors.camera import Camera
-        # result, sensor = omni.kit.commands.execute(
-        #     "IsaacSensorCreateImuSensor",
-        #     path="/Imu_Sensor",
-        #     parent="/World/rob/base_link/imu_link",
-        # )
+        from isaacsim.oceansim.sensors.ImagingSonarSensor import ImagingSonarSensor
+        self._sonar = ImagingSonarSensor(robot_prim_path + "/baselink/sonar")
 
-        left_camera_prim_path = "/World/rob/base_link/left_camera/cam_L"
-        right_camera_prim_path = "/World/rob/base_link/right_camera/cam_R"
-        cam_L = Camera(prim_path=left_camera_prim_path)
-        cam_R = Camera(prim_path=right_camera_prim_path)
+        # left_camera_prim_path = "/World/rob/base_link/left_camera/cam_L"
+        # right_camera_prim_path = "/World/rob/base_link/right_camera/cam_R"
+        # cam_L = Camera(prim_path=left_camera_prim_path)
+        # cam_R = Camera(prim_path=right_camera_prim_path)
 
         
             
@@ -323,7 +321,7 @@ class UIBuilder():
     def _reset_scenario(self):
         self._scenario.save_data_frame()
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._ctrl_mode)
+        self._scenario.setup_scenario(self._rob, self._sonar, self._ctrl_mode)
     def _on_post_reset_btn(self):
         """
         This function is attached to the Reset Button as the post_reset_fn callback.

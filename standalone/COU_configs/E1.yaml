@@ -1,0 +1,51 @@
+launch_config:
+  renderer: "RealTimePathTracing"
+  headless: true
+  extra_args:
+    # "--/persistent/renderer/rtpt/enabled=True",             # This enables RTX 2.0 for Isaac 4.5
+    - "--/persistent/rtx/modes/rt2/enabled=True"              # This enables RTX 2.0 for Isaac 5.0
+    - "--/persistent/rtx/modes/pt/enabled=True"               # This enables Path Tracing for Isaac 5.0
+    - "--/persistent/rtx/modes/rt/enabled=True"               # This enables Ray Tracing for Isaac 5.0
+    - "--/log/level=error"                                     # These will shut isaac sim the fuck up
+    - "--/log/fileLogLevel=error"
+    - "--/log/outputStreamLevel=error"
+    - "--/renderer/multiGpu/enabled=false"                    # Nvidia another freaking bug?
+
+total_captures: 2000
+camera_collider_radius: 0.1
+env_url: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/simple_plane"
+objects_url: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/"
+distractors_folder: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/OceanRealm_assets/"
+rt_subframes: 16
+resolution: [1920, 1080]
+camera_properties_kwargs:
+  focalLength: 24.0
+  focusDistance: 400
+  fStop: 0.0
+  clippingRange: [0.001, 100]
+
+writers:
+  - type: "UWCam_KittiWriter"
+    kwargs:
+      output_dir: "/mnt/frog-users/projects/OceanSim/sim2real/training_data/raw_sdg/E1"
+      colorize_instance_segmentation: false
+      use_tight_bbox: true
+      debug_mode: false
+      UW_param:
+        scale_range: [0.0, 0.0]
+        veiling:
+          seaclear_sea_urchin: [1.0, 1.0, 1.0]
+        backscatter:
+          seaclear_sea_urchin: [1.0, 1.0, 1.0]
+        attenuation:
+          seaclear_sea_urchin: [1.0, 1.0, 1.0]
+
+add_distractors: false
+cam_workspace: [-0.25, -0.25, 0.5, 0.25, 0.25, 1.75]  # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+cam_lookat_workspace: [-1.5, -1.5, -1.0, 1.5, 1.5, 1.0]  # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+obj_workspace: [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0]  # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+dist_workspace: [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0]  # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+disable_render_products: false
+debug_mode: false
+seed: 114514
+path_tracing: false

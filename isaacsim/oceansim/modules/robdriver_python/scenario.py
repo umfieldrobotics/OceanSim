@@ -3,7 +3,7 @@ import numpy as np
 from pxr import Gf, PhysxSchema
 
 # Isaac sim import
-from isaacsim.core.prims import SingleRigidPrim
+from isaacsim.core.prims import SingleRigidPrim, SingleXFormPrim
 from isaacsim.core.utils.prims import get_prim_path
 import omni.replicator.core as rep
 from omni.replicator.core import AnnotatorRegistry, WriterRegistry, BackendDispatch, Writer
@@ -28,32 +28,33 @@ class RobDriver_Scenario():
         self._output_directory = "/mnt/frog-users/projects/OceanSim/foundnationStero/sdg_data/"
         self._record_data = []
 
-    def setup_scenario(self, rob, ctrl_mode):
+    def setup_scenario(self, rob, sonar, ctrl_mode):
         self._rob = rob
+        self._sonar = sonar
         self._ctrl_mode = ctrl_mode
         self._id = 0
         self._imu = IMUSensor(prim_path="/World/rob/base_link/imu_link/Imu_Sensor", frequency=MAX_FREQ)
+    
+        # rp_L = rep.create.render_product("/World/rob/base_link/left_camera/cam_L", (960, 544))
+        # rp_R = rep.create.render_product("/World/rob/base_link/right_camera/cam_R", (960, 544))
 
-        rp_L = rep.create.render_product("/World/rob/base_link/left_camera/cam_L", (960, 544))
-        rp_R = rep.create.render_product("/World/rob/base_link/right_camera/cam_R", (960, 544))
-
-        self._rgbAnnot_L = AnnotatorRegistry.get_annotator("rgb", device="cuda:0")
-        self._rgbAnnot_R = AnnotatorRegistry.get_annotator("rgb", device="cuda:0")
-        self._distance_to_image_planeAnnot_L = AnnotatorRegistry.get_annotator("distance_to_image_plane", device="cuda:0")
-        self._distance_to_image_planeAnnot_R = AnnotatorRegistry.get_annotator("distance_to_image_plane", device="cuda:0")
-        # self._camera_paramsAnnot_L = AnnotatorRegistry.get_annotator("camera_params")
+        # self._rgbAnnot_L = AnnotatorRegistry.get_annotator("rgb", device="cuda:0")
+        # self._rgbAnnot_R = AnnotatorRegistry.get_annotator("rgb", device="cuda:0")
+        # self._distance_to_image_planeAnnot_L = AnnotatorRegistry.get_annotator("distance_to_image_plane", device="cuda:0")
+        # self._distance_to_image_planeAnnot_R = AnnotatorRegistry.get_annotator("distance_to_image_plane", device="cuda:0")
+        # # self._camera_paramsAnnot_L = AnnotatorRegistry.get_annotator("camera_params")
         # self._camera_paramsAnnot_R = AnnotatorRegistry.get_annotator("camera_params")
 
-        self._dvl = SingleRigidPrim("/World/rob")
+        self._dvl = SingleXFormPrim("/World/rob")
 
 
-        self._rgbAnnot_L.attach(rp_L)
-        self._rgbAnnot_R.attach(rp_R)
-        self._distance_to_image_planeAnnot_L.attach(rp_L)
-        self._distance_to_image_planeAnnot_R.attach(rp_R)
+        # self._rgbAnnot_L.attach(rp_L)
+        # self._rgbAnnot_R.attach(rp_R)
+        # self._distance_to_image_planeAnnot_L.attach(rp_L)
+        # self._distance_to_image_planeAnnot_R.attach(rp_R)
         # self._camera_paramsAnnot_L.attach(rp_L)
         # self._camera_paramsAnnot_R.attach(rp_R)
-
+        self._sonar.sonar_initialize(include_unlabelled = True)
         self._backend = BackendDispatch({"paths": {"out_dir": self._output_directory}})
         
         # Apply the physx force schema if manual control
@@ -108,6 +109,7 @@ class RobDriver_Scenario():
         self._rob = None
         self._imu = None
         self._dvl = None
+        self._sonar = None
         self._running_scenario = False
         self._time = 0.0
         self._record_data = []
@@ -120,12 +122,11 @@ class RobDriver_Scenario():
         if not self._running_scenario:
             return
         
-        self._time += step
         
-
-        self.data_frame = self._imu.get_current_frame()
-        self.collect_data(int(self.data_frame['physics_step']))
-
+        self._sonar.make_sonar_data()
+        self.data_frame = {}
+        self.collect_data()
+        self._backend.write_image(data=self._sonar.get_sonar_image(), path=f"sonar/sonar_{self._id}.png")
         
         force_cmd = Gf.Vec3f(*self._force_cmd._base_command)
         torque_cmd = Gf.Vec3f(*self._torque_cmd._base_command)
@@ -134,27 +135,21 @@ class RobDriver_Scenario():
 
         
         self._id += 1
+        self._time += step
 
 
-    def collect_data(self, index: int):
-        print(f"Collecting f={self.data_frame['time']} data at index {index}")
-        gt_position = self._dvl.get_current_dynamic_state().position
-        gt_orientation = self._dvl.get_current_dynamic_state().orientation
-        self.data_frame.update({"gt_position" : gt_position.tolist(), "gt_orientation" : gt_orientation.tolist()})
-        for key, value in self.data_frame.items():
-            if isinstance(value, np.ndarray):
-                self.data_frame[key] = value.tolist()
 
+    def collect_data(self):
+        print(f"Collecting f={self._time} data at index {self._id}")
+        gt_position, gt_orientation = self._dvl.get_world_pose()
+        self.data_frame.update({"time": self._time, "gt_position": gt_position.tolist(), "gt_orientation": gt_orientation.tolist()})
         
-        if index % CAMERA_FREQ == 0:
-            print(f"[{index}] Writing camera data")
-            self._backend.schedule(write_image, data=self._rgbAnnot_L.get_data(), path="cam_L/rgb" + f"/rgb_{index}.png")
-            self._backend.schedule(write_image, data=self._rgbAnnot_R.get_data(), path="cam_R/rgb" + f"/rgb_{index}.png")
-            self._backend.schedule(write_np, data=self._distance_to_image_planeAnnot_L.get_data(), path="cam_L/depth" + f"/distance_to_image_plane_{index}.npy")
-            self._backend.schedule(write_np, data=self._distance_to_image_planeAnnot_R.get_data(), path="cam_R/depth" + f"/distance_to_image_plane_{index}.npy")
 
-        if index % DVL_FREQ == 0:
-            self.data_frame.update({"dvl" : self._dvl.get_linear_velocity().tolist()})
+            # self._backend.schedule(write_image, data=self._rgbAnnot_L.get_data(), path="cam_L/rgb" + f"/rgb_{index}.png")
+            # self._backend.schedule(write_image, data=self._rgbAnnot_R.get_data(), path="cam_R/rgb" + f"/rgb_{index}.png")
+            # self._backend.schedule(write_np, data=self._distance_to_image_planeAnnot_L.get_data(), path="cam_L/depth" + f"/distance_to_image_plane_{index}.npy")
+            # self._backend.schedule(write_np, data=self._distance_to_image_planeAnnot_R.get_data(), path="cam_R/depth" + f"/distance_to_image_plane_{index}.npy")
+
         
         self._record_data.append(self.data_frame)
         
