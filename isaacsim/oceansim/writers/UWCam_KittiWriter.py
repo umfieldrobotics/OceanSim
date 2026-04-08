@@ -141,6 +141,7 @@ class UWCam_KittiWriter(Writer):
         bbox_height_threshold: int = 5,
         bbox2d_partly_occluded_threshold: float = 0.65,
         bbox2d_fully_visible_threshold: float = 0.95,
+        truncation_dropout_threshold: float = 0.45,
         use_tight_bbox: bool = False,
         mapping_path: str = None,
         mapping_dict: dict = None,
@@ -170,6 +171,7 @@ class UWCam_KittiWriter(Writer):
         self._use_tight_bbox = use_tight_bbox
         self._bbox2d_partly_occluded_threshold = bbox2d_partly_occluded_threshold
         self._bbox2d_fully_visible_threshold = bbox2d_fully_visible_threshold
+        self._truncation_dropout_threshold = truncation_dropout_threshold
         self._use_kitti_dir_names = use_kitti_dir_names
         self._cuboid_keypoints_order = cuboid_keypoints_order
         self._debug_mode = debug_mode
@@ -369,48 +371,6 @@ class UWCam_KittiWriter(Writer):
         pose_file_path = os.path.join(sub_dir, pose_dir_name, f"{self._frame_id}.json")
         self._backend.schedule(F.write_json, path=pose_file_path, data=objs_data, indent=2)
 
-    # Write a function to avoid creating bounding boxes or recording information for any objects located beyond a specified distance (e.g., 10 meters, set as a variable)
-    # def _obj_beyond_max_distance(self, obj_location_world_frame, camera_params, max_distance=None, enable_filter=None):
-    #     """
-    #     Determines whether an object is beyond the specified max distance from the camera.
-        
-    #     Parameters:
-    #     - obj_location_world_frame (list or np.array): [x, y, z] position of the object in world coordinates.
-    #     - camera_params (dict): Camera parameters containing the camera view transform.
-    #     - max_distance (float, optional): Maximum allowable distance in meters. Uses self._max_distance if None.
-    #     - enable_filter (bool, optional): If False, the function always returns False (i.e., no filtering).
-    #                                     Uses self._enable_distance_filter if None.
-        
-    #     Returns:
-    #     - bool: True if object is beyond max_distance and filtering is enabled, False otherwise.
-    #     """
-    #     # Determine whether distance filtering is enabled
-    #     # if distance filtering is enabled and use default filter and distance
-    #     if enable_filter is None:
-    #         enable_filter = self._enable_distance_filter
-    #     if max_distance is None:
-    #         max_distance = self._max_distance
-
-    #     # if disabled, keep objects
-    #     if not enable_filter:
-    #         return False
-        
-    #     # Reshape camera view transform matrix (4x4)
-    #     world_to_camera_tf = camera_params["cameraViewTransform"].reshape(4, 4)
-        
-    #     # Invert the matrix to get the camera's position in world coordinates
-    #     camera_to_world_tf = np.linalg.inv(world_to_camera_tf)
-    #     # The translation vector (x,y,z) is stored in the last row (index 3) of the inverse matrix
-    #     camera_position_world = camera_to_world_tf[3, :3]  # Extract translation component for camera location in world space
-        
-    #     # Convert object position to numpy array
-    #     obj_position = np.array(obj_location_world_frame[:3])
-        
-    #     # Compute Euclidean distance
-    #     distance = np.linalg.norm(obj_position - camera_position_world)
-
-    #     # Return True only if the object is farther than the limit
-    #     return distance > max_distance
 
     def _write_object_detection(
         self,
@@ -495,7 +455,7 @@ class UWCam_KittiWriter(Writer):
             bbox3d_info = self._process_bounding_box_3d_single(bbox3d_id_to_bbox[id], data[camera_param_annotator])
             
             # Check if a majority part of the object is out of the frame
-            if bbox3d_info['truncation_ratio'] > 0.45:
+            if bbox3d_info['truncation_ratio'] > self._truncation_dropout_threshold:
                 continue
             
             

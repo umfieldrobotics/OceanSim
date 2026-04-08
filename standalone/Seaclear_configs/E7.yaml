@@ -27,23 +27,19 @@ camera_properties_kwargs:
 writers:
   - type: "UWCam_KittiWriter"
     kwargs:
-      output_dir: "/mnt/frog-users/projects/OceanSim/sim2real/training_data/raw_sdg/targeted"
+      output_dir: "/mnt/frog-users/projects/OceanSim/sim2real/training_data/raw_sdg/E7"
       colorize_instance_segmentation: false
       use_tight_bbox: true
       debug_mode: false
       UW_param:
-        scale_range: [0.5, 1.0]
+        scale_range: [0.0, 0.0]
         veiling:
-          "seaclear_sea_urchin_0": [0.1, 0.42, 0.52]
-          "seaclear_sea_urchin_1": [0.0, 0.5, 0.5]
-          "seaclear_sea_urchin_2": [0.1, 0.4, 0.42]
-          "seaclear_sea_urchin_3": [0.0, 0.38, 0.46]
-          "seaclear_sea_urchin_4": [0.0, 0.42, 0.42]
-          "seaclear_sea_urchin_5": [0.1, 0.46, 0.46]
-          "seaclear_sea_urchin_6": [0.1, 0.35, 0.38]
-          "seaclear_sea_urchin_7": [0.25, 0.4, 0.42]
-          "seaclear_sea_urchin_8": [0.25, 0.36, 0.44]
-          "seaclear_sea_urchin_9": [0.1, 0.33, 0.33]
+          akdeniz: [0.14, 0.3, 0.5]
+          river: [0.294, 0.4, 0.263]
+          mud: [0.259, 0.259, 0.024]
+          mhl: [0.0, 0.3021, 0.239]
+          murky: [0.275, 0.212, 0.071]
+          seaclear_sea_urchin: [0.08, 0.42, 0.52]
         backscatter:
           "Type I": [0.905, 0.961, 0.982]
           "Type IA": [0.804, 0.954, 0.975]

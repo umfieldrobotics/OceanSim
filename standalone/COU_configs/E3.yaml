@@ -4,7 +4,7 @@ launch_config:
   extra_args: ["--/persistent/rtx/modes/rt2/enabled=True", "--/persistent/rtx/modes/pt/enabled=True", "--/persistent/rtx/modes/rt/enabled=True", "--/log/level=error", "--/log/fileLogLevel=error", "--/log/outputStreamLevel=error", "--/renderer/multiGpu/enabled=false"]
 total_captures: 2000
 camera_collider_radius: 0.1
-env_url: /mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/simple_plane
+env_url: /mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains_3x3
 objects_url: /mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_COU_replica
 distractors_folder: /mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/OceanRealm_assets/
 rt_subframes: 16
@@ -17,14 +17,14 @@ camera_properties_kwargs:
 writers:
   - type: UWCam_KittiWriter
     kwargs:
-      output_dir: /mnt/frog-users/projects/OceanSim/sim2real/training_data/COU_sim/E1
+      output_dir: /mnt/frog-users/projects/OceanSim/sim2real/training_data/COU_sim/E3
       colorize_instance_segmentation: false
       truncation_dropout_threshold: 0.8
       bbox2d_partly_occluded_threshold: 0.7
       use_tight_bbox: true
       debug_mode: false
       UW_param:
-        scale_range: [0.5, 0.5]
+        scale_range: [0.5, 0.75]
         veiling:
           akdeniz: [0.14, 0.3, 0.5]
           river: [0.294, 0.4, 0.263]
@@ -56,7 +56,7 @@ override_semantic_mapping:
   Car: 5
   ROV: 6
   Knife: 7
-add_distractors: false
+add_distractors: true
 cam_workspace: [-0.25, -0.25, 0.75, 0.25, 0.25, 1.25]
 cam_lookat_workspace: [-1.5, -1.5, -1.0, 1.5, 1.5, 1.0]
 obj_workspace: [-2.0, -2.0, -1.0, 2.0, 2.0, 1.0]

@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASEDIR="/isaac-sim/"
 
 SCRIPT="${BASEDIR}extsUser/isaacsim.oceansim/standalone/UWCam_sdg_seaclear.py"
+TIMES_LOG_FILE="${SCRIPT_DIR}/run_sdg_SeaClear_times.txt"
 
 # Use first argument as config directory, or default if not provided
 if [ -z "$1" ]; then
@@ -32,6 +33,13 @@ fi
 # Get start time in seconds
 START_TIME=$(date +%s)
 
+# Initialize per-run timing log section
+{
+    echo "=============================================="
+    echo "Run started at: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "Config directory: ${CONFIG_DIR}"
+} >> "$TIMES_LOG_FILE"
+
 # Count YAML files
 yaml_count=$(find "$CONFIG_DIR" -maxdepth 1 -name "*.yaml" -type f | wc -l)
 
@@ -50,6 +58,7 @@ for config_file in "$CONFIG_DIR"/*.yaml; do
     fi
     
     echo "Running $config_file ..."
+    FILE_START_TIME=$(date +%s)
     
     # Use python.sh if it exists, otherwise try python3 or python
     if [ -f "${BASEDIR}python.sh" ]; then
@@ -68,6 +77,12 @@ for config_file in "$CONFIG_DIR"/*.yaml; do
         echo "Error: Failed to execute $config_file"
         exit 1
     fi
+
+    FILE_END_TIME=$(date +%s)
+    FILE_ELAPSED=$((FILE_END_TIME - FILE_START_TIME))
+    CONFIG_NAME="$(basename "$config_file")"
+    echo "${CONFIG_NAME}: ${FILE_ELAPSED} seconds" >> "$TIMES_LOG_FILE"
+    echo "Completed $CONFIG_NAME in ${FILE_ELAPSED} seconds"
 done
 
 # Get end time
@@ -77,6 +92,10 @@ END_TIME=$(date +%s)
 ELAPSED=$((END_TIME - START_TIME))
 
 echo "Total elapsed time: $ELAPSED seconds"
+echo "Total elapsed time: ${ELAPSED} seconds" >> "$TIMES_LOG_FILE"
+echo "Run finished at: $(date '+%Y-%m-%d %H:%M:%S')" >> "$TIMES_LOG_FILE"
+echo "" >> "$TIMES_LOG_FILE"
+echo "Per-file timing log saved to: $TIMES_LOG_FILE"
 
 # Equivalent of 'pause' in Windows - wait for user input
 echo "Press any key to continue..."

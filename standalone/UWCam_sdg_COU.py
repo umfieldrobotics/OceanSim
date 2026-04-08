@@ -14,7 +14,7 @@ config = {
             "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug? Will crash on multi-gpu
             ]
     },
-    "total_captures" : 5,
+    "total_captures" : 30,
     "camera_collider_radius": 0.1,
     "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains_3x3",
     "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_COU_replica",
@@ -22,7 +22,7 @@ config = {
     "rt_subframes": 16,
     "resolution": [1920, 1080],
     "camera_properties_kwargs": {
-        "focalLength": 24,
+        "focalLength": 32,
         "focusDistance": 400,
         "fStop": 0.0,
         "clippingRange": [0.001, 100],
@@ -33,10 +33,12 @@ config = {
             "kwargs": {
                 "output_dir": "/mnt/frog-users/projects/OceanSim/sim2real/training_data/temp",
                 "colorize_instance_segmentation": False,
+                "truncation_dropout_threshold": 0.8,
+                "bbox2d_partly_occluded_threshold": 0.7,
                 "use_tight_bbox": True,
                 "debug_mode": False,
                 "UW_param": {
-                    "scale_range": (0.0, 0.0), # 0.25 for now is on an ablalation study that gives the greatest mAP 
+                    "scale_range": (0.5, 0.5), # 0.25 for now is on an ablalation study that gives the greatest mAP 
                     "veiling": {
                             # "deep_sea": (0.0, 0.0, 0.28),
                             # "shallow_water": (0.05, 0.11, 0.7),
@@ -45,7 +47,7 @@ config = {
                             "mud": (0.259, 0.259, 0.024),
                             "mhl": (0.0, 0.3021, 0.239),
                             "murky": (0.275, 0.212, 0.071),
-                            "seaclear_sea_urchin": (0.08, 0.42, 0.52),
+                            # "seaclear_sea_urchin": (0.08, 0.42, 0.52),
                         },
                     "backscatter": {
                             "Type I": (0.905, 0.961, 0.982),
@@ -77,13 +79,25 @@ config = {
         }
 
     ],
+    # If specified, this dict will override the default mapping from object names to kitti labels. 
+    # Format: {"object_name_keyword": kitti_label_id, ...}
+    "override_semantic_mapping": {
+        "Scissors" : 0,
+        "Fork" : 1,
+        "Cup" : 2,
+        "Spoon" : 3,
+        "Screwdriver" : 4,
+        "Car" : 5,
+        "ROV" : 6,
+        "Knife" : 7,
+    }, 
     "add_distractors": True,
-    "cam_workspace" : [-0.25, -0.25, 0.5, 0.25, 0.25, 1.75], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "cam_workspace" : [-0.25, -0.25, 0.75, 0.25, 0.25, 1.25], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "cam_lookat_workspace" : [-1.5, -1.5, -1.0, 1.5, 1.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
-    "obj_workspace" : [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
+    "obj_workspace" : [-2.0, -2.0, -1.0, 2.0, 2.0, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "dist_workspace" : [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0], # [minX, minY, minZ, maxX, maxY, maxZ] in the world frame
     "randomize_object_color": True,
-    "color_bias_range": (-0.1, 0.1),
+    "color_bias_range": (-0.25, 0.25),
     "color_scale_range": (0.8, 1.2),
     "disable_render_products": False,
     "debug_mode": False,
@@ -202,7 +216,7 @@ def run_sdg(config: dict=config):
     num_cameras = config.get("num_cameras", 1)
     domelight_intensity = config.get("domelight_intensity", 1500.0)
     resolution = tuple(config.get("resolution", [640, 480]))
-
+    override_semantic_mapping = config.get("override_semantic_mapping", None)
     disable_render_products = config.get("disable_render_products", False)
 
     # ENVIRONMENT
@@ -274,9 +288,9 @@ def run_sdg(config: dict=config):
     
     # Add objects
     objects, kitti_labels = add_objects(objects_folder_path=objects_url, 
-                                        override_semantic_mapping=None, 
+                                        override_semantic_mapping=override_semantic_mapping, 
                                         physics=True,
-                                        count=1,
+                                        count=2,
                                         )
     print(f"[SDG] {len(objects)} numbers of detection objects being added to the scene")
 
@@ -311,7 +325,6 @@ def run_sdg(config: dict=config):
     if (color_bias_range or color_scale_range) and distractors:
         distractors_material_prims = get_material_prims(stage.GetPrimAtPath("/SDG_distractors"))
         distractors_uv_texture_shaders = list(chain.from_iterable([get_UsdUVTexture_shaders(prim) for prim in distractors_material_prims]))
-    
     
     # Only create the writers if there are render products to attach to
     writers = []
@@ -365,7 +378,6 @@ def run_sdg(config: dict=config):
     # carb.settings.get_settings().set("/rtx/background/source/color", (0, 0, 0))
     # carb.settings.get_settings().set("/rtx/background/source/type", "Color")
     # carb.settings.get_settings().set("/rtx/background/source/color", (0, 0, 0))
-
     while capture_counter < total_captures:
 
         if capture_counter % env_switch_interval == 0 and capture_counter > 0:
@@ -382,13 +394,11 @@ def run_sdg(config: dict=config):
             # Recompute the sampled points on the new terrain 
             obj_ws_points = extract_points_from_mesh(stage.GetPrimAtPath("/terrain/collider"), obj_ws)
             dist_ws_points = extract_points_from_mesh(stage.GetPrimAtPath("/terrain/collider"), dist_ws)
-
-            # make sure render artifact is gone
             for _ in range(100):
                 simulation_app.update()
 
         # we put objects a bit higher than the terrain
-        sample_objects_on_points(obj_ws_points, objects, offset=(0, 0, 0.05))
+        sample_objects_on_points(obj_ws_points, objects, offset=(0, 0, 0.2))
         if distractors:
             sample_objects_on_points(dist_ws_points, distractors)
         if objects_uv_texture_shaders:
@@ -399,13 +409,13 @@ def run_sdg(config: dict=config):
             randomize_UVTexture_scale_bias(distractors_uv_texture_shaders, 
                                        scale_range=color_scale_range,
                                        bias_range=color_bias_range)
-        
-        randomize_camera_poses_rel_to_objs(cameras, objects, lookat_ws, cam_ws, look_at_offset=(-0.3, 0.3))
+
+        randomize_camera_poses_rel_to_objs(cameras, objects, lookat_ws, cam_ws, look_at_offset=(-0.1, 0.1))
 
         perturb_object_poses(objects, scale_range=(0.75, 1.25))
 
         # Run simulation a bit for collider to settle
-        run_simulation(num_frames=5, render=False)
+        run_simulation(num_frames=10, render=False)
 
         # Check if the render products need to be enabled for the capture
         if disable_render_products:
