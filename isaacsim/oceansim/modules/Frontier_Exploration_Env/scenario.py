@@ -27,7 +27,7 @@ class MHL_Sensor_Example_Scenario():
     #def setup_scenario(self, rob, sonar, cam, DVL, baro, zed,  ctrl_mode):
     def setup_scenario(self, imu, rob, sonar, cam, DVL, baro,  ctrl_mode):
         #Initialize omni graph before dependant sensors
-        self.omni_ros = ros2_helpers.OmniHandler(name="Sensorexample_pthon")
+        self.omni_ros = ros2_helpers.OmniHandler(name="FrontierExploration")
         self._imu = imu
         self._rob = rob
         self._sonar = sonar

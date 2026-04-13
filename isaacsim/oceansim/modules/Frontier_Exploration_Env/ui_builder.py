@@ -186,9 +186,10 @@ class UIBuilder:
                     tooltip="Click this checkbox to activate barometer",
                     on_click_fn=self._on_baro_checkbox_click_fn,
                 )
-                self._use_baro = False
 
+                self._use_baro = False
                 self.wrapped_ui_elements.append(baro_check_box)
+
                 # zed_stereo_check_box = CheckBox(
                 #     "ZED X Stereo",
                 #     default_value=False,
@@ -310,19 +311,17 @@ class UIBuilder:
         else:
             print("USD path is empty. Default to example scene")
 
-            # add MHL scene as reference
-            MHL_prim_path = "/World/mhl"
-            MHL_usd_path = get_oceansim_assets_path() + "/collected_MHL/mhl_scaled.usd"
+            # Tartan Ocean scene
+            MHL_prim_path = "/World/Root"
+            MHL_usd_path = get_oceansim_assets_path() + "/tartan_ocean/tartan_ocean.usd"
             add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
-            # Toggle MHL mesh's collider
             SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
-            # apply a reflectivity of 1.0 to mesh of the scene for sonar simulation
             add_update_semantics(
-                prim=get_prim_at_path(MHL_prim_path + "/Mesh/mesh"),
+                prim=get_prim_at_path(MHL_prim_path),
                 type_label="reflectivity",
                 semantic_label="1.0",
             )
-            # Load the rock
+            # Load the rock (leaving it in for now but should remove for this new scenerio)
             rock_prim_path = "/World/rock"
             rock_usd_path = get_oceansim_assets_path() + "/collected_rock/rock.usd"
             rock_prim = add_reference_to_stage(
@@ -371,7 +370,7 @@ class UIBuilder:
         SingleRigidPrim(
             prim_path=robot_prim_path,
             mass=self._rob_mass,
-            translation=np.array([-2.0, 0.0, -0.8]),
+            translation=np.array([-2.0, 0.0, 3.0]),
         )
 
         set_camera_view(
@@ -411,7 +410,9 @@ class UIBuilder:
 
             self._cam = UW_Camera_ROS(
                 prim_path=robot_prim_path + "/UW_camera",
-                # orientation=euler_angles_to_quat(np.array([0.0, 45, 0.0]),  degrees=True),
+                orientation=euler_angles_to_quat(
+                    np.array([0.0, 45, 0.0]), degrees=True
+                ),
                 resolution=[1920, 1080],
                 translation=self._cam_trans,
             )
