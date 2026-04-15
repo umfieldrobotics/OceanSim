@@ -6,3 +6,19 @@ E7.yaml: 2890 seconds
 Total elapsed time: 53073 seconds
 Run finished at: 2026-04-07 12:51:31
 
+==============================================
+Run started at: 2026-04-08 20:11:21
+Config directory: /isaac-sim/extsUser/isaacsim.oceansim/standalone/Seaclear_configs
+E1.yaml: 1561 seconds
+E2.yaml: 1556 seconds
+E9.yaml: 1889 seconds
+Total elapsed time: 5006 seconds
+Run finished at: 2026-04-08 21:34:47
+
+==============================================
+Run started at: 2026-04-08 21:52:26
+Config directory: /isaac-sim/extsUser/isaacsim.oceansim/standalone/Seaclear_configs
+E7.yaml: 2520 seconds
+Total elapsed time: 2520 seconds
+Run finished at: 2026-04-08 22:34:26
+

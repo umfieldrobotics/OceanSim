@@ -13,7 +13,7 @@ launch_config:
 
 total_captures: 2000
 camera_collider_radius: 0.1
-env_url: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains_3x3"
+env_url: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/simple_plane"
 objects_url: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/"
 distractors_folder: "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/OceanRealm_assets/"
 rt_subframes: 16
@@ -27,7 +27,7 @@ camera_properties_kwargs:
 writers:
   - type: "UWCam_KittiWriter"
     kwargs:
-      output_dir: "/mnt/frog-users/projects/OceanSim/sim2real/training_data/Seaclear_raw_sdg/E7"
+      output_dir: "/mnt/frog-users/projects/OceanSim/sim2real/training_data/raw_sdg/E9"
       colorize_instance_segmentation: false
       use_tight_bbox: true
       debug_mode: false
@@ -63,7 +63,7 @@ writers:
           # "Type 7": [0.93, 0.915, 0.885]
           # "Type 9": [0.825, 0.69, 0.435]
 
-add_distractors: false
+add_distractors: true
 cam_workspace: [-0.25, -0.25, 0.5, 0.25, 0.25, 1.75]
 cam_lookat_workspace: [-1.5, -1.5, -1.0, 1.5, 1.5, 1.0]
 obj_workspace: [-2.5, -2.5, -1.0, 2.5, 2.5, 1.0]

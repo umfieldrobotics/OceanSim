@@ -14,7 +14,7 @@ config = {
             "--/renderer/multiGpu/enabled=false"            # Nvidia another freaking bug? Will crash on multi-gpu
             ]
     },
-    "total_captures" : 10000,
+    "total_captures" : 5,
     "camera_collider_radius": 0.1,
     "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains_3x3",
     "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/",
