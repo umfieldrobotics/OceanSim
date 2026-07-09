@@ -46,7 +46,8 @@ class BarometerSensor_ROS(BarometerSensor):
         self._last_payload = None
 
     def initialize(self, og_node=None):
-        self._og_node = og_node
+        if og_node is not None:
+            self._og_node = og_node
 
     def _compute_variance(self) -> float:
         sqrt_cov = np.asarray(self._mvn_press.get_sqrt_cov(), dtype=np.float64)
@@ -61,15 +62,14 @@ class BarometerSensor_ROS(BarometerSensor):
         sim_time = float(omni.timeline.get_timeline_interface().get_current_time())
         stamp_sec, stamp_nanosec = to_ros_stamp(sim_time)
         pressure = float(self.get_pressure())
-        payload = {
+        return {
             "header_stamp_sec": stamp_sec,
             "header_stamp_nanosec": stamp_nanosec,
             "header_frame_id": self._frame_id,
             "timestamp": sim_time,
             "fluid_pressure": pressure,
-            "variance": self._compute_variance(), #self._compute_variance()
+            "variance": self._compute_variance(),
         }
-        return payload
 
     def _set_og_attr(self, attr_name: str, value):
         attr = self._og_node.get_attribute(attr_name)
@@ -78,18 +78,10 @@ class BarometerSensor_ROS(BarometerSensor):
     def _publish_payload(self, payload: dict):
         if self._og_node is None:
             return
-        # setting these on the barometer publisher node
-        # if self._og_node.get_attribute_exists("inputs:header:stamp:sec"):
-        #     self._set_og_attr("inputs:header:stamp:sec", payload["header_stamp_sec"])
-        # if self._og_node.get_attribute_exists("inputs:header:stamp:nanosec"):
-        #     self._set_og_attr("inputs:header:stamp:nanosec", payload["header_stamp_nanosec"])
-        # if self._og_node.get_attribute_exists("inputs:header:frame_id"):
-        #     self._set_og_attr("inputs:header:frame_id", payload["header_frame_id"])
         self._set_og_attr("inputs:header:stamp:sec", payload["header_stamp_sec"])
         self._set_og_attr("inputs:header:stamp:nanosec", payload["header_stamp_nanosec"])
         self._set_og_attr("inputs:header:frame_id", payload["header_frame_id"])
         self._set_og_attr("inputs:fluid_pressure", payload["fluid_pressure"])
-
         self._set_og_attr("inputs:variance", payload["variance"])
 
     def read(self):

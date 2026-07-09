@@ -1,51 +1,14 @@
-# import carb
-# from isaacsim import SimulationApp
-# import sys
-
-BACKGROUND_STAGE_PATH = "/background"
-BACKGROUND_USD_PATH = (
-    "/Isaac/Environments/Simple_Warehouse/warehouse_with_forklifts.usd"
-)
-
-CONFIG = {"renderer": "RayTracedLighting", "headless": False}
-
-# Example ROS 2 bridge sample demonstrating the manual loading of stages and manual publishing of images
-# simulation_app = SimulationApp(CONFIG)
+import carb
 import omni
-
-# import numpy as np
-# from isaacsim.core.api import SimulationContext
-# from isaacsim.core.utils import stage, extensions, nucleus
 import omni.graph.core as og
 import omni.replicator.core as rep
 import omni.syntheticdata._syntheticdata as sd
 from isaacsim.core.nodes.scripts.utils import set_target_prims
-
-# ROS2 bridge extension
 from isaacsim.core.utils.extensions import enable_extension
-
-# import isaacsim.core.utils.numpy.rotations as rot_utils
 from isaacsim.core.utils.prims import is_prim_path_valid
-
-# from isaacsim.core.utils.prims import set_targets
 from isaacsim.sensors.camera import Camera
 
 enable_extension("isaacsim.ros2.bridge")
-import carb
-
-# Import OmniGraph Controller
-import omni.graph.core as og
-
-# #opencv
-# from cv_bridge import CvBridge
-# bridge = CvBridge()
-
-# #ros
-# import rclpy
-# from sensor_msgs.msg import Image
-# from rclpy.node import Node
-
-###### Shared ROS 2 utils ########
 
 
 def to_ros_stamp(sim_time: float) -> tuple[int, int]:
@@ -303,7 +266,7 @@ def publish_camera_tf(camera: Camera):
             },
         )
     except Exception as e:
-        print(e)
+        carb.log_error(f"Failed to setup camera TF publishers: {e}")
 
     # Add target prims for the USD pose. All other frames are static.
     set_target_prims(
@@ -380,7 +343,6 @@ class OmniHandler:
                         ("dvl_publisher", "isaacsim.ros2.bridge.ROS2Publisher"),
                         ("baro_publisher", "isaacsim.ros2.bridge.ROS2Publisher"),
                         ("on_tick", "omni.graph.action.OnTick"),
-                        # ("imu_read", "isaacsim.sensors.physics.IsaacReadIMU")
                     ],
                     keys.CONNECT: [
                         ("on_tick.outputs:tick", "uw_rgb_publisher.inputs:execIn"),
@@ -396,9 +358,6 @@ class OmniHandler:
                         ("on_tick.outputs:tick", "imu_publisher.inputs:execIn"),
                         ("on_tick.outputs:tick", "dvl_publisher.inputs:execIn"),
                         ("on_tick.outputs:tick", "baro_publisher.inputs:execIn"),
-                        #    ("imu_read.outputs:angularVelocity", "imu_publisher.inputs:angularVelocity"),
-                        #    ("imu_read.outputs:linearAcceleration", "imu_publisher.inputs:linearAcceleration"),
-                        #    ("imu_read.outputs:orientation", "imu_publisher.inputs:orientation"),
                     ],
                     keys.SET_VALUES: [
                         ("uw_rgb_publisher.inputs:topicName", f"{self._name}/rgb"),
@@ -452,7 +411,7 @@ class OmniHandler:
             self._imu_node = imu_pub_node
             self._dvl_node = dvl_pub_node
             self._baro_node = baro_pub_node
-            print(
+            carb.log_info(
                 f"[{self._name}] Internal ROS 2 Bridge Graph initialized at {graph_path}"
             )
 
