@@ -21,6 +21,7 @@ OceanSim is a high-fidelity underwater simulation framework designed to accelera
 <!-- use emoji -->
 🚀 **GPU-accelerated**: OceanSim fully leverages the power of GPU-based parallel computing. OceanSim is built on top of [NVIDIA Isaac Sim](https://developer.nvidia.com/isaac/sim) and is part of [NVIDIA Omniverse](https://www.nvidia.com/en-us/omniverse/) ecosystem, which provide high performance and real-time rendering. \
 🌊 **Physics-based underwater sensor rendering**: Experience realistic simulations with advanced physics models that accurately replicate underwater sensor data under varied conditions. \
+📡 **ROS 2 integration**: Easily integrate into you existing projects with support for publishing of sensors and control over ROS 2.
 🎨 **Efficient 3D workflows**: Users of OceanSim can enjoy efficient 3D workflows empowered by [OpenUSD](https://openusd.org/release/index.html). \
 🤝 **Built by the community, for the community**: OceanSim is an open-source project and we invite the community to join us to keep improving it!
 <!-- include figure media/oceansim_overall_framework.svg -->
@@ -30,6 +31,7 @@ OceanSim is a high-fidelity underwater simulation framework designed to accelera
 
 
 ## Latest Updates
+- `[2026/7]` Toggleable ROS 2 sensor publishing.
 - `[2025/9]` OceanSim is now compatible with Isaac Sim 5.0 GA.
 - `[2025/4]` OceanSim is featured by [NVIDIA Robotics](https://www.linkedin.com/posts/nvidiarobotics_robotics-underwaterrobotics-simulation-activity-7313986055894880257-Dfmq?utm_source=share&utm_medium=member_desktop&rcm=ACoAACB8Y7sB7ikB6wVGPL5NrxYkNwk8RTEJ-3Y)!
 - `[2025/4]` 🔥 Beta version of OceanSim is released!
@@ -44,9 +46,10 @@ OceanSim is a high-fidelity underwater simulation framework designed to accelera
 
 ## Documentation
 <!-- installation, running examples, building your own digital twins-->
-We divide the documentation into three parts:
+We divide the documentation into four parts:
 - [Installation](subsections/installation.md)
 - [Running OceanSim](subsections/running_example.md)
+- [ROS 2](subsections/ros2.md)
 - [Building Your Own Digital Twins with OceanSim](subsections/building_own_digital_twin.md)
 
 ## Support and Contributing

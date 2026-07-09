@@ -6,7 +6,9 @@ OceanSim provides an example also formatted as an extension to demonstrate the u
 
 Navigate to `OceanSim - Examples - Sensor Example` to open the module. Select the sensors you wish to simulate and point the "Path to USD" to your own USD scene or the example MHL scene in the `OceanSim_assets` directory.
 
-The module provides self-explanatory UI in which you can choose which sensor to use and corresponding data visualization will be automatically available. User may test this module in their own USD scenes otherwise a default one is used. 
+The module provides self-explanatory UI in which you can choose which sensor to use and corresponding data visualization will be automatically available. User may test this module in their own USD scenes otherwise a default one is used.
+
+**Enable ROS** (on by default) publishes selected sensors over ROS 2 via `isaacsim.ros2.bridge`. Uncheck it to run without ROS.
 
 We do not recommend user to perform digital twin experiments on this extension. This is example involves boilerplate code which is only for demonstration purposes.
 ### Instructions
