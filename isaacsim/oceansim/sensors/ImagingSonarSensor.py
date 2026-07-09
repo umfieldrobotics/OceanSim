@@ -492,8 +492,10 @@ class ImagingSonarSensor(Camera):
                       self.sonar_map
                   ]
                   )
-        
-        
+
+        sonar_image = self.make_sonar_image()
+        self._on_sonar_frame(sonar_image)
+
         # Write data to the dir
         if self.writing:
             # self.backend.schedule(write_np, f"intensity_{self.id}.npy", data=intensity)
@@ -502,12 +504,15 @@ class ImagingSonarSensor(Camera):
             print(f"[{self._name}] [{self.id}] Writing sonar data to {self.backend.output_dir}")
         
         if self._viewport:
-            self._sonar_provider.set_bytes_data_from_gpu(self.make_sonar_image().ptr, 
+            self._sonar_provider.set_bytes_data_from_gpu(sonar_image.ptr, 
                                                     [self.sonar_map.shape[1], self.sonar_map.shape[0]])
             # self.backend.schedule(write_image, f'sonar_{self.id}.png', data = self.make_sonar_image())        
             
         self.id += 1
-    
+
+    def _on_sonar_frame(self, sonar_image):
+        """Abstract method for ROS subclasses to publish after a sonar image is produced."""
+        pass
 
     def make_sonar_image(self):
         """Convert processed sonar data to a viewable grayscale image.
