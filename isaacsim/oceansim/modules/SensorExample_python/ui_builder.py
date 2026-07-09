@@ -32,8 +32,6 @@ from isaacsim.gui.components import (
     str_builder,
 )
 
-# ROS2 integ
-from isaacsim.oceansim.sensors import ros2_helpers  # move to utils
 from isaacsim.oceansim.utils.assets_utils import get_oceansim_assets_path
 from omni.usd import StageEventType
 from pxr import PhysxSchema
@@ -146,13 +144,23 @@ class UIBuilder:
         self.frames.append(sensor_choosing_frame)
         with sensor_choosing_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
-                sonar_check_box = CheckBox(
+                ros_check_box = CheckBox(
+                    "Enable ROS",
+                    default_value=True,
+                    tooltip="Publish selected sensors over ROS 2 via isaacsim.ros2.bridge",
+                    on_click_fn=self._on_ros_checkbox_click_fn,
+                )
+                self._use_ros = True
+                self.wrapped_ui_elements.append(ros_check_box)
+
+                imu_check_box = CheckBox(
                     "Imu",
                     default_value=False,
                     tooltip=" Click this checkbox to activate Imu",
                     on_click_fn=self._on_imu_checkbox_click_fn,
                 )
                 self._use_imu = False
+                self.wrapped_ui_elements.append(imu_check_box)
 
                 sonar_check_box = CheckBox(
                     "Imaging Sonar",
@@ -379,22 +387,40 @@ class UIBuilder:
         )
 
         if self._use_imu:
-            from isaacsim.oceansim.sensors.ImuSensor_ROS import ImuSensor_ROS
+            if self._use_ros:
+                from isaacsim.oceansim.sensors.ImuSensor_ROS import ImuSensor_ROS
 
-            # from isaacsim.sensors.physics import IMUSensor
-            self._imu = ImuSensor_ROS(
-                prim_path=robot_prim_path + "/imu",
-                name="Imu",
-                frequency=60,
-                translation=np.array([0, 0, 0]),
-            )
+                self._imu = ImuSensor_ROS(
+                    prim_path=robot_prim_path + "/imu",
+                    name="Imu",
+                    frequency=60,
+                    translation=np.array([0, 0, 0]),
+                )
+            else:
+                from isaacsim.sensors.physics import IMUSensor
+
+                self._imu = IMUSensor(
+                    prim_path=robot_prim_path + "/imu",
+                    name="Imu",
+                    frequency=60,
+                    translation=np.array([0, 0, 0]),
+                )
 
         if self._use_sonar:
-            from isaacsim.oceansim.sensors.ImagingSonarSensor_ROS import (
-                ImagingSonarSensor_ROS,
-            )
+            if self._use_ros:
+                from isaacsim.oceansim.sensors.ImagingSonarSensor_ROS import (
+                    ImagingSonarSensor_ROS,
+                )
 
-            self._sonar = ImagingSonarSensor_ROS(
+                sonar_cls = ImagingSonarSensor_ROS
+            else:
+                from isaacsim.oceansim.sensors.ImagingSonarSensor import (
+                    ImagingSonarSensor,
+                )
+
+                sonar_cls = ImagingSonarSensor
+
+            self._sonar = sonar_cls(
                 prim_path=robot_prim_path + "/sonar",
                 translation=self._sonar_trans,
                 orientation=euler_angles_to_quat(
@@ -407,46 +433,55 @@ class UIBuilder:
 
         if self._use_camera:
             # TODO: make stereo seperate
-            from isaacsim.oceansim.sensors.UW_Camera_ROS import UW_Camera_ROS
+            if self._use_ros:
+                from isaacsim.oceansim.sensors.UW_Camera_ROS import UW_Camera_ROS
 
-            self._cam = UW_Camera_ROS(
+                cam_cls = UW_Camera_ROS
+            else:
+                from isaacsim.oceansim.sensors.UW_Camera import UW_Camera
+
+                cam_cls = UW_Camera
+
+            self._cam = cam_cls(
                 prim_path=robot_prim_path + "/UW_camera",
-                # orientation=euler_angles_to_quat(np.array([0.0, 45, 0.0]),  degrees=True),
                 resolution=[1920, 1080],
                 translation=self._cam_trans,
             )
             self._cam.set_focal_length(0.1 * self._cam_focal_length)
             self._cam.set_clipping_range(0.1, 100)
-            # MOVED TO SCENERIO, MUST RUN AFTER initialize function call Call publishers
-            approx_freq = 30
-            # info has type mismatch when calling read_camera_info Stage.GetPrimAtPath(Stage, NoneType) did not match C++ signature:
-            # ros2_helpers.publish_camera_info( self._cam, approx_freq)
-            # ros2_helpers.publish_rgb( self._cam, approx_freq)
-            # ros2_helpers.publish_depth( self._cam, approx_freq)
-            # ros2_helpers.publish_pointcloud_from_depth( self._cam, approx_freq)
-            # ros2_helpers.publish_camera_tf( self._cam)
 
         if self._use_DVL:
-            from isaacsim.oceansim.sensors.DVLSensor_ROS import DVLSensor_ROS
+            if self._use_ros:
+                from isaacsim.oceansim.sensors.DVLSensor_ROS import DVLSensor_ROS
 
-            self._DVL = DVLSensor_ROS(max_range=10)
+                self._DVL = DVLSensor_ROS(max_range=10)
+            else:
+                from isaacsim.oceansim.sensors.DVLsensor import DVLsensor
+
+                self._DVL = DVLsensor(max_range=10)
             self._DVL.attachDVL(
                 rigid_body_path=robot_prim_path, translation=self._DVL_trans
             )
             self._DVL.add_debug_lines()
 
         if self._use_baro:
-            from isaacsim.oceansim.sensors.BarometerSensor_ROS import (
-                BarometerSensor_ROS,
-            )
+            if self._use_ros:
+                from isaacsim.oceansim.sensors.BarometerSensor_ROS import (
+                    BarometerSensor_ROS,
+                )
 
-            self._baro = BarometerSensor_ROS(
-                prim_path=robot_prim_path + "/Baro",
-                water_surface_z=self._water_surface,
-                frame_id="baro",
-            )
-            # if self._use_zed:
-        #     from isaacsim.simulation_app.utils.
+                self._baro = BarometerSensor_ROS(
+                    prim_path=robot_prim_path + "/Baro",
+                    water_surface_z=self._water_surface,
+                    frame_id="baro",
+                )
+            else:
+                from isaacsim.oceansim.sensors.BarometerSensor import BarometerSensor
+
+                self._baro = BarometerSensor(
+                    prim_path=robot_prim_path + "/Baro",
+                    water_surface_z=self._water_surface,
+                )
 
     def _setup_scenario(self):
         """
@@ -474,6 +509,7 @@ class UIBuilder:
             self._DVL,
             self._baro,
             self._ctrl_mode,
+            use_ros=self._use_ros,
         )
 
     def _on_post_reset_btn(self):
@@ -539,6 +575,10 @@ class UIBuilder:
         self._scenario_state_btn.reset()
         self._scenario_state_btn.enabled = False
         self._reset_btn.enabled = False
+
+    def _on_ros_checkbox_click_fn(self, model):
+        self._use_ros = model
+        print("Reload the scene for changes to take effect.")
 
     def _on_imu_checkbox_click_fn(self, model):
         self._use_imu = model
