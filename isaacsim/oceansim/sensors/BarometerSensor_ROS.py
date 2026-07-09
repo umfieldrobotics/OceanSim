@@ -45,9 +45,10 @@ class BarometerSensor_ROS(BarometerSensor):
         self._frame_id = frame_id
         self._last_payload = None
 
-    def initialize(self, og_node=None):
+    def initialize(self, physics_sim_view=None, og_node=None):
         if og_node is not None:
             self._og_node = og_node
+        super().initialize(physics_sim_view)
 
     def _compute_variance(self) -> float:
         sqrt_cov = np.asarray(self._mvn_press.get_sqrt_cov(), dtype=np.float64)

@@ -22,9 +22,10 @@ class ImuSensor_ROS(IMUSensor):
             translation=translation,
         )
 
-    def initialize(self, og_node=None):
+    def initialize(self, physics_sim_view=None, og_node=None):
         if og_node is not None:
             self._og_node = og_node
+        super().initialize(physics_sim_view)
 
     def read(self):
         # imu api: https://docs.isaacsim.omniverse.nvidia.com/5.1.0/py/source/extensions/isaacsim.sensors.physics/docs/index.html#isaacsim.sensors.physics.IMUSensor
