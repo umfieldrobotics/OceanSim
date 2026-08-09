@@ -1,4 +1,4 @@
-EXTENSION_TITLE = "Sensor Example"
+EXTENSION_TITLE = "Rob Driver"
 
 EXTENSION_DESCRIPTION = "This is unified example demonstrating various OceanSim UW sensors." \
 "User should click 'Open Source Code' icon located on the extension title for any sensor parameter tunning, \n" \

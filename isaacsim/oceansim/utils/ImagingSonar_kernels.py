@@ -98,6 +98,10 @@ def bin_semantics_process(pcl: wp.array(dtype=wp.vec3),
                           bin_min_zenith: wp.array(ndim=2, dtype=wp.float32),
                           bin_semantics: wp.array(ndim=2, dtype=wp.uint32)
                           ):
+    '''
+    This kernel is DEPRECATED, use bin_segmentation_process instead. \n
+    bin_semantics_process only process semantics information while bin_segmentation_process process both semantics and instances
+    '''
     tid = wp.tid()
 
     # Get the zenith of this pcl
@@ -110,6 +114,28 @@ def bin_semantics_process(pcl: wp.array(dtype=wp.vec3),
     if (z <= bin_min_zenith[x_bin_idx, y_bin_idx]):
         bin_semantics[x_bin_idx, y_bin_idx] = semantics[tid]
 
+
+@wp.kernel
+def bin_segmentation_process(pcl: wp.array(dtype=wp.vec3),
+                             semantics: wp.array(dtype=wp.uint32),
+                             instances: wp.array(dtype=wp.uint32),
+                             pcl_bin_idx: wp.array(dtype=wp.vec2ui),
+                             bin_min_zenith: wp.array(ndim=2, dtype=wp.float32),
+                             bin_semantics: wp.array(ndim=2, dtype=wp.uint8),
+                             bin_instances: wp.array(ndim=2, dtype=wp.uint8)
+                             ):
+    tid = wp.tid()
+
+    # Get the zenith of this pcl
+    z = pcl[tid][2]
+
+    # Get the index of the bin in which this pcl falls in
+    x_bin_idx = pcl_bin_idx[tid][0]
+    y_bin_idx = pcl_bin_idx[tid][1]
+    # This ensures the semantics of this cell only belongs to the pcl semantics with the smallest zenith value
+    if (z <= bin_min_zenith[x_bin_idx, y_bin_idx]):
+        bin_semantics[x_bin_idx, y_bin_idx] = wp.uint8(semantics[tid])
+        bin_instances[x_bin_idx, y_bin_idx] = wp.uint8(instances[tid])
 
 @wp.kernel
 def draw_bbox(n : int,

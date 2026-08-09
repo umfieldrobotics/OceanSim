@@ -1,4 +1,4 @@
-EXTENSION_TITLE = "Color Picker"
+EXTENSION_TITLE = "Trajectory Recorder"
 
 EXTENSION_DESCRIPTION = "This is a handy widget that aims to adjust the underwater column effects \n" \
 "to mimic realist underwater environment based on underwater image formation model. \n" \

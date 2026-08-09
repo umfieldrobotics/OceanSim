@@ -15,11 +15,14 @@ readme = "docs/README.md"
 preview_image = "data/preview.png"
 icon = "data/icon.png"
 
+[fswatcher.patterns]
+include = ["*.ogn", "*.py"]
+exclude = ["Ogn*Database.py"]
 
 [dependencies]
 "omni.kit.uiapp" = {}
-"omni.isaac.ui" = {}
-"omni.isaac.core" = {}
+"isaacsim.gui.components" = {}
+"isaacsim.examples.extension" = {}
 
 
 [[python.module]]
@@ -29,5 +32,14 @@ name = "isaacsim.oceansim.modules.SensorExample_python"
 name = "isaacsim.oceansim.modules.colorpicker_python"
 
 [[python.module]]
-name = "isaacsim.oceansim.modules.ImagingSonar_python"
+name = "isaacsim.oceansim.modules.trajRecorder_python"
 
+[[python.module]]
+name = "isaacsim.oceansim.modules.SDGplayground_python"
+
+
+[[python.module]]
+name = "isaacsim.oceansim.modules.robdriver_python"
+
+[[python.module]]
+name = "isaacsim.oceansim"
