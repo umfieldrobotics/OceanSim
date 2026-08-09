@@ -190,8 +190,8 @@ class UW_Camera(Camera):
             dim=np.flip(self.get_resolution()),
             kernel=UW_depth_turbidity_attenuator,
             inputs=[
+                raw_rgba,
                 depth,
-                degraded_depth,
                 self._max_range,
                 self._backscatter_value,
                 self._atten_coeff,
@@ -199,7 +199,7 @@ class UW_Camera(Camera):
                 self._depth_noise_sigma,
                 int(self._id),
             ],
-            outputs=[],
+            outputs=[degraded_depth],
         )
 
         self._uw_frame = uw_image.numpy()

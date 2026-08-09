@@ -115,7 +115,7 @@ class Colorpicker_Scenario():
                 backscatter_value = wp.vec3f(*render_param[0:3])
                 atten_coeff = wp.vec3f(*render_param[6:9])
                 backscatter_coeff = wp.vec3f(*render_param[3:6])
-
+                # If we are not blending caustics, we can just call UW_render shader
                 # wp.launch(
                 #     dim=(self.raw_rgba.shape[0], self.raw_rgba.shape[1]),
                 #     kernel=UW_render,
@@ -174,7 +174,7 @@ class Colorpicker_Scenario():
 
 
                 wp.launch(
-                dim=(self.width, self.height),
+                dim=(self.height, self.width),
                 kernel=UW_render_2,
                 inputs=[
                     self.uw_image,
