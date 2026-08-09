@@ -1,40 +1,63 @@
 # Omniverse import
-import numpy as np
 import os
+
+import carb
+import numpy as np
 import omni.timeline
 import omni.ui as ui
-from omni.usd import StageEventType
-from pxr import PhysxSchema
-import carb
 
 # Isaac sim import
-from isaacsim.core.prims import SingleRigidPrim, SingleGeometryPrim
+from isaacsim.core.prims import SingleGeometryPrim, SingleRigidPrim
+from isaacsim.core.utils.extensions import get_extension_path
 from isaacsim.core.utils.prims import get_prim_at_path
-from isaacsim.core.utils.stage import get_current_stage, add_reference_to_stage, create_new_stage, open_stage
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.semantics import add_update_semantics
-from isaacsim.gui.components import CollapsableFrame, StateButton, get_style, setup_ui_headers, CheckBox, combo_cb_xyz_plot_builder, combo_cb_plot_builder, dropdown_builder, str_builder
+from isaacsim.core.utils.stage import (
+    add_reference_to_stage,
+    create_new_stage,
+    get_current_stage,
+    open_stage,
+)
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.examples.extension.core_connectors import LoadButton, ResetButton
-from isaacsim.core.utils.extensions import get_extension_path
+from isaacsim.gui.components import (
+    CheckBox,
+    CollapsableFrame,
+    StateButton,
+    combo_cb_plot_builder,
+    combo_cb_xyz_plot_builder,
+    dropdown_builder,
+    get_style,
+    setup_ui_headers,
+    str_builder,
+)
+
+from isaacsim.oceansim.utils.assets_utils import get_oceansim_assets_path
+from omni.usd import StageEventType
+from pxr import PhysxSchema
+
+from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_LINK, EXTENSION_TITLE
 
 # Custom import
 from .scenario import MHL_Sensor_Example_Scenario
-from .global_variables import EXTENSION_DESCRIPTION, EXTENSION_TITLE, EXTENSION_LINK
-from isaacsim.oceansim.utils.assets_utils import get_oceansim_assets_path
 
-class UIBuilder():
+
+class UIBuilder:
     def __init__(self):
 
-        self._ext_id = omni.kit.app.get_app().get_extension_manager().get_extension_id_by_module(__name__)
+        self._ext_id = (
+            omni.kit.app.get_app()
+            .get_extension_manager()
+            .get_extension_id_by_module(__name__)
+        )
         self._file_path = os.path.abspath(__file__)
         self._title = EXTENSION_TITLE
-        self._doc_link =  EXTENSION_LINK
+        self._doc_link = EXTENSION_LINK
         self._overview = EXTENSION_DESCRIPTION
         self._extension_path = get_extension_path(self._ext_id)
-        
-        self._ctrl_mode = 'Manual control'
-        self._waypoints_path = self._extension_path + '/demo/demo_waypoints.txt'
+
+        self._ctrl_mode = "Manual control"
+        self._waypoints_path = self._extension_path + "/demo/demo_waypoints.txt"
         # Get access to the timeline to control stop/pause/play programmatically
         self._timeline = omni.timeline.get_timeline_interface()
 
@@ -109,18 +132,36 @@ class UIBuilder():
         """
 
         setup_ui_headers(
-            ext_id=self._ext_id, 
-            file_path=self._file_path, 
-            title=self._title, 
-            doc_link=self._doc_link, 
-            overview=self._overview, 
-            info_collapsed=False
+            ext_id=self._ext_id,
+            file_path=self._file_path,
+            title=self._title,
+            doc_link=self._doc_link,
+            overview=self._overview,
+            info_collapsed=False,
         )
 
-        sensor_choosing_frame = CollapsableFrame('Sensors', collapsed=False)
+        sensor_choosing_frame = CollapsableFrame("Sensors", collapsed=False)
         self.frames.append(sensor_choosing_frame)
         with sensor_choosing_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
+                ros_check_box = CheckBox(
+                    "Enable ROS",
+                    default_value=True,
+                    tooltip="Publish selected sensors over ROS 2 via isaacsim.ros2.bridge",
+                    on_click_fn=self._on_ros_checkbox_click_fn,
+                )
+                self._use_ros = True
+                self.wrapped_ui_elements.append(ros_check_box)
+
+                imu_check_box = CheckBox(
+                    "Imu",
+                    default_value=False,
+                    tooltip=" Click this checkbox to activate Imu",
+                    on_click_fn=self._on_imu_checkbox_click_fn,
+                )
+                self._use_imu = False
+                self.wrapped_ui_elements.append(imu_check_box)
+
                 sonar_check_box = CheckBox(
                     "Imaging Sonar",
                     default_value=False,
@@ -139,10 +180,10 @@ class UIBuilder():
                 self.wrapped_ui_elements.append(camera_check_box)
 
                 DVL_check_box = CheckBox(
-                    'DVL',
+                    "DVL",
                     default_value=False,
                     tooltip=" Click this checkbox to activate DVL",
-                    on_click_fn=self._on_DVL_checkbox_click_fn
+                    on_click_fn=self._on_DVL_checkbox_click_fn,
                 )
                 self._use_DVL = False
                 self.wrapped_ui_elements.append(DVL_check_box)
@@ -150,43 +191,62 @@ class UIBuilder():
                 baro_check_box = CheckBox(
                     "Barometer",
                     default_value=False,
-                    tooltip='Click this checkbox to activate barometer',
-                    on_click_fn=self._on_baro_checkbox_click_fn
-                ) 
+                    tooltip="Click this checkbox to activate barometer",
+                    on_click_fn=self._on_baro_checkbox_click_fn,
+                )
                 self._use_baro = False
-                self.wrapped_ui_elements.append(baro_check_box)
 
-                
+                self.wrapped_ui_elements.append(baro_check_box)
+                # zed_stereo_check_box = CheckBox(
+                #     "ZED X Stereo",
+                #     default_value=False,
+                #     tooltip='Click this checkbox to activate ZED X',
+                #     on_click_fn=self._on_zed_checkbox_click_fn
+                # )
+                # self._use_zed = False
+                # self.wrapped_ui_elements.append(zed_stereo_check_box)
+
         world_controls_frame = CollapsableFrame("World Controls", collapsed=False)
         self.frames.append(world_controls_frame)
         with world_controls_frame:
             with ui.VStack(style=get_style(), spacing=5, height=0):
-                
                 # self._build_USD_filepicker()
                 self._USD_path_field = str_builder(
-                    label='Path to USD',
+                    label="Path to USD",
                     default_val="",
-                    tooltip='Select the USD file for the scene',
+                    tooltip="Select the USD file for the scene",
                     use_folder_picker=True,
                     folder_button_title="Select USD",
-                    folder_dialog_title='Select the USD scene to test')
-                
+                    folder_dialog_title="Select the USD scene to test",
+                )
+
                 self._ctrl_mode_model = dropdown_builder(
-                    label='Control Mode',
+                    label="Control Mode",
                     default_val=3,
-                    items=['No control', 'Straight line', 'Waypoints', 'Manual control'],
-                    tooltip='Select preferred control mode',
-                    on_clicked_fn=self._on_ctrl_mode_dropdown_clicked
+                    items=[
+                        "No control",
+                        "Straight line",
+                        "Waypoints",
+                        "Manual control",
+                    ],
+                    tooltip="Select preferred control mode",
+                    on_clicked_fn=self._on_ctrl_mode_dropdown_clicked,
                 )
 
                 self._load_btn = LoadButton(
-                    "Load Button", "LOAD", setup_scene_fn=self._setup_scene, setup_post_load_fn=self._setup_scenario
+                    "Load Button",
+                    "LOAD",
+                    setup_scene_fn=self._setup_scene,
+                    setup_post_load_fn=self._setup_scenario,
                 )
                 # self._load_btn.set_world_settings(physics_dt=1 / 60.0, rendering_dt=1 / 60.0)
                 self.wrapped_ui_elements.append(self._load_btn)
 
                 self._reset_btn = ResetButton(
-                    "Reset Button", "RESET", pre_reset_fn=None, post_reset_fn=self._on_post_reset_btn
+                    "Reset Button",
+                    "RESET",
+                    pre_reset_fn=None,
+                    post_reset_fn=self._on_post_reset_btn,
                 )
                 self._reset_btn.enabled = False
                 self.wrapped_ui_elements.append(self._reset_btn)
@@ -206,13 +266,14 @@ class UIBuilder():
                 self._scenario_state_btn.enabled = False
                 self.wrapped_ui_elements.append(self._scenario_state_btn)
 
-        self.sensor_reading_frame = CollapsableFrame('Sensor Reading', collapsed=False, visible=False)
+        self.sensor_reading_frame = CollapsableFrame(
+            "Sensor Reading", collapsed=False, visible=False
+        )
         self.frames.append(self.sensor_reading_frame)
-        self.waypoints_frame = CollapsableFrame('Waypoints',collapsed=False, visible=False)
+        self.waypoints_frame = CollapsableFrame(
+            "Waypoints", collapsed=False, visible=False
+        )
         self.frames.append(self.waypoints_frame)
-
-
-
 
     ######################################################################################
     # Functions Below This Point Related to Scene Setup (USD\PhysX..)
@@ -221,24 +282,24 @@ class UIBuilder():
     def _on_init(self):
 
         # Robot parameters
-        self._rob_mass = 5.0 # kg
+        self._rob_mass = 5.0  # kg
         self._rob_angular_damping = 10.0
         self._rob_linear_damping = 10.0
 
         # Sensor
+        self._imu = None
         self._sonar = None
-        self._sonar_trans = np.array([0.3,0.0, 0.3])
+        self._sonar_trans = np.array([0.3, 0.0, 0.3])
         self._cam = None
-        self._cam_trans = np.array([0.3,0.0, 0.1])
+        self._cam_trans = np.array([0.3, 0.0, 0.1])
         self._cam_focal_length = 21
         self._DVL = None
-        self._DVL_trans = np.array([0,0,-0.1])
+        self._DVL_trans = np.array([0, 0, -0.1])
         self._baro = None
-        self._water_surface = 1.43389 # Arbitrary
-        
+        self._water_surface = 1.43389  # Arbitrary
+
         # Scenario
         self._scenario = MHL_Sensor_Example_Scenario()
-
 
     def _setup_scene(self):
         """
@@ -248,96 +309,179 @@ class UIBuilder():
         """
         create_new_stage()
         if self._USD_path_field.get_value_as_string() != "":
-            scene_prim_path = '/World/scene'
-            add_reference_to_stage(usd_path=self._USD_path_field.get_value_as_string(), prim_path=scene_prim_path)
-            print('User USD scene is loaded.')
+            scene_prim_path = "/World/scene"
+            add_reference_to_stage(
+                usd_path=self._USD_path_field.get_value_as_string(),
+                prim_path=scene_prim_path,
+            )
+            print("User USD scene is loaded.")
         else:
-            print('USD path is empty. Default to example scene')
+            print("USD path is empty. Default to example scene")
 
             # add MHL scene as reference
-            MHL_prim_path = '/World/mhl'
+            MHL_prim_path = "/World/mhl"
             MHL_usd_path = get_oceansim_assets_path() + "/collected_MHL/mhl_scaled.usd"
             add_reference_to_stage(usd_path=MHL_usd_path, prim_path=MHL_prim_path)
             # Toggle MHL mesh's collider
             SingleGeometryPrim(prim_path=MHL_prim_path, collision=True)
             # apply a reflectivity of 1.0 to mesh of the scene for sonar simulation
-            add_update_semantics(prim=get_prim_at_path(MHL_prim_path + "/Mesh/mesh"),
-                                type_label='reflectivity',
-                                semantic_label='1.0')
+            add_update_semantics(
+                prim=get_prim_at_path(MHL_prim_path + "/Mesh/mesh"),
+                type_label="reflectivity",
+                semantic_label="1.0",
+            )
             # Load the rock
-            rock_prim_path = '/World/rock'
+            rock_prim_path = "/World/rock"
             rock_usd_path = get_oceansim_assets_path() + "/collected_rock/rock.usd"
-            rock_prim = add_reference_to_stage(usd_path=rock_usd_path, prim_path=rock_prim_path)
+            rock_prim = add_reference_to_stage(
+                usd_path=rock_usd_path, prim_path=rock_prim_path
+            )
             # apply a reflectivity of 2.0 for sonar simulation
-            add_update_semantics(prim=get_prim_at_path(rock_prim_path+ '/Mesh/mesh'),
-                                type_label='reflectivity',
-                                semantic_label='2.0')
+            add_update_semantics(
+                prim=get_prim_at_path(rock_prim_path + "/Mesh/mesh"),
+                type_label="reflectivity",
+                semantic_label="2.0",
+            )
             # Toggle collider for the rock
-            rock_collider_prim = SingleGeometryPrim(prim_path=rock_prim_path,
-                            collision=True)
+            rock_collider_prim = SingleGeometryPrim(
+                prim_path=rock_prim_path, collision=True
+            )
             # Set collision approximation using convexDecomposition to automatically compute inertia matrix
-            rock_collider_prim.set_collision_approximation('convexDecomposition')
+            rock_collider_prim.set_collision_approximation("convexDecomposition")
             # Toggle rigid body for the rock
-            rock_rigid_prim = SingleRigidPrim(prim_path=rock_prim_path,                          
-                                            translation=np.array([1.0, 0.1, -1.5]),
-                                            orientation=euler_angles_to_quat(np.array([0.0,0.0,90]), degrees=True), 
-                                            )
-            
+            rock_rigid_prim = SingleRigidPrim(
+                prim_path=rock_prim_path,
+                translation=np.array([1.0, 0.1, -1.5]),
+                orientation=euler_angles_to_quat(
+                    np.array([0.0, 0.0, 90]), degrees=True
+                ),
+            )
+
         # add bluerov robot as reference
         robot_prim_path = "/World/rob"
         robot_usd_path = get_oceansim_assets_path() + "/Bluerov/BROV_low.usd"
-        self._rob = add_reference_to_stage(usd_path=robot_usd_path, prim_path=robot_prim_path)
+        self._rob = add_reference_to_stage(
+            usd_path=robot_usd_path, prim_path=robot_prim_path
+        )
         # Toggle rigid body and collider preset for robot, and set zero gravity to mimic underwater environment
-        rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(get_prim_at_path(robot_prim_path))
+        rob_rigidBody_API = PhysxSchema.PhysxRigidBodyAPI.Apply(
+            get_prim_at_path(robot_prim_path)
+        )
         rob_rigidBody_API.CreateDisableGravityAttr(True)
         # Set damping of the robot
         rob_rigidBody_API.GetLinearDampingAttr().Set(self._rob_linear_damping)
         rob_rigidBody_API.GetAngularDampingAttr().Set(self._rob_angular_damping)
         # Set the mass for the robot to suppress a warning from inertia autocomputation
-        rob_collider_prim = SingleGeometryPrim(prim_path=robot_prim_path,
-                                               collision=True)
-        rob_collider_prim.set_collision_approximation('boundingCube')
-        SingleRigidPrim(prim_path=robot_prim_path,
-                        mass=self._rob_mass,
-                        translation=np.array([-2.0, 0.0, -0.8]))
+        rob_collider_prim = SingleGeometryPrim(
+            prim_path=robot_prim_path, collision=True
+        )
+        rob_collider_prim.set_collision_approximation("boundingCube")
+        SingleRigidPrim(
+            prim_path=robot_prim_path,
+            mass=self._rob_mass,
+            translation=np.array([-2.0, 0.0, -0.8]),
+        )
 
-        set_camera_view(eye=np.array([5,0.6,0.4]), target=rob_collider_prim.get_world_pose()[0])
-        
+        set_camera_view(
+            eye=np.array([5, 0.6, 0.4]), target=rob_collider_prim.get_world_pose()[0]
+        )
+
+        if self._use_imu:
+            if self._use_ros:
+                from isaacsim.oceansim.sensors.ImuSensor_ROS import ImuSensor_ROS
+
+                self._imu = ImuSensor_ROS(
+                    prim_path=robot_prim_path + "/imu",
+                    name="Imu",
+                    frequency=60,
+                    translation=np.array([0, 0, 0]),
+                )
+            else:
+                from isaacsim.sensors.physics import IMUSensor
+
+                self._imu = IMUSensor(
+                    prim_path=robot_prim_path + "/imu",
+                    name="Imu",
+                    frequency=60,
+                    translation=np.array([0, 0, 0]),
+                )
 
         if self._use_sonar:
-            from isaacsim.oceansim.sensors.ImagingSonarSensor import ImagingSonarSensor
-            self._sonar = ImagingSonarSensor(prim_path=robot_prim_path + '/sonar',
-                                            translation=self._sonar_trans,
-                                            orientation=euler_angles_to_quat(np.array([0.0, 45, 0.0]),  degrees=True),
-                                            range_res=0.005,
-                                            angular_res=0.25,
-                                            hori_res=4000
-                                            )
-            
-        if self._use_camera:
-            from isaacsim.oceansim.sensors.UW_Camera import UW_Camera
+            if self._use_ros:
+                from isaacsim.oceansim.sensors.ImagingSonarSensor_ROS import (
+                    ImagingSonarSensor_ROS,
+                )
 
-            self._cam = UW_Camera(prim_path=robot_prim_path + '/UW_camera',
-                                    resolution=[1920,1080],
-                                    translation=self._cam_trans)
+                sonar_cls = ImagingSonarSensor_ROS
+            else:
+                from isaacsim.oceansim.sensors.ImagingSonarSensor import (
+                    ImagingSonarSensor,
+                )
+
+                sonar_cls = ImagingSonarSensor
+
+            self._sonar = sonar_cls(
+                prim_path=robot_prim_path + "/sonar",
+                translation=self._sonar_trans,
+                orientation=euler_angles_to_quat(
+                    np.array([0.0, 45, 0.0]), degrees=True
+                ),
+                range_res=0.005,
+                angular_res=0.25,
+                hori_res=4000,
+            )
+
+        if self._use_camera:
+            # TODO: make stereo seperate
+            if self._use_ros:
+                from isaacsim.oceansim.sensors.UW_Camera_ROS import UW_Camera_ROS
+
+                cam_cls = UW_Camera_ROS
+            else:
+                from isaacsim.oceansim.sensors.UW_Camera import UW_Camera
+
+                cam_cls = UW_Camera
+
+            self._cam = cam_cls(
+                prim_path=robot_prim_path + "/UW_camera",
+                resolution=[1920, 1080],
+                translation=self._cam_trans,
+            )
             self._cam.set_focal_length(0.1 * self._cam_focal_length)
             self._cam.set_clipping_range(0.1, 100)
-            
+
         if self._use_DVL:
-            from isaacsim.oceansim.sensors.DVLsensor import DVLsensor
+            if self._use_ros:
+                from isaacsim.oceansim.sensors.DVLSensor_ROS import DVLSensor_ROS
 
-            self._DVL = DVLsensor(max_range=10)
-            self._DVL.attachDVL(rigid_body_path=robot_prim_path,
-                                translation=self._DVL_trans)
+                self._DVL = DVLSensor_ROS(max_range=10)
+            else:
+                from isaacsim.oceansim.sensors.DVLsensor import DVLsensor
+
+                self._DVL = DVLsensor(max_range=10)
+            self._DVL.attachDVL(
+                rigid_body_path=robot_prim_path, translation=self._DVL_trans
+            )
             self._DVL.add_debug_lines()
-            
+
         if self._use_baro:
-            from isaacsim.oceansim.sensors.BarometerSensor import BarometerSensor
+            if self._use_ros:
+                from isaacsim.oceansim.sensors.BarometerSensor_ROS import (
+                    BarometerSensor_ROS,
+                )
 
-            self._baro = BarometerSensor(prim_path=robot_prim_path + '/Baro',
-                                        water_surface_z=self._water_surface)
-            
+                self._baro = BarometerSensor_ROS(
+                    prim_path=robot_prim_path + "/Baro",
+                    water_surface_z=self._water_surface,
+                    frame_id="baro",
+                )
+            else:
+                from isaacsim.oceansim.sensors.BarometerSensor import BarometerSensor
 
+                self._baro = BarometerSensor(
+                    prim_path=robot_prim_path + "/Baro",
+                    water_surface_z=self._water_surface,
+                )
 
     def _setup_scenario(self):
         """
@@ -355,7 +499,19 @@ class UIBuilder():
 
     def _reset_scenario(self):
         self._scenario.teardown_scenario()
-        self._scenario.setup_scenario(self._rob, self._sonar, self._cam, self._DVL, self._baro, self._ctrl_mode)
+        # self._scenario.setup_scenario(self._rob, self._sonar, self._cam, self._DVL, self._baro, self._zed, self._ctrl_mode)
+
+        self._scenario.setup_scenario(
+            self._imu,
+            self._rob,
+            self._sonar,
+            self._cam,
+            self._DVL,
+            self._baro,
+            self._ctrl_mode,
+            use_ros=self._use_ros,
+        )
+
     def _on_post_reset_btn(self):
         """
         This function is attached to the Reset Button as the post_reset_fn callback.
@@ -420,35 +576,45 @@ class UIBuilder():
         self._scenario_state_btn.enabled = False
         self._reset_btn.enabled = False
 
+    def _on_ros_checkbox_click_fn(self, model):
+        self._use_ros = model
+        print("Reload the scene for changes to take effect.")
+
+    def _on_imu_checkbox_click_fn(self, model):
+        self._use_imu = model
+        print("Reload the scene for changes to take effect.")
 
     def _on_sonar_checkbox_click_fn(self, model):
         self._use_sonar = model
-        print('Reload the scene for changes to take effect.')
+        print("Reload the scene for changes to take effect.")
 
     def _on_camera_checkbox_click_fn(self, model):
         self._use_camera = model
-        print('Reload the scene for changes to take effect.')
+        print("Reload the scene for changes to take effect.")
 
     def _on_DVL_checkbox_click_fn(self, model):
         self._use_DVL = model
-        print('Reload the scene for changes to take effect.')
+        print("Reload the scene for changes to take effect.")
 
     def _on_baro_checkbox_click_fn(self, model):
         self._use_baro = model
-        print('Reload the scene for changes to take effect.')
-    
+        print("Reload the scene for changes to take effect.")
+
+    # def _on_zed_checkbox_click_fn(self, model):
+    #     self._use_zed = model
+    #     print('Reload the scene for changes to take effect.')
+
     def _on_manual_ctrl_cb_click_fn(self, model):
         self._manual_ctrl = model
-        print('Reload the scene for changes to take effect.')
+        print("Reload the scene for changes to take effect.")
 
     def _on_ctrl_mode_dropdown_clicked(self, model):
         self._ctrl_mode = model
-        print(f'Ctrl mode: {model}. Reload the scene for changes to take effect.')
+        print(f"Ctrl mode: {model}. Reload the scene for changes to take effect.")
 
-   
     def _add_extra_ui(self):
         with self.sensor_reading_frame:
-            with ui.VStack(spacing=5, height=0):                
+            with ui.VStack(spacing=5, height=0):
                 if self._use_DVL is True:
                     self._build_DVL_plot()
                     self.sensor_reading_frame.visible = True
@@ -456,36 +622,37 @@ class UIBuilder():
                     self._build_baro_plot()
                     self.sensor_reading_frame.visible = True
                 if not self._use_baro and not self._use_DVL:
-                    self.sensor_reading_frame.visible = False 
+                    self.sensor_reading_frame.visible = False
         with self.waypoints_frame:
-            if self._ctrl_mode == 'Waypoints':
+            if self._ctrl_mode == "Waypoints":
                 self._build_waypoints_filepicker()
                 self.waypoints_frame.visible = True
             else:
                 self.waypoints_frame.visible = False
 
-
     def _build_waypoints_filepicker(self):
         self._waypoints_path_field = str_builder(
-            label='Path to waypoints',
+            label="Path to waypoints",
             default_val=self._waypoints_path,
-            tooltip='Select the txt files containing the waypoint data',
+            tooltip="Select the txt files containing the waypoint data",
             use_folder_picker=True,
-            folder_button_title='Select txt',
-            folder_dialog_title='Select the txt file containing the waypoint'
+            folder_button_title="Select txt",
+            folder_dialog_title="Select the txt file containing the waypoint",
         )
         self._scenario.setup_waypoints(
-            waypoint_path=self._waypoints_path, 
-            default_waypoint_path=self._extension_path + '/demo/demo_waypoints.txt'
-            )
-        self._waypoints_path_field.add_value_changed_fn(self._on_waypoints_path_changed_fn)
+            waypoint_path=self._waypoints_path,
+            default_waypoint_path=self._extension_path + "/demo/demo_waypoints.txt",
+        )
+        self._waypoints_path_field.add_value_changed_fn(
+            self._on_waypoints_path_changed_fn
+        )
 
     def _on_waypoints_path_changed_fn(self, model):
         self._waypoints_path = model.get_value_as_string()
         self._scenario.setup_waypoints(
-            waypoint_path=model.get_value_as_string(), 
-            default_waypoint_path=self._extension_path + '/demo/demo_waypoints.txt'
-            )
+            waypoint_path=model.get_value_as_string(),
+            default_waypoint_path=self._extension_path + "/demo/demo_waypoints.txt",
+        )
 
     def _build_DVL_plot(self):
         self._DVL_event_sub = None
@@ -507,7 +674,9 @@ class UIBuilder():
         if val:
             if not self._DVL_event_sub:
                 self._DVL_event_sub = (
-                    omni.kit.app.get_app().get_update_event_stream().create_subscription_to_pop(self._on_DVL_step)
+                    omni.kit.app.get_app()
+                    .get_update_event_stream()
+                    .create_subscription_to_pop(self._on_DVL_step)
                 )
             else:
                 self._DVL_event_sub = None
@@ -541,21 +710,22 @@ class UIBuilder():
         self._baro_data = []
 
         kwargs = {
-                "label": "Barometer reading (Pa)", 
-                "on_clicked_fn": self.toggle_baro_step, 
-                "data": self._baro_data,
-                "min": 101325.0,
-                'max': 101325.0 + 50000,
-                  }
+            "label": "Barometer reading (Pa)",
+            "on_clicked_fn": self.toggle_baro_step,
+            "data": self._baro_data,
+            "min": 101325.0,
+            "max": 101325.0 + 50000,
+        }
         self._baro_plot, self._baro_plot_value = combo_cb_plot_builder(**kwargs)
 
-
     def toggle_baro_step(self, val=None):
-        print('Barometer DAQ: ', val)
+        print("Barometer DAQ: ", val)
         if val:
             if not self._baro_event_sub:
-                self._baro_event_sub= (
-                    omni.kit.app.get_app().get_update_event_stream().create_subscription_to_pop(self._on_baro_step)
+                self._baro_event_sub = (
+                    omni.kit.app.get_app()
+                    .get_update_event_stream()
+                    .create_subscription_to_pop(self._on_baro_step)
                 )
             else:
                 self._baro_event_sub = None
@@ -569,5 +739,3 @@ class UIBuilder():
         if len(self._baro_data) > 50:
             self._baro_data.pop(0)
         self._baro_plot.set_data(*self._baro_data)
-
-        

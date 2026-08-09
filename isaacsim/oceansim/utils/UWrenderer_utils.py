@@ -303,42 +303,42 @@ def depth_to_world_pos(
     world_points[y, x, 2] = world_pos_h[2] * is_valid
 
 
+@wp.kernel
+def UW_depth_turbidity_attenuator(
+    raw_image: wp.array(ndim=3, dtype=wp.uint8),
+    depth_image: wp.array(ndim=2, dtype=wp.float32),
+    max_range: wp.float32,
+    backscatter_value: wp.vec3,
+    atten_coeff: wp.vec3,
+    backscatter_coeff: wp.vec3,
+    sigma: wp.float32,
+    seed: int,
+    adjusted_depth: wp.array(ndim=2, dtype=wp.float32),
+):
+    i, j = wp.tid()
+    raw_RGB = wp.vec3(
+        wp.float32(raw_image[i, j, 0]),
+        wp.float32(raw_image[i, j, 1]),
+        wp.float32(raw_image[i, j, 2]),
+        dtype=wp.float32,
+    )
+    depth = depth_image[i, j]
 
+    # beer-lambert decay
+    exp_atten = vec3_exp(-depth * atten_coeff)
+    min_intens = wp.float32(0.25)
+    rgb_intens = vec3_mul(raw_RGB, exp_atten)
 
-if __name__ == "__main__":
-    wp.init()
-    width, height = 1024, 512
-    out_img = wp.zeros(shape=(height, width, 3), dtype=wp.uint8)
+    # average the RGB intensity per pixel
+    av_rgb_intens = (rgb_intens[0] + rgb_intens[1] + rgb_intens[2]) / (
+        wp.float32(3.0) * wp.float32(255.0)
+    )
 
-    # Animation params
-    fps = 30
-    seconds = 5
-    time_speed = 2.0
-    num_frames = fps * seconds
-
-    # Setup interactive display
-    plt.ion()
-    fig, ax = plt.subplots()
-    ax.set_title("Water Caustics")
-    ax.axis('off')
-    im_artist = ax.imshow(out_img.numpy())
-
-    for frame_idx in range(num_frames):
-        t = float(frame_idx) / float(fps)
-        wp.launch(
-            water_caustics,
-            dim=(width, height),
-            inputs=[out_img, width, height, t, time_speed],
-        )
-        wp.synchronize()
-        im_artist.set_data(out_img.numpy())
-        fig.canvas.draw()
-        fig.canvas.flush_events()
-        plt.pause(1.0 / fps)
-
-    plt.ioff()
-    plt.show()
-
-
-    
-    
+    # filter all depth points with too low of an intensity to be observable
+    if av_rgb_intens <= min_intens:
+        adjusted_depth[i, j] = wp.float32(0.0)
+    else:
+        state = wp.rand_init(seed, i * depth_image.shape[1] + j)
+        sample = wp.randn(state)
+        g_noise = sample * sigma
+        adjusted_depth[i, j] = wp.max(depth + g_noise, wp.float32(0.0))

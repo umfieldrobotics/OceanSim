@@ -10,33 +10,90 @@ from isaacsim.core.utils.prims import get_prim_path
 class MHL_Sensor_Example_Scenario():
     def __init__(self):
         self._rob = None
+        self._imu = None
         self._sonar = None
         self._cam = None
         self._DVL = None
         self._baro = None
 
         self._ctrl_mode = None
+        self._cmd_vel_controller = None
+        self._use_ros = True
+        self.omni_ros = None
 
         self._running_scenario = False
         self._time = 0.0
 
-    def setup_scenario(self, rob, sonar, cam, DVL, baro, ctrl_mode):
+    def setup_scenario(self, imu, rob, sonar, cam, DVL, baro, ctrl_mode, use_ros=True):
+        self._use_ros = use_ros
+        self._imu = imu
         self._rob = rob
         self._sonar = sonar
         self._cam = cam
         self._DVL = DVL
         self._baro = baro
         self._ctrl_mode = ctrl_mode
-        if self._sonar is not None:
-            self._sonar.sonar_initialize(include_unlabelled=True)
-        if self._cam is not None:
-            self._cam.initialize()
-        if self._DVL is not None:
-            self._DVL_reading = [0.0, 0.0, 0.0]
-        if self._baro is not None:
-            self._baro_reading = 101325.0 # atmospheric pressure (Pa)
-        
-        
+
+        if self._use_ros:
+            from isaacsim.oceansim.sensors import ros2_helpers
+
+            self.omni_ros = ros2_helpers.OmniHandler(name="SensorExample")
+
+            if self._imu is not None:
+                self._imu.initialize(og_node=self.omni_ros._imu_node)
+
+            if self._sonar is not None:
+                approx_freq = 30
+                self._sonar.sonar_initialize(
+                    include_unlabelled=True, og_node=self.omni_ros._sonar_node
+                )
+                ros2_helpers.publish_camera_info(self._sonar, approx_freq)
+                ros2_helpers.publish_depth(self._sonar, approx_freq)
+                ros2_helpers.publish_pointcloud_from_depth(self._sonar, approx_freq)
+                ros2_helpers.publish_camera_tf(self._sonar)
+
+            if self._cam is not None:
+                self._cam.initialize(
+                    og_node=self.omni_ros._rgb_node,
+                    depth_og_node=self.omni_ros._depth_node,
+                    pointcloud_og_node=self.omni_ros._pointcloud_node,
+                )
+                approx_freq = 30
+                ros2_helpers.publish_camera_info(self._cam, approx_freq)
+                ros2_helpers.publish_rgb(self._cam, approx_freq)
+                ros2_helpers.publish_camera_tf(self._cam)
+
+            if self._DVL is not None:
+                self._DVL.initialize(og_node=self.omni_ros._dvl_node)
+                self._DVL_reading = [0.0, 0.0, 0.0]
+
+            if self._baro is not None:
+                self._baro.initialize(og_node=self.omni_ros._baro_node)
+                self._baro_reading = 101325.0  # atmospheric pressure (Pa)
+        else:
+            self.omni_ros = None
+
+            if self._imu is not None and hasattr(self._imu, "initialize"):
+                self._imu.initialize()
+
+            if self._sonar is not None:
+                self._sonar.sonar_initialize(include_unlabelled=True)
+
+            if self._cam is not None:
+                self._cam.initialize()
+
+            if self._DVL is not None:
+                self._DVL_reading = [0.0, 0.0, 0.0]
+
+            if self._baro is not None:
+                self._baro_reading = 101325.0  # atmospheric pressure (Pa)
+
+        # Setup cmd_vel ROS2 subscriber (works with any control mode except Manual)
+        if ctrl_mode != "Manual control":
+            from ...utils.cmd_vel_subscriber import CmdVelController
+            robot_path = get_prim_path(self._rob)
+            self._cmd_vel_controller = CmdVelController(robot_prim_path=robot_path)
+
         # Apply the physx force schema if manual control
         if ctrl_mode == "Manual control":
             from ...utils.keyboard_cmd import keyboard_cmd
@@ -107,10 +164,17 @@ class MHL_Sensor_Example_Scenario():
 
         # Because these two sensors create annotator cache in GPU,
         # close() will detach annotator from render product and clear the cache.
+        if self._imu is not None: # TODO do better than derefing
+            self._imu = None
         if self._sonar is not None:
             self._sonar.close()
         if self._cam is not None:
             self._cam.close()
+
+        # Clear cmd_vel controller
+        if self._cmd_vel_controller is not None:
+            self._cmd_vel_controller.cleanup()
+            self._cmd_vel_controller = None
 
         # clear the keyboard subscription
         if self._ctrl_mode=="Manual control":
@@ -122,26 +186,41 @@ class MHL_Sensor_Example_Scenario():
         self._cam = None
         self._DVL = None
         self._baro = None
+        self.omni_ros = None
         self._running_scenario = False
         self._time = 0.0
 
 
     def update_scenario(self, step: float):
 
-        
+
         if not self._running_scenario:
             return
-        
+
         self._time += step
-        
+        if self._imu is not None:
+            if self._use_ros:
+                self._imu.read()
+            else:
+                self._imu.get_current_frame()
         if self._sonar is not None:
             self._sonar.make_sonar_data()
         if self._cam is not None:
             self._cam.render()
         if self._DVL is not None:
-            self._DVL_reading = self._DVL.get_linear_vel()
+            if self._use_ros:
+                self._DVL_reading = self._DVL.read()
+            else:
+                self._DVL_reading = self._DVL.get_linear_vel()
         if self._baro is not None:
-            self._baro_reading = self._baro.get_pressure()
+            if self._use_ros:
+                self._baro_reading = float(self._baro.read())
+            else:
+                self._baro_reading = float(self._baro.get_pressure())
+
+        # Update cmd_vel controller if active
+        if self._cmd_vel_controller is not None:
+            self._cmd_vel_controller.update(self._rob)
 
         if self._ctrl_mode=="Manual control":
             force_cmd = Gf.Vec3f(*self._force_cmd._base_command)
@@ -158,12 +237,3 @@ class MHL_Sensor_Example_Scenario():
                 print('Waypoints finished')                
         elif self._ctrl_mode=="Straight line":
             SingleRigidPrim(prim_path=get_prim_path(self._rob)).set_linear_velocity(np.array([0.5,0,0])) 
-
-
-
-
-        
-
-        
-
-

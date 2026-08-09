@@ -269,7 +269,6 @@ def make_sonar_map_range(r: wp.array(ndim=2, dtype=wp.float32),
                           r[i,j] * wp.sin(azi[i,j]),
                           intensity[i,j])
     
-
 @wp.kernel
 def make_sonar_image(sonar_data: wp.array(ndim=2, dtype=wp.vec3),
                      sonar_image: wp.array(ndim=3, dtype=wp.uint8)):

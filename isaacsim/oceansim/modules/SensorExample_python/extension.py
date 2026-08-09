@@ -1,9 +1,19 @@
+# Copyright (c) 2022-2023, NVIDIA CORPORATION. All rights reserved.
+#
+# NVIDIA CORPORATION and its licensors retain all intellectual property
+# and proprietary rights in and to this software, related documentation
+# and any modifications thereto. Any use, reproduction, disclosure or
+# distribution of this software and related documentation without an express
+# license agreement from NVIDIA CORPORATION is strictly prohibited.
+#
+
 import asyncio
 import gc
 import weakref
 
 
 import omni
+import omni.kit.commands
 import omni.physx as _physx
 import omni.timeline
 import omni.ui as ui
