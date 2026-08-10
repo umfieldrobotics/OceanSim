@@ -1,4 +1,4 @@
-# DISPLACEMENT_FACTOR = 0.05 # This fucking value is the maximum displacement window in global scale (meters)
+# DISPLACEMENT_FACTOR = 0.05 # This value is the maximum displacement window in global scale (meters)
 # PATCH_FACTOR : int = 3
 # RES = 100 # number of vertices + 1 per side for the central plane (visual)
 # REFINE_LEVEL = 5 # subdivision level for the central plane (catmullClark)

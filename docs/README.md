@@ -31,7 +31,7 @@ OceanSim is a high-fidelity underwater simulation framework designed to accelera
 
 
 ## Latest Updates
-- `[2026/7]` Toggleable ROS 2 sensor publishing.
+- `[2026/8]` We now incorporate a pipeline for our underwater object detection project in our [paper](TODO) and bringing OceanSim 0.2.
 - `[2025/9]` OceanSim is now compatible with Isaac Sim 5.0 GA.
 - `[2025/4]` OceanSim is featured by [NVIDIA Robotics](https://www.linkedin.com/posts/nvidiarobotics_robotics-underwaterrobotics-simulation-activity-7313986055894880257-Dfmq?utm_source=share&utm_medium=member_desktop&rcm=ACoAACB8Y7sB7ikB6wVGPL5NrxYkNwk8RTEJ-3Y)!
 - `[2025/4]` 🔥 Beta version of OceanSim is released!
@@ -49,8 +49,9 @@ OceanSim is a high-fidelity underwater simulation framework designed to accelera
 We divide the documentation into four parts:
 - [Installation](subsections/installation.md)
 - [Running OceanSim](subsections/running_example.md)
-- [ROS 2](subsections/ros2.md)
+- [ROS 2](subsections/ros2.md) [NEW]
 - [Building Your Own Digital Twins with OceanSim](subsections/building_own_digital_twin.md)
+- [Underwater SDG using standalone scripts](subsections/running_sdg_example.md) [NEW]
 
 ## Support and Contributing
 We welcome contributions and discussions from the community!

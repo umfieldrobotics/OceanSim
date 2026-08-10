@@ -1,68 +1,58 @@
 # Run SDG Examples in OceanSim
-In this document, we will provide guidelines and assets folders for users to run 'UWCam_sdg_seaclear.py' in [UWCam_sdg_seaclear.py](../../standalone/UWCam_sdg_seaclear.py), which is the main standalone script used to generate our experiment dataset in paper.
+In this document, we will provide guidelines and assets folders for users to run [UWCam_sdg_seaclear.py](../../standalone/UWCam_sdg_seaclear.py), which is the main standalone script used to generate our experiment dataset in paper.
 
 ## SDG Configs
 We provide a bash file [run_sdg_Seaclear.sh](../../standalone/run_sdg_SeaClear.sh) to sequentially run each SDG task specified by each config json files in [Seaclear_configs](../../standalone/Seaclear_configs/) folder. Explanation for the configs are below:
-**TODO**
+
+The default SDG configuration is a Python dictionary that can be overridden or replaced by JSON/YAML files passed through the `--config` command-line argument. The main options are:
+
+- `launch_config`: Controls the Isaac Sim launch behavior.
+  - `renderer`: Rendering backend to use, e.g. `RealTimePathTracing`.
+  - `headless`: Runs the simulation without opening a GUI when set to `True`.
+  - `extra_args`: Additional simulator arguments, such as enabling RTX 2.0/Path Tracing modes or reducing log verbosity.
+- `total_captures`: Number of image sequences or samples to generate for the run.
+- `camera_collider_radius`: Radius used for camera collision checks around the scene.
+- `env_url`: Path to the environment asset directory used as the base scene.
+- `objects_url`: Path to the object asset directory containing the target objects to place in the scene.
+- `distractors_folder`: Path to the distractor asset directory used to add clutter or non-target items.
+- `rt_subframes`: Number of subframes used for ray tracing rendering.
+- `resolution`: Output image resolution as `[width, height]`.
+- `camera_properties_kwargs`: Camera intrinsic and optical settings, including focal length, focus distance, aperture, and clipping range.
+- `writers`: List of output writers. The default writer `UWCam_KittiWriter` generates KITTI-style annotations and outputs.
+  - `output_dir`: Directory where generated data will be saved.
+  - `colorize_instance_segmentation`: Whether instance segmentation masks should be colorized.
+  - `use_tight_bbox`: Whether to use tight bounding boxes for annotations.
+  - `debug_mode`: Enables extra debug output when set to `True`.
+  - `UW_param`: Water and rendering parameters, including:
+    - `scale_range`: Range for scaling the underwater imaging parameters.
+    - `veiling`: Veiling light parameters for different water types.
+    - `backscatter`: Backscatter coefficients for different water types.
+    - `attenuation`: Attenuation coefficients for different water types.
+- `add_distractors`: Whether to place distractor objects in the scene.
+- `cam_workspace`: 3D bounding box for camera placement in world coordinates as `[minX, minY, minZ, maxX, maxY, maxZ]`.
+- `cam_lookat_workspace`: Bounding box used to sample camera look-at targets.
+- `obj_workspace`: Bounding box used to sample object placement positions.
+- `dist_workspace`: Bounding box used to sample distractor placement positions.
+- `randomize_object_color`: Whether object colors should be randomized.
+- `color_bias_range`: Range used to offset object color values.
+- `color_scale_range`: Range used to scale object color values.
+- `disable_render_products`: Disables camera rendering between the capture when set to `True`.
+- `debug_mode`: Enables additional debugging behavior for the pipeline.
+- `seed`: Random seed used for reproducibility.
+- `path_tracing`: Enables path tracing behavior when set to `True`.
+
+Users can edit these values directly in the config dictionary or provide a separate JSON/YAML file to swap in a custom configuration.
 
 ## Assets Folder
 For general computer vision tasks, we categorize assets into following three categories: environment(env_url), objects(objects_url), and distractors(distractors_folder). Users can link the corresponding assets folder downloaded from our google drive or use their own assets. Every user has different asset convention but OpenUSD has largely standardized them; however, details about how we parse the asset folder structure and generate the label can be found in [UWCam_sdg_utils.py](../../isaacsim/oceansim/utils/UWCam_sdg_utils.py)
 
+## SDG playground
+To help user understand and tune the above configs (because users should have distinct purpose when generating synthetic data), we encourage users to understand our functions and code their own. We developed a playground to play with and help users to understand how we perfrom randomization and manage assets for SDG. 
+<!-- (../../media/SDG_playground.gif) -->
+![SDG playground](../../media/SDG_playground.gif)
 
-Navigate to `OceanSim - Examples - Sensor Example` to open the module.
 
-The module provides self-explanatory UI in which you can choose which sensor to use and corresponding data visualization will be automatically available. User may test this module in their own USD scenes otherwise a default one is used. 
 
-We do not recommend user to perform digital twin experiment on this extension. This is an example involves boilerplate code and less performent, which is only for demonstration purpose.
-
-For more instructions when using this example, refer to [information panel](../../isaacsim/oceansim/modules/SensorExample_python/global_variables.py) in the extension UI.
-
-## Color Picker
-OceanSim provies a handy UI tool to accelerate the process of recreating underwater column effects similar to the robot's actual working environment by selecting the appropriate image formation parameters ([Akkaynak, Derya, and Tali Treibitz. "A revised underwater image formation model"](https://ieeexplore.ieee.org/document/8578801).)
-
-Navigate to `OceanSim - Color Picker` to open the module.
-
-This widget allows user to visualize the rendered result in any USD scene while tunning parameters in real time. 
-
-For more instructions when using this example, refer to [information panel](../../isaacsim/oceansim/modules/colorpicker_python/global_variables.py) in the extension UI.
-
-## Tuning Object Reflectivity for Imaging Sonar
-User can adjust reflectivity of objects in the sonar perception via adding semantic label to the object. 
-
-Semantic type must be `"reflectivity"` as string. 
-And corresponding semantic data must be float, eg. `0.2`.
-
-Semantic configuration can either be performed by code during scene setup:
-<!-- configure Prim Semantics by code -->
-```bash
-from isaacsim.core.utils.semantics import add_update_semantics
-add_update_semantics(prim=<object_prim>,
-                    type_label='reflectivity',
-                    semantic_label='1.0')
-```
-Or with UI provided in `semantics.schema.editor` ([Semantic Schema Editor](https://docs.omniverse.nvidia.com/extensions/latest/ext_replicator/semantics_schema_editor.html) should be auto loaded as Isaac Sim starts up). 
-
-A simple tutorial is as followed:
-<!-- (../../media/semantic_editor.gif) -->
-![Add reflectivity by Semantic Editor](../../media/semantic_editor.gif)
-
-As demonstrated by this workflow, developers are freely to add more modeling parameters as a new semantic type to improve sonar fidelity.  
-
-## Adding Water Caustics
-Notice the below way of adding water caustics into the USD scene is still in exploration and thus may lead to performance issue and crash during the simulation.
-
-To turn on rendering caustics, `Render Settings - Ray Tracing - Caustics` will be set `on`, and `Enable Caustics` in the UsdLux that supports caustics will be set `on` for the light source.
-
-Next we assign `transparent materials` (eg. Water, glass) to any mesh surface that we wish to [deflect photons](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-2-rendering-water-caustics) and create caustics.
-
-Lastly to simulate water caustics, we will deform the surface according to realistic water surface deformation.
-
-A USD file containing the caustic settings and surface deformation powered by a Warp kernel can be found in the OceanSim assets `~\OceanSim_assets\collected_MHL\mhl_water.usd` we published. 
-
-And the corresponding demo video is provided below:
-
-<!-- (../../media/caustics.gif) -->
-![How to turn on Caustics](../../media/caustics.gif)
 
 
 
