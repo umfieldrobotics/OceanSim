@@ -1,9 +1,9 @@
 # Omniverse import
 import numpy as np
-from pxr import Gf, PhysxSchema
+from pxr import Gf
 
 # Isaac sim import
-from isaacsim.core.prims import SingleRigidPrim
+from isaacsim.core.prims import RigidPrim, SingleRigidPrim
 from isaacsim.core.utils.prims import get_prim_path
 
 
@@ -37,7 +37,14 @@ class MHL_Sensor_Example_Scenario():
         if self._use_ros:
             from isaacsim.oceansim.sensors import ros2_helpers
 
-            self.omni_ros = ros2_helpers.OmniHandler(name="SensorExample")
+            self.omni_ros = ros2_helpers.OmniHandler(
+                name="SensorExample",
+                use_camera=self._cam is not None,
+                use_sonar=self._sonar is not None,
+                use_imu=self._imu is not None,
+                use_dvl=self._DVL is not None,
+                use_baro=self._baro is not None,
+            )
 
             if self._imu is not None:
                 self._imu.initialize(og_node=self.omni_ros._imu_node)
@@ -94,11 +101,12 @@ class MHL_Sensor_Example_Scenario():
             robot_path = get_prim_path(self._rob)
             self._cmd_vel_controller = CmdVelController(robot_prim_path=robot_path)
 
-        # Apply the physx force schema if manual control
+        # Apply forces via RigidPrim tensor view if manual control
         if ctrl_mode == "Manual control":
             from ...utils.keyboard_cmd import keyboard_cmd
 
-            self._rob_forceAPI = PhysxSchema.PhysxForceAPI.Apply(self._rob)
+            self._rob_view = RigidPrim(prim_paths_expr=get_prim_path(self._rob))
+            self._rob_view.initialize()
             self._force_cmd = keyboard_cmd(base_command=np.array([0.0, 0.0, 0.0]),
                                       input_keyboard_mapping={
                                         # forward command
@@ -223,10 +231,11 @@ class MHL_Sensor_Example_Scenario():
             self._cmd_vel_controller.update(self._rob)
 
         if self._ctrl_mode=="Manual control":
-            force_cmd = Gf.Vec3f(*self._force_cmd._base_command)
-            torque_cmd = Gf.Vec3f(*self._torque_cmd._base_command)
-            self._rob_forceAPI.CreateForceAttr().Set(force_cmd)
-            self._rob_forceAPI.CreateTorqueAttr().Set(torque_cmd)
+            force = np.asarray(self._force_cmd._base_command, dtype=np.float32).reshape(1, 3)
+            torque = np.asarray(self._torque_cmd._base_command, dtype=np.float32).reshape(1, 3)
+            self._rob_view.apply_forces_and_torques_at_pos(
+                forces=force, torques=torque, is_global=False
+            )
         elif self._ctrl_mode=="Waypoints":
             if len(self.waypoints) > 0:
                 waypoints = self.waypoints[0]

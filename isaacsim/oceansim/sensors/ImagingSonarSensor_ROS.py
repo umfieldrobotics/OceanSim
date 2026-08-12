@@ -49,7 +49,6 @@ class ImagingSonarSensor_ROS(ImagingSonarSensor):
 
     def sonar_initialize(
         self,
-        output_dir: str = None,
         viewport: bool = True,
         include_unlabelled=False,
         if_array_copy: bool = True,
@@ -58,11 +57,19 @@ class ImagingSonarSensor_ROS(ImagingSonarSensor):
         if og_node is not None:
             self._og_node = og_node
         super().sonar_initialize(
-            output_dir=output_dir,
             viewport=viewport,
             include_unlabelled=include_unlabelled,
             if_array_copy=if_array_copy,
         )
+
+    def make_sonar_data(self, *args, **kwargs):
+        previous_frame_id = self.id
+        # handles sonar data generation
+        result = super().make_sonar_data(*args, **kwargs)
+        if self.id > previous_frame_id:
+            # handles ROS publishing of sonar image
+            self._on_sonar_frame(self.sonar_image)
+        return result
 
     def _on_sonar_frame(self, sonar_image):
         if self._og_node is None:

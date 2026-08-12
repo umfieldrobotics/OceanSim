@@ -288,7 +288,13 @@ class OmniHandler:
         dvl_message_package: str = "msgs",
         dvl_message_subfolder: str = "msg",
         dvl_message_name: str = "Dvl",
+        use_camera: bool = False,
+        use_sonar: bool = False,
+        use_imu: bool = False,
+        use_dvl: bool = False,
+        use_baro: bool = False,
     ):
+        self._og_graph = None
         self._rgb_node = None
         self._depth_node = None
         self._pointcloud_node = None
@@ -300,7 +306,37 @@ class OmniHandler:
         self._dvl_message_package = dvl_message_package
         self._dvl_message_subfolder = dvl_message_subfolder
         self._dvl_message_name = dvl_message_name
+        self._use_camera = use_camera
+        self._use_sonar = use_sonar
+        self._use_imu = use_imu
+        self._use_dvl = use_dvl
+        self._use_baro = use_baro
         self._setup_ros_graph()
+
+    @staticmethod
+    def _add_sensor_publisher(
+        *,
+        node_definitions,
+        execution_connections,
+        attribute_values,
+        publisher_node_name,
+        publisher_node_type,
+        publisher_input_values,
+    ):
+        node_definitions.append((publisher_node_name, publisher_node_type))
+        execution_connections.append(
+            (
+                "on_tick.outputs:tick",
+                f"{publisher_node_name}.inputs:execIn",
+            )
+        )
+        attribute_values.extend(
+            (
+                f"{publisher_node_name}.inputs:{input_name}",
+                input_value,
+            )
+            for input_name, input_value in publisher_input_values.items()
+        )
 
     def _setup_ros_graph(self):
         """Creates a standalone OmniGraph to drive the internal C++ ROS Bridge."""
@@ -308,109 +344,155 @@ class OmniHandler:
             keys = og.Controller.Keys
             graph_path = f"/UW_Publisher_{self._name}"
 
-            if pd := omni.usd.get_context().get_stage().GetPrimAtPath(graph_path):
+            if omni.usd.get_context().get_stage().GetPrimAtPath(graph_path):
                 omni.kit.commands.execute("DeletePrims", paths=[graph_path])
+
+            publisher_node_definitions = [
+                ("on_tick", "omni.graph.action.OnTick")
+            ]
+            publisher_execution_connections = []
+            publisher_attribute_values = []
+
             # https://docs.isaacsim.omniverse.nvidia.com/5.1.0/py/source/extensions/isaacsim.ros2.bridge/docs/ogn/OgnROS2PublishImage.html
-            (
-                self._og_graph,
-                [
-                    rgb_pub_node,
-                    depth_pub_node,
-                    pointcloud_pub_node,
-                    sonar_pub_node,
-                    imu_pub_node,
-                    dvl_pub_node,
-                    baro_pub_node,
-                    _,
-                ],
-                _,
-                _,
-            ) = og.Controller.edit(
+            if self._use_camera:
+                self._add_sensor_publisher(
+                    node_definitions=publisher_node_definitions,
+                    execution_connections=publisher_execution_connections,
+                    attribute_values=publisher_attribute_values,
+                    publisher_node_name="uw_rgb_publisher",
+                    publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImage",
+                    publisher_input_values={
+                        "topicName": f"{self._name}/rgb",
+                        "frameId": self._name,
+                        "encoding": "rgba8",
+                    },
+                )
+                self._add_sensor_publisher(
+                    node_definitions=publisher_node_definitions,
+                    execution_connections=publisher_execution_connections,
+                    attribute_values=publisher_attribute_values,
+                    publisher_node_name="uw_depth_publisher",
+                    publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImage",
+                    publisher_input_values={
+                        "topicName": f"{self._name}/depth",
+                        "frameId": self._name,
+                        "encoding": "32FC1",
+                    },
+                )
+                self._add_sensor_publisher(
+                    node_definitions=publisher_node_definitions,
+                    execution_connections=publisher_execution_connections,
+                    attribute_values=publisher_attribute_values,
+                    publisher_node_name="uw_pointcloud_publisher",
+                    publisher_node_type=(
+                        "isaacsim.ros2.bridge.ROS2PublishPointCloud"
+                    ),
+                    publisher_input_values={
+                        "topicName": f"{self._name}/pointcloud",
+                        "frameId": self._name,
+                    },
+                )
+
+            if self._use_sonar:
+                self._add_sensor_publisher(
+                    node_definitions=publisher_node_definitions,
+                    execution_connections=publisher_execution_connections,
+                    attribute_values=publisher_attribute_values,
+                    publisher_node_name="multibeam_sonar_publisher",
+                    publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImage",
+                    publisher_input_values={
+                        "topicName": f"{self._name}/sonar_image",
+                        "frameId": self._name,
+                        "encoding": "rgba8",
+                    },
+                )
+
+            if self._use_imu:
+                self._add_sensor_publisher(
+                    node_definitions=publisher_node_definitions,
+                    execution_connections=publisher_execution_connections,
+                    attribute_values=publisher_attribute_values,
+                    publisher_node_name="imu_publisher",
+                    publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImu",
+                    publisher_input_values={
+                        "topicName": f"{self._name}/imu",
+                        "frameId": self._name,
+                    },
+                )
+
+            if self._use_dvl:
+                self._add_sensor_publisher(
+                    node_definitions=publisher_node_definitions,
+                    execution_connections=publisher_execution_connections,
+                    attribute_values=publisher_attribute_values,
+                    publisher_node_name="dvl_publisher",
+                    publisher_node_type="isaacsim.ros2.bridge.ROS2Publisher",
+                    publisher_input_values={
+                        "topicName": f"{self._name}/dvl",
+                        "queueSize": 10,
+                        "messagePackage": self._dvl_message_package,
+                        "messageSubfolder": self._dvl_message_subfolder,
+                        "messageName": self._dvl_message_name,
+                    },
+                )
+
+            if self._use_baro:
+                self._add_sensor_publisher(
+                    node_definitions=publisher_node_definitions,
+                    execution_connections=publisher_execution_connections,
+                    attribute_values=publisher_attribute_values,
+                    publisher_node_name="baro_publisher",
+                    publisher_node_type="isaacsim.ros2.bridge.ROS2Publisher",
+                    publisher_input_values={
+                        "topicName": f"{self._name}/baro",
+                        "queueSize": 10,
+                        "messagePackage": "sensor_msgs",
+                        "messageSubfolder": "msg",
+                        "messageName": "FluidPressure",
+                    },
+                )
+
+            if not publisher_execution_connections:
+                carb.log_info(
+                    f"[{self._name}] No ROS 2 sensor publishers are enabled"
+                )
+                return
+
+            self._og_graph, _, _, _ = og.Controller.edit(
                 {"graph_path": graph_path, "evaluator_name": "execution"},
                 {
-                    keys.CREATE_NODES: [
-                        ("uw_rgb_publisher", "isaacsim.ros2.bridge.ROS2PublishImage"),
-                        ("uw_depth_publisher", "isaacsim.ros2.bridge.ROS2PublishImage"),
-                        (
-                            "uw_pointcloud_publisher",
-                            "isaacsim.ros2.bridge.ROS2PublishPointCloud",
-                        ),
-                        (
-                            "multibeam_sonar_publisher",
-                            "isaacsim.ros2.bridge.ROS2PublishImage",
-                        ),
-                        ("imu_publisher", "isaacsim.ros2.bridge.ROS2PublishImu"),
-                        ("dvl_publisher", "isaacsim.ros2.bridge.ROS2Publisher"),
-                        ("baro_publisher", "isaacsim.ros2.bridge.ROS2Publisher"),
-                        ("on_tick", "omni.graph.action.OnTick"),
-                    ],
-                    keys.CONNECT: [
-                        ("on_tick.outputs:tick", "uw_rgb_publisher.inputs:execIn"),
-                        ("on_tick.outputs:tick", "uw_depth_publisher.inputs:execIn"),
-                        (
-                            "on_tick.outputs:tick",
-                            "uw_pointcloud_publisher.inputs:execIn",
-                        ),
-                        (
-                            "on_tick.outputs:tick",
-                            "multibeam_sonar_publisher.inputs:execIn",
-                        ),
-                        ("on_tick.outputs:tick", "imu_publisher.inputs:execIn"),
-                        ("on_tick.outputs:tick", "dvl_publisher.inputs:execIn"),
-                        ("on_tick.outputs:tick", "baro_publisher.inputs:execIn"),
-                    ],
-                    keys.SET_VALUES: [
-                        ("uw_rgb_publisher.inputs:topicName", f"{self._name}/rgb"),
-                        ("uw_rgb_publisher.inputs:frameId", self._name),
-                        (
-                            "uw_rgb_publisher.inputs:encoding",
-                            "rgba8",
-                        ),  # switch back to rgb8 if not working
-                        ("uw_depth_publisher.inputs:topicName", f"{self._name}/depth"),
-                        ("uw_depth_publisher.inputs:frameId", self._name),
-                        ("uw_depth_publisher.inputs:encoding", "32FC1"),
-                        (
-                            "uw_pointcloud_publisher.inputs:topicName",
-                            f"{self._name}/pointcloud",
-                        ),
-                        ("uw_pointcloud_publisher.inputs:frameId", self._name),
-                        (
-                            "multibeam_sonar_publisher.inputs:topicName",
-                            f"{self._name}/sonar_image",
-                        ),
-                        ("multibeam_sonar_publisher.inputs:frameId", self._name),
-                        (
-                            "multibeam_sonar_publisher.inputs:encoding",
-                            "rgba8",
-                        ),  # switch back to rgb8 if not working
-                        ("imu_publisher.inputs:topicName", f"{self._name}/imu"),
-                        ("imu_publisher.inputs:frameId", self._name),
-                        ("dvl_publisher.inputs:topicName", f"{self._name}/dvl"),
-                        ("dvl_publisher.inputs:queueSize", 10),
-                        (
-                            "dvl_publisher.inputs:messagePackage",
-                            self._dvl_message_package,
-                        ),
-                        (
-                            "dvl_publisher.inputs:messageSubfolder",
-                            self._dvl_message_subfolder,
-                        ),
-                        ("dvl_publisher.inputs:messageName", self._dvl_message_name),
-                        ("baro_publisher.inputs:topicName", f"{self._name}/baro"),
-                        ("baro_publisher.inputs:queueSize", 10),
-                        ("baro_publisher.inputs:messagePackage", "sensor_msgs"),
-                        ("baro_publisher.inputs:messageSubfolder", "msg"),
-                        ("baro_publisher.inputs:messageName", "FluidPressure"),
-                    ],
+                    keys.CREATE_NODES: publisher_node_definitions,
+                    keys.CONNECT: publisher_execution_connections,
+                    keys.SET_VALUES: publisher_attribute_values,
                 },
             )
-            self._rgb_node = rgb_pub_node
-            self._depth_node = depth_pub_node
-            self._pointcloud_node = pointcloud_pub_node
-            self._sonar_node = sonar_pub_node
-            self._imu_node = imu_pub_node
-            self._dvl_node = dvl_pub_node
-            self._baro_node = baro_pub_node
+
+            if self._use_camera:
+                self._rgb_node = og.Controller.node(
+                    f"{graph_path}/uw_rgb_publisher"
+                )
+                self._depth_node = og.Controller.node(
+                    f"{graph_path}/uw_depth_publisher"
+                )
+                self._pointcloud_node = og.Controller.node(
+                    f"{graph_path}/uw_pointcloud_publisher"
+                )
+            if self._use_sonar:
+                self._sonar_node = og.Controller.node(
+                    f"{graph_path}/multibeam_sonar_publisher"
+                )
+            if self._use_imu:
+                self._imu_node = og.Controller.node(
+                    f"{graph_path}/imu_publisher"
+                )
+            if self._use_dvl:
+                self._dvl_node = og.Controller.node(
+                    f"{graph_path}/dvl_publisher"
+                )
+            if self._use_baro:
+                self._baro_node = og.Controller.node(
+                    f"{graph_path}/baro_publisher"
+                )
             carb.log_info(
                 f"[{self._name}] Internal ROS 2 Bridge Graph initialized at {graph_path}"
             )
