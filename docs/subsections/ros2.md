@@ -1,8 +1,10 @@
 # ROS 2
 
-OceanSim publishes sensor data and accepts velocity commands through Isaac Sim's `isaacsim.ros2.bridge`. Use **Enable ROS** in the included scenarioto turn publishing on or off.
-Follow this example scenario to see how to utlilize ROS 2 in your scenario.
-Topics are namespaced by the OmniHandler name (e.g. `SensorExample`). 
+OceanSim publishes sensor data and accepts velocity commands through ROS when enabled. Use **Enable ROS** in the included scenario to turn publishing on or off.
+Follow the example scenario to see how to utlilize ROS in your scenario.
+Topics are namespaced by the OmniHandler name (e.g. `SensorExample`) for the example scenario provided. 
+
+**Important**: Ensure you have cloned [Oceansim_msgs](https://github.com/umfieldrobotics/oceansim_ros_msgs) into your ROS workspace. Build and source this package in the terminal from which you are starting Isaac Sim prior to launching. This is required as certain sensors depend on custom defined message types (this currently applies to the DVL only).
 
 ## Published topics
 
