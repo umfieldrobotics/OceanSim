@@ -16,10 +16,10 @@
 OceanSim is a high-fidelity underwater simulation framework designed to accelerate the development of robust underwater perception solutions. Leveraging GPU-accelerated rendering and advanced physics-based techniques, OceanSim accurately models both visual and acoustic sensors, significantly reducing the simulation-to-real gap.
 
 <a href="https://umfieldrobotics.github.io/OceanSim/">
-  <img src="../media/terrain-gen.gif" alt="OceanSim Demo" style="width:100%;">
+  <img src="../media/terrain-gen.gif" alt="OceanSim Demo" style="width:75%;">
 </a>
 
-We are now bringing OceanSim 0.2 with our explorations and solutions for end-to-end synthetic data generation for underwater detection task.
+Towards scaling marine perception with synthetic data, we are now bringing OceanSim 0.2 with our explorations and solutions for an underwater detection task by synthetic data. 
 
 ## Highlights
 ![OceanSim pitch](../media/pitch.png)
@@ -68,7 +68,7 @@ We welcome contributions and discussions from the community!
 ## Contributors
 OceanSim is an open-source project initiated by the [Field Robotics Group](https://fieldrobotics.engin.umich.edu/) (FRoG) at the University of Michigan. We hope to build a vibrant community around OceanSim and invite contributions from researchers and developers around the world! A big shoutout to our contributors:
 
-[Jingyu Song](https://song-jingyu.github.io/), [Haoyu Ma](https://haoyuma2002814.github.io/), [Onur Bagoren](https://www.obagoren.com/), [Advaith V. Sethuraman](https://www.advaiths.com/), [Yiting Zhang](https://sites.google.com/umich.edu/yitingzhang/), and [Katherine A. Skinner](https://fieldrobotics.engin.umich.edu/).
+[Jingyu Song](https://song-jingyu.github.io/), [Haoyu Ma](https://haoyuma2002814.github.io/), [Onur Bagoren](https://www.obagoren.com/), [Advaith V. Sethuraman](https://www.advaiths.com/), [Yiting Zhang](https://sites.google.com/umich.edu/yitingzhang/), Anja Sheppard, Tanner Aslan, Elias Fandi, Ashrith Edukulla and [Katherine A. Skinner](https://fieldrobotics.engin.umich.edu/).
 <!-- - [Jingyu Song](https://song-jingyu.github.io/)  
 - [Haoyu Ma](https://haoyuma2002814.github.io/)  
 - [Onur Bagoren](https://www.obagoren.com/)  
