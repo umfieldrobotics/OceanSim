@@ -1,5 +1,18 @@
-# DISPLACEMENT_FACTOR = 0.05 # This value is the maximum displacement window in global scale (meters)
-# PATCH_FACTOR : int = 3
+# This script generates a terrain USD stage from a given texture folder. The texture folder should contain the following:
+# - textures/ : a folder containing the texture files (displacement, albedo, normal, roughness, AO, ORM)
+# - meta.txt : a text file containing metadata about the texture set, including the physical size of the scanned area (in meters). The meta.txt file should have the following format:
+#   wide: <float>  # The width of the scanned area
+#   tall: <float>  # The height of the scanned area
+
+
+# We downloaded our texture maps from https://ambientcg.com/.
+
+# The script assumes that the textures are square and that the scanned area is also square. 
+# It will generate a USD stage with a central high-resolution plane and a background plane, both textured with the provided textures. 
+# The central plane will have a displacement map and collider applied to it, and the background plane will be a simple flat plane.
+# NOTE: This script can only be run in Isaac Sim shipped python environment because it uses OpenUSD API.
+
+# PATCH_FACTOR : int = 3 # This value is the number of patches in the central plane (the high res plane) in each direction. The central plane will be subdivided into PATCH_FACTOR x PATCH_FACTOR patches. Each patch will have its own UV mapping to the displacement map.
 # RES = 100 # number of vertices + 1 per side for the central plane (visual)
 # REFINE_LEVEL = 5 # subdivision level for the central plane (catmullClark)
 # COL_RES = 1000 # number of vertices + 1 per side for the collider 

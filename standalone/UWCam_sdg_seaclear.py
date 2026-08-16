@@ -1,4 +1,8 @@
 # Default config dict, can be updated/replaced using json/yaml config files ('--config' cli argument)
+
+# NOTE: Simply run this with "./python.sh extsUser/isaacsim.oceansim/standalone/UWCam_sdg_seaclear.py"
+# "python.sh" should be in the root of the Isaac Sim installation folder.
+
 config = {
     "launch_config": {
         "renderer": "RealTimePathTracing",
@@ -16,9 +20,9 @@ config = {
     },
     "total_captures" : 5,
     "camera_collider_radius": 0.1,
-    "env_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/sceneAssets/terrains_3x3",
-    "objects_url": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/ObjectAssets_detect_sea_urchin_seaclear/",
-    "distractors_folder": "/mnt/frog-users/projects/OceanSim/sim2real/SDG_assets/ObjectAssets/OceanRealm_assets/",
+    "env_url": "/home/haoyu-ma/Desktop/OceanSim_assets/terrains_3x3",
+    "objects_url": "/home/haoyu-ma/Desktop/OceanSim_assets/sample_sdg/objects/sea_urchin",
+    "distractors_folder": "/home/haoyu-ma/Desktop/OceanSim_assets/sample_sdg/objects/OceanRealm",
     "rt_subframes": 16,
     "resolution": [1920, 1080],
     "camera_properties_kwargs": {
@@ -31,7 +35,7 @@ config = {
         {
             "type": "UWCam_KittiWriter",
             "kwargs": {
-                "output_dir": "/mnt/frog-users/projects/OceanSim/sim2real/",
+                "output_dir": "/home/haoyu-ma/Desktop/viz/",
                 "colorize_instance_segmentation": False,
                 "use_tight_bbox": True,
                 "debug_mode": False,

@@ -123,7 +123,7 @@ class UIBuilder:
                 self.scene_path_field = str_builder(
                     label='Path to USD',
                     tooltip='Input the path to your terrain scene file',
-                    default_val=self._oceansim_assets_path + "sample_sdg/scenes/rocky_trail_8k/rocky_trail_8k.usd",
+                    default_val=self._oceansim_assets_path + "/sample_sdg/terrains_3x3/rocky_trail_8k/rocky_trail_8k.usd",
                     use_folder_picker=True,
                     folder_button_title='Select USD',
                     folder_dialog_title='Select USD scene to import',
@@ -131,7 +131,7 @@ class UIBuilder:
                 self.object_folder_field = str_builder(
                     label="Object Folder",
                     tooltip="Directory containing object assets for randomization",
-                    default_val=self._oceansim_assets_path + "sample_sdg/objects/sea_urchin/",
+                    default_val=self._oceansim_assets_path + "/sample_sdg/objects/sea_urchin/",
                     use_folder_picker=True,
                     folder_button_title="Select Object Folder",
                     folder_dialog_title="Select folder with object assets",
@@ -161,7 +161,7 @@ class UIBuilder:
                 self.distractor_folder_field = str_builder(
                     label="Distractor Folder",
                     tooltip="Directory containing distractor assets for randomization",
-                    default_val=self._oceansim_assets_path + "sample_sdg/objects/OceanRealm",
+                    default_val=self._oceansim_assets_path + "/sample_sdg/objects/OceanRealm",
                     use_folder_picker=True,
                     folder_button_title="Select Distractor Folder",
                     folder_dialog_title="Select folder with distractor assets",

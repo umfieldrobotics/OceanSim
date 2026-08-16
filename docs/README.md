@@ -15,6 +15,12 @@
 
 OceanSim is a high-fidelity underwater simulation framework designed to accelerate the development of robust underwater perception solutions. Leveraging GPU-accelerated rendering and advanced physics-based techniques, OceanSim accurately models both visual and acoustic sensors, significantly reducing the simulation-to-real gap.
 
+<a href="https://umfieldrobotics.github.io/OceanSim/">
+  <img src="../media/terrain-gen.gif" alt="OceanSim Demo" style="width:100%;">
+</a>
+
+We are now bringing OceanSim 0.2 with our explorations and solutions for end-to-end synthetic data generation for underwater detection task.
+
 ## Highlights
 ![OceanSim pitch](../media/pitch.png)
 <!-- GPU-accelerated, physics-based underwater sensor rendering, highly effetcive 3D workflows, open-source -->
@@ -34,7 +40,7 @@ OceanSim is a high-fidelity underwater simulation framework designed to accelera
 - `[2026/8]` We now incorporate a pipeline for our underwater object detection project in our [paper](TODO) and bringing OceanSim 0.2.
 - `[2025/9]` OceanSim is now compatible with Isaac Sim 5.0 GA.
 - `[2025/4]` OceanSim is featured by [NVIDIA Robotics](https://www.linkedin.com/posts/nvidiarobotics_robotics-underwaterrobotics-simulation-activity-7313986055894880257-Dfmq?utm_source=share&utm_medium=member_desktop&rcm=ACoAACB8Y7sB7ikB6wVGPL5NrxYkNwk8RTEJ-3Y)!
-- `[2025/4]` 🔥 Beta version of OceanSim is released!
+- `[2025/4]` 🔥 OceanSim 0.1 is released!
 - `[2025/3]` 🎉 OceanSim will be presented at [AQ²UASIM](https://sites.google.com/view/aq2uasim/home?authuser=0) and the late-breaking poster session at [ICRA 2025](https://2025.ieee-icra.org/)!
 - `[2025/3]` OceanSim paper is available on arXiv. Check it out [here](https://arxiv.org/abs/2503.01074).
 
@@ -49,9 +55,9 @@ OceanSim is a high-fidelity underwater simulation framework designed to accelera
 We divide the documentation into four parts:
 - [Installation](subsections/installation.md)
 - [Running OceanSim](subsections/running_example.md)
-- [ROS 2](subsections/ros2.md) [NEW]
+- [ROS 2](subsections/ros2.md) [❗NEW❗]
 - [Building Your Own Digital Twins with OceanSim](subsections/building_own_digital_twin.md)
-- [Underwater SDG using standalone scripts](subsections/running_sdg_example.md) [NEW]
+- [Underwater SDG using standalone scripts](subsections/running_sdg_example.md) [❗NEW❗]
 
 ## Support and Contributing
 We welcome contributions and discussions from the community!

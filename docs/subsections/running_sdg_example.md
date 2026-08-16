@@ -41,21 +41,35 @@ The default SDG configuration is a Python dictionary that can be overridden or r
 - `seed`: Random seed used for reproducibility.
 - `path_tracing`: Enables path tracing behavior when set to `True`.
 
-Users can edit these values directly in the config dictionary or provide a separate JSON/YAML file to swap in a custom configuration.
+Users can edit these values directly in the config dictionary or provide a separate JSON/YAML file to swap in a custom configuration. To visualize the SDG output, feel free to use our help script [UWCam_sdg_test.py](../../standalone/UWCam_sdg_test.py)
 
 ## Assets Folder
 For general computer vision tasks, we categorize assets into following three categories: environment(env_url), objects(objects_url), and distractors(distractors_folder). Users can link the corresponding assets folder downloaded from our google drive or use their own assets. Every user has different asset convention but OpenUSD has largely standardized them; however, details about how we parse the asset folder structure and generate the label can be found in [UWCam_sdg_utils.py](../../isaacsim/oceansim/utils/UWCam_sdg_utils.py)
 
+
+**/OceanSim_assets/terrains_3x3** includes 30 terrains in USD format
+**/OceanSim_assets/sample_sdg/objects** includes some demo assets as target/distractor converted from UE fab shop. 
+
+For instance in the SDG config file, we can set:
+```python
+"env_url": "~/OceanSim_assets/sample_sdg/terrains_3x3"
+
+"objects_url": "~/OceanSim_assets/sample_sdg/objects/sea_urchin"
+
+"distractors_folder": "~/OceanSim_assets/sample_sdg/objects/OceanRealm"
+```
 ## SDG playground
 To help user understand and tune the above configs (because users should have distinct purpose when generating synthetic data), we encourage users to understand our functions and code their own. We developed a playground to play with and help users to understand how we perfrom randomization and manage assets for SDG. 
 <!-- (../../media/SDG_playground.gif) -->
 ![SDG playground](../../media/SDG_playground.gif)
 
 
+## Note about terrain displacement map
+In SDG playground, if you see a flat geometry for the terrain plane. Make sure to toggle **MDL displacement** and restart Isaac.
+<!-- (../../media/MDL_displacement.png) -->
+![SDG playground](../../media/MDL_displacement.png)
 
-
-
-
+In our provided terrain assets, we are using a high subdivision level then applying the displacement map. This may cause low-end GPU to run out of memory due to the dense terrain. Users are advised to explore settings in [terrain_gen.py](../../standalone/terrain_gen.py) which is the script that helps to convert PBR textures downloaded from internet into USD-format assets for SDG.
 
 
 

@@ -1,3 +1,11 @@
+# This script provides functions to visualize KITTI-style object detection labels, RGB images, instance segmentation, and semantic segmentation.
+# --base: The base directory containing single/multiple datasets, each with a cam_0 folder structure.
+# --index: The index of the frame to visualize (e.g., 0, 1, 2, ...).
+# --debug: Optional flag to include debug images if available.
+# --multi: Optional flag Force multi-dataset mode.
+# --single: Optional flag Force single-dataset mode.
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
