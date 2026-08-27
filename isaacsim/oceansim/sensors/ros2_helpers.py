@@ -362,7 +362,7 @@ class OmniHandler:
                     publisher_node_name="uw_rgb_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImage",
                     publisher_input_values={
-                        "topicName": f"{self._name}/rgb",
+                        "topicName": "rgb",
                         "frameId": self._name,
                         "encoding": "rgba8",
                     },
@@ -374,7 +374,7 @@ class OmniHandler:
                     publisher_node_name="uw_depth_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImage",
                     publisher_input_values={
-                        "topicName": f"{self._name}/depth",
+                        "topicName": "depth",
                         "frameId": self._name,
                         "encoding": "32FC1",
                     },
@@ -388,7 +388,7 @@ class OmniHandler:
                         "isaacsim.ros2.bridge.ROS2PublishPointCloud"
                     ),
                     publisher_input_values={
-                        "topicName": f"{self._name}/pointcloud",
+                        "topicName": "pointcloud",
                         "frameId": self._name,
                     },
                 )
@@ -401,7 +401,7 @@ class OmniHandler:
                     publisher_node_name="multibeam_sonar_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImage",
                     publisher_input_values={
-                        "topicName": f"{self._name}/sonar_image",
+                        "topicName": "sonar_image",
                         "frameId": self._name,
                         "encoding": "rgba8",
                     },
@@ -415,7 +415,7 @@ class OmniHandler:
                     publisher_node_name="imu_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImu",
                     publisher_input_values={
-                        "topicName": f"{self._name}/imu",
+                        "topicName": "imu",
                         "frameId": self._name,
                     },
                 )
@@ -428,7 +428,7 @@ class OmniHandler:
                     publisher_node_name="dvl_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2Publisher",
                     publisher_input_values={
-                        "topicName": f"{self._name}/dvl",
+                        "topicName": "dvl",
                         "queueSize": 10,
                         "messagePackage": self._dvl_message_package,
                         "messageSubfolder": self._dvl_message_subfolder,
@@ -444,7 +444,7 @@ class OmniHandler:
                     publisher_node_name="baro_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2Publisher",
                     publisher_input_values={
-                        "topicName": f"{self._name}/baro",
+                        "topicName": "baro",
                         "queueSize": 10,
                         "messagePackage": "sensor_msgs",
                         "messageSubfolder": "msg",
