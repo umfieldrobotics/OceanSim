@@ -28,6 +28,7 @@ def to_ros_stamp(sim_time: float) -> tuple[int, int]:
 
 
 # Source: https://docs.isaacsim.omniverse.nvidia.com/5.1.0/ros2_tutorials/tutorial_ros2_camera_publishing.html
+# TODO: topic_name refactor for OmniHanlder topics
 def publish_camera_info(camera: Camera, freq, topic_name=None):
     from isaacsim.ros2.bridge import read_camera_info
 
@@ -101,72 +102,6 @@ def publish_pointcloud_from_depth(camera: Camera, freq, topic_name=None):
     )
     og.Controller.attribute(gate_path + ".inputs:step").set(step_size)
 
-    return
-
-
-def publish_depth(camera: Camera, freq, topic_name=None):
-    # The following code will link the camera's render product and publish the data to the specified topic name.
-    render_product = camera._render_product_path
-    step_size = int(60 / freq)
-    if topic_name is None:
-        topic_name = "ImagingSonar/depth_raw"
-    queue_size = 1
-    node_namespace = ""
-    frame_id = camera.prim_path.split("/")[
-        -1
-    ]  # This matches what the TF tree is publishing.
-
-    rv = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(
-        sd.SensorType.DistanceToImagePlane.name
-    )
-    writer = rep.writers.get(rv + "ROS2PublishImage")
-    writer.initialize(
-        frameId=frame_id,
-        nodeNamespace=node_namespace,
-        queueSize=queue_size,
-        topicName=topic_name,
-    )
-    writer.attach([render_product])
-
-    # Set step input of the Isaac Simulation Gate nodes upstream of ROS publishers to control their execution rate
-    gate_path = omni.syntheticdata.SyntheticData._get_node_path(
-        rv + "IsaacSimulationGate", render_product
-    )
-    og.Controller.attribute(gate_path + ".inputs:step").set(step_size)
-
-    return
-
-
-# Not currently using this for the UW camera, see the omnigraph node in UW_Camera_ROS instead
-def publish_rgb(camera: Camera, freq, topic_name=None):
-    # The following code will link the camera's render product and publish the data to the specified topic name.
-    render_product = camera._render_product_path
-    step_size = int(60 / freq)
-    if topic_name is None:
-        topic_name = "RGBCamera/image_raw"
-    queue_size = 1
-    node_namespace = ""
-    frame_id = camera.prim_path.split("/")[
-        -1
-    ]  # This matches what the TF tree is publishing.
-
-    rv = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(
-        sd.SensorType.Rgb.name
-    )
-    writer = rep.writers.get(rv + "ROS2PublishImage")
-    writer.initialize(
-        frameId=frame_id,
-        nodeNamespace=node_namespace,
-        queueSize=queue_size,
-        topicName=topic_name,
-    )
-    writer.attach([render_product])
-
-    # Set step input of the Isaac Simulation Gate nodes upstream of ROS publishers to control their execution rate
-    gate_path = omni.syntheticdata.SyntheticData._get_node_path(
-        rv + "IsaacSimulationGate", render_product
-    )
-    og.Controller.attribute(gate_path + ".inputs:step").set(step_size)
     return
 
 

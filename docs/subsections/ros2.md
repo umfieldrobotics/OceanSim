@@ -13,11 +13,9 @@ Follow the example scenario to see how to utlilize ROS in your scenario.
 | `/DepthImage` | `sensor_msgs/Image` (`32FC1`) | Underwater camera depth |
 | `/RGBCamera/pointcloud` | `sensor_msgs/PointCloud2` | Underwater camera point cloud |
 | `/RGBCamera/camera_info` | `sensor_msgs/CameraInfo` | Underwater camera parameters |
-| `/RGBCamera/image_raw` | `sensor_msgs/Image` | Raw camera render |
 | `/ImagingSonar/image` | `sensor_msgs/Image` | Imaging sonar |
 | `/ImagingSonar/camera_info` | `sensor_msgs/CameraInfo` | Imaging sonar camera parameters |
 | `/ImagingSonar/pointcloud` | `sensor_msgs/PointCloud2` | Imaging sonar point cloud |
-| `/ImagingSonar/depth_raw` | `sensor_msgs/Image` | Raw sonar render depth |
 | `/IMU` | `sensor_msgs/Imu` | IMU |
 | `/DVL` | `msgs/Dvl` | DVL |
 | `/Barometer` | `sensor_msgs/FluidPressure` | Barometer |
