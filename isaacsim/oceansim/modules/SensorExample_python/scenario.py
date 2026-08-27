@@ -66,7 +66,11 @@ class MHL_Sensor_Example_Scenario():
                     pointcloud_og_node=self.omni_ros._pointcloud_node,
                 )
                 approx_freq = 30
-                ros2_helpers.publish_camera_info(self._cam, approx_freq)
+                ros2_helpers.publish_camera_info(
+                    self._cam,
+                    approx_freq,
+                    topic_name="RGBCamera/camera_info",
+                )
                 ros2_helpers.publish_rgb(self._cam, approx_freq)
                 ros2_helpers.publish_camera_tf(self._cam)
 

@@ -9,16 +9,19 @@ Follow the example scenario to see how to utlilize ROS in your scenario.
 
 | Topic | Message | Sensor |
 |-------|---------|--------|
-| `/rgb` | `sensor_msgs/Image` | Underwater camera |
-| `/depth` | `sensor_msgs/Image` (`32FC1`) | Underwater camera |
-| `/pointcloud` | `sensor_msgs/PointCloud2` | Underwater camera |
-| `/sonar_image` | `sensor_msgs/Image` | Imaging sonar |
-| `/imu` | `sensor_msgs/Imu` | IMU |
-| `/dvl` | `msgs/Dvl` | DVL |
-| `/baro` | `sensor_msgs/FluidPressure` | Barometer |
+| `/RGBCamera/image` | `sensor_msgs/Image` | Underwater camera |
+| `/DepthImage` | `sensor_msgs/Image` (`32FC1`) | Underwater camera depth |
+| `/RGBCamera/pointcloud` | `sensor_msgs/PointCloud2` | Underwater camera point cloud |
+| `/RGBCamera/camera_info` | `sensor_msgs/CameraInfo` | Underwater camera parameters |
+| `/RGBCamera/image_raw` | `sensor_msgs/Image` | Raw camera render |
+| `/ImagingSonar/image` | `sensor_msgs/Image` | Imaging sonar |
+| `/ImagingSonar/camera_info` | `sensor_msgs/CameraInfo` | Imaging sonar camera parameters |
+| `/ImagingSonar/pointcloud` | `sensor_msgs/PointCloud2` | Imaging sonar point cloud |
+| `/ImagingSonar/depth_raw` | `sensor_msgs/Image` | Raw sonar render depth |
+| `/IMU` | `sensor_msgs/Imu` | IMU |
+| `/DVL` | `msgs/Dvl` | DVL |
+| `/Barometer` | `sensor_msgs/FluidPressure` | Barometer |
 | `/tf` | `tf2_msgs/TFMessage` | Camera / sonar frames |
-
-Also published when camera or sonar is enabled: `{sensor_name}_camera_info` (`sensor_msgs/CameraInfo`). Camera depth and point cloud may also appear as `{sensor_name}_depth` and `{sensor_name}_pointcloud`.
 
 ## Subscribed topics
 

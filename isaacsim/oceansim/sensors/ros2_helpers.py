@@ -28,13 +28,14 @@ def to_ros_stamp(sim_time: float) -> tuple[int, int]:
 
 
 # Source: https://docs.isaacsim.omniverse.nvidia.com/5.1.0/ros2_tutorials/tutorial_ros2_camera_publishing.html
-def publish_camera_info(camera: Camera, freq):
+def publish_camera_info(camera: Camera, freq, topic_name=None):
     from isaacsim.ros2.bridge import read_camera_info
 
     # The following code will link the camera's render product and publish the data to the specified topic name.
     render_product = camera._render_product_path
     step_size = int(60 / freq)
-    topic_name = camera.name + "_camera_info"
+    if topic_name is None:
+        topic_name = "ImagingSonar/camera_info"
     queue_size = 1
     node_namespace = ""
     frame_id = camera.prim_path.split("/")[
@@ -67,11 +68,12 @@ def publish_camera_info(camera: Camera, freq):
     return
 
 
-def publish_pointcloud_from_depth(camera: Camera, freq):
+def publish_pointcloud_from_depth(camera: Camera, freq, topic_name=None):
     # The following code will link the camera's render product and publish the data to the specified topic name.
     render_product = camera._render_product_path
     step_size = int(60 / freq)
-    topic_name = camera.name + "_pointcloud"  # Set topic name to the camera's name
+    if topic_name is None:
+        topic_name = "ImagingSonar/pointcloud"
     queue_size = 1
     node_namespace = ""
     frame_id = camera.prim_path.split("/")[
@@ -102,11 +104,12 @@ def publish_pointcloud_from_depth(camera: Camera, freq):
     return
 
 
-def publish_depth(camera: Camera, freq):
+def publish_depth(camera: Camera, freq, topic_name=None):
     # The following code will link the camera's render product and publish the data to the specified topic name.
     render_product = camera._render_product_path
     step_size = int(60 / freq)
-    topic_name = camera.name + "_depth"
+    if topic_name is None:
+        topic_name = "ImagingSonar/depth_raw"
     queue_size = 1
     node_namespace = ""
     frame_id = camera.prim_path.split("/")[
@@ -135,11 +138,12 @@ def publish_depth(camera: Camera, freq):
 
 
 # Not currently using this for the UW camera, see the omnigraph node in UW_Camera_ROS instead
-def publish_rgb(camera: Camera, freq):
+def publish_rgb(camera: Camera, freq, topic_name=None):
     # The following code will link the camera's render product and publish the data to the specified topic name.
     render_product = camera._render_product_path
     step_size = int(60 / freq)
-    topic_name = camera.name + "_rgb"
+    if topic_name is None:
+        topic_name = "RGBCamera/image_raw"
     queue_size = 1
     node_namespace = ""
     frame_id = camera.prim_path.split("/")[
@@ -362,7 +366,7 @@ class OmniHandler:
                     publisher_node_name="uw_rgb_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImage",
                     publisher_input_values={
-                        "topicName": "rgb",
+                        "topicName": "RGBCamera/image",
                         "frameId": self._name,
                         "encoding": "rgba8",
                     },
@@ -374,7 +378,7 @@ class OmniHandler:
                     publisher_node_name="uw_depth_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImage",
                     publisher_input_values={
-                        "topicName": "depth",
+                        "topicName": "DepthImage",
                         "frameId": self._name,
                         "encoding": "32FC1",
                     },
@@ -388,7 +392,7 @@ class OmniHandler:
                         "isaacsim.ros2.bridge.ROS2PublishPointCloud"
                     ),
                     publisher_input_values={
-                        "topicName": "pointcloud",
+                        "topicName": "RGBCamera/pointcloud",
                         "frameId": self._name,
                     },
                 )
@@ -401,7 +405,7 @@ class OmniHandler:
                     publisher_node_name="multibeam_sonar_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImage",
                     publisher_input_values={
-                        "topicName": "sonar_image",
+                        "topicName": "ImagingSonar/image",
                         "frameId": self._name,
                         "encoding": "rgba8",
                     },
@@ -415,7 +419,7 @@ class OmniHandler:
                     publisher_node_name="imu_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2PublishImu",
                     publisher_input_values={
-                        "topicName": "imu",
+                        "topicName": "IMU",
                         "frameId": self._name,
                     },
                 )
@@ -428,7 +432,7 @@ class OmniHandler:
                     publisher_node_name="dvl_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2Publisher",
                     publisher_input_values={
-                        "topicName": "dvl",
+                        "topicName": "DVL",
                         "queueSize": 10,
                         "messagePackage": self._dvl_message_package,
                         "messageSubfolder": self._dvl_message_subfolder,
@@ -444,7 +448,7 @@ class OmniHandler:
                     publisher_node_name="baro_publisher",
                     publisher_node_type="isaacsim.ros2.bridge.ROS2Publisher",
                     publisher_input_values={
-                        "topicName": "baro",
+                        "topicName": "Barometer",
                         "queueSize": 10,
                         "messagePackage": "sensor_msgs",
                         "messageSubfolder": "msg",

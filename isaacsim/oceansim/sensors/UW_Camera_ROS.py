@@ -52,6 +52,8 @@ class UW_Camera_ROS(UW_Camera):
         og_node=None,
         depth_og_node=None,
         pointcloud_og_node=None,
+        depth_topic_name=None,
+        pointcloud_topic_name=None,
     ):
         if og_node is not None:
             self._og_node = og_node
@@ -77,7 +79,11 @@ class UW_Camera_ROS(UW_Camera):
             ).set(frame_id)
             og.Controller.attribute(
                 self._depth_og_node.get_attribute("inputs:topicName")
-            ).set(f"{self.name}_depth")
+            ).set(
+                depth_topic_name
+                if depth_topic_name is not None
+                else "DepthImage"
+            )
             og.Controller.attribute(
                 self._depth_og_node.get_attribute("inputs:encoding")
             ).set("32FC1")
@@ -95,7 +101,11 @@ class UW_Camera_ROS(UW_Camera):
             ).set(frame_id)
             og.Controller.attribute(
                 self._pointcloud_og_node.get_attribute("inputs:topicName")
-            ).set(f"{self.name}_pointcloud")
+            ).set(
+                pointcloud_topic_name
+                if pointcloud_topic_name is not None
+                else "RGBCamera/pointcloud"
+            )
 
     def render(self):
         super().render()
