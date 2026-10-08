@@ -55,7 +55,6 @@ class MHL_Sensor_Example_Scenario():
                     include_unlabelled=True, og_node=self.omni_ros._sonar_node
                 )
                 ros2_helpers.publish_camera_info(self._sonar, approx_freq)
-                ros2_helpers.publish_depth(self._sonar, approx_freq)
                 ros2_helpers.publish_pointcloud_from_depth(self._sonar, approx_freq)
                 ros2_helpers.publish_camera_tf(self._sonar)
 
@@ -66,8 +65,11 @@ class MHL_Sensor_Example_Scenario():
                     pointcloud_og_node=self.omni_ros._pointcloud_node,
                 )
                 approx_freq = 30
-                ros2_helpers.publish_camera_info(self._cam, approx_freq)
-                ros2_helpers.publish_rgb(self._cam, approx_freq)
+                ros2_helpers.publish_camera_info(
+                    self._cam,
+                    approx_freq,
+                    topic_name="RGBCamera/camera_info",
+                )
                 ros2_helpers.publish_camera_tf(self._cam)
 
             if self._DVL is not None:
